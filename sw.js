@@ -1,10 +1,13 @@
 // Service worker: laat de app installeren en offline werken.
 // Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v1';
+const VERSIE = 'voorraad-v2';
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
   './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'parser.js', 'barcode.js', 'manifest.webmanifest',
   'icoon.svg', 'icoon.png', 'icoon-192.png', 'icoon-512.png', 'icoon-maskable-512.png',
+];
+// pdf-lezer: los bewaard, zodat één ontbrekend bestand de installatie niet tegenhoudt
+const PDF_BESTANDEN = [
   'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',
   'vendor/standard_fonts/LiberationSans-Regular.ttf', 'vendor/standard_fonts/LiberationSans-Bold.ttf',
   'vendor/standard_fonts/LiberationSans-Italic.ttf', 'vendor/standard_fonts/LiberationSans-BoldItalic.ttf',
@@ -13,7 +16,10 @@ const BESTANDEN = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSIE).then((c) => c.addAll(BESTANDEN)));
+  e.waitUntil(caches.open(VERSIE).then(async (c) => {
+    await c.addAll(BESTANDEN);
+    await Promise.all(PDF_BESTANDEN.map((b) => c.add(b).catch(() => console.warn('Niet gevonden:', b))));
+  }));
 });
 
 self.addEventListener('activate', (e) => {

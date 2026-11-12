@@ -11,7 +11,8 @@ Er is geen server en geen AI-dienst. Alleen:
 2. Klik rechtsboven op **+** → **New repository**. Naam bv. `voorraad`, kies **Public**, klik **Create repository**.
 3. Klik op **uploading an existing file**. Pak de zip uit en sleep **de inhoud** van de map
    (index.html, app.js, de map vendor, …) in het venster. Klik **Commit changes**.
-   (Belangrijk: index.html moet bovenaan staan, niet in een submap.)
+   (Belangrijk: index.html moet bovenaan staan, niet in een submap. Sleep ook de map **vendor** mee:
+   via "choose your files" kun je geen mappen kiezen, via slepen wel.)
 4. Ga naar **Settings** → **Pages**. Kies bij *Branch* `main` en map `/ (root)`, klik **Save**.
 5. Na een minuut staat er bovenaan: *Your site is live at* `https://<jouwnaam>.github.io/voorraad/`.
 

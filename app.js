@@ -857,9 +857,15 @@ function pdfTekst(items) {
   return t.replace(/ +\n/g, '\n').replace(/ {2,}/g, ' ');
 }
 async function pdfLezen(bestand) {
-  const pdfjs = await import('./vendor/pdf.min.mjs');
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
-  const map = (m) => new URL(`./vendor/${m}/`, import.meta.url).href;
+  // Eigen kopie van pdf.js; ontbreekt die (bv. map vendor niet geüpload), dan dezelfde versie van jsDelivr.
+  const CDN = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/';
+  let pdfjs, basis = new URL('./vendor/', import.meta.url).href, bouw = basis;
+  try { pdfjs = await import('./vendor/pdf.min.mjs'); } catch {
+    try { pdfjs = await import(CDN + 'build/pdf.min.mjs'); } catch { throw new Error('De pdf-lezer kon niet geladen worden. Ben je online?'); }
+    basis = CDN; bouw = CDN + 'build/';
+  }
+  pdfjs.GlobalWorkerOptions.workerSrc = bouw + 'pdf.worker.min.mjs';
+  const map = (m) => basis + m + '/';
   const taak = pdfjs.getDocument({ data: new Uint8Array(await bestand.arrayBuffer()), isEvalSupported: false, disableFontFace: true,
     enableXfa: false, standardFontDataUrl: map('standard_fonts'), cMapUrl: map('cmaps'), cMapPacked: true, wasmUrl: map('wasm'), iccUrl: map('iccs') });
   const doc = await taak.promise;
