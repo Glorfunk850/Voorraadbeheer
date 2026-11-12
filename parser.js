@@ -1,0 +1,256 @@
+// Recepttekst omzetten naar een gestructureerd recept, en ingrediënten koppelen aan de voorraad.
+// Alles gebeurt in de browser; er wordt niets verstuurd.
+
+const BREUKEN = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125, '⅕': 0.2 };
+const TELWOORDEN = {
+  een: 1, één: 1, twee: 2, drie: 3, vier: 4, vijf: 5, zes: 6, zeven: 7, acht: 8, negen: 9, tien: 10,
+  twaalf: 12, 'een halve': 0.5, 'een half': 0.5, 'een hele': 1, half: 0.5, halve: 0.5, anderhalf: 1.5, anderhalve: 1.5, paar: 2,
+};
+
+// Eenheid -> alle schrijfwijzen
+const EENHEDEN = {
+  g: ['g', 'gr', 'gram', 'grammen', 'grs'],
+  kg: ['kg', 'kilo', 'kilogram', "kilo's"],
+  ml: ['ml', 'milliliter'],
+  cl: ['cl', 'centiliter'],
+  dl: ['dl', 'deciliter'],
+  l: ['l', 'liter', 'ltr', 'liters'],
+  el: ['el', 'eetlepel', 'eetlepels', 'eetl', 'tbsp', 'tbs'],
+  tl: ['tl', 'theelepel', 'theelepels', 'thl', 'theel', 'tsp'],
+  snuf: ['snuf', 'snufje', 'snuifje', 'snuif', 'mespunt', 'mespuntje', 'snufjes'],
+  teen: ['teen', 'teentje', 'teentjes', 'tenen'],
+  blik: ['blik', 'blikje', 'blikjes', 'blikken'],
+  pak: ['pak', 'pakje', 'pakjes', 'pakken'],
+  zak: ['zak', 'zakje', 'zakjes', 'zakken'],
+  pot: ['pot', 'potje', 'potjes', 'potten'],
+  fles: ['fles', 'flesje', 'flessen'],
+  takje: ['takje', 'takjes', 'tak', 'takken'],
+  bos: ['bos', 'bosje', 'bosjes'],
+  kopje: ['kop', 'kopje', 'kopjes', 'kopjes', 'cup', 'cups'],
+  plak: ['plak', 'plakje', 'plakjes', 'plakken', 'sneetje', 'sneetjes', 'snee'],
+  scheut: ['scheut', 'scheutje', 'scheutjes'],
+  handvol: ['handvol', 'handje', 'handjevol'],
+  blad: ['blad', 'blaadje', 'blaadjes', 'bladeren'],
+  stuks: ['st', 'stuk', 'stuks'],
+};
+const EENHEID_VAN = {};
+for (const [eenheid, vormen] of Object.entries(EENHEDEN)) for (const v of vormen) EENHEID_VAN[v] = eenheid;
+
+const KOP_INGREDIENTEN = /^(ingredi[eëé]nten|benodigdheden|nodig|wat heb je nodig|je hebt nodig|boodschappen(lijst)?|ingredients)\b/i;
+const KOP_BEREIDING = /^(bereiding(swijze)?|werkwijze|instructies|zo maak je (het|dit)|aan de slag|bereiden|methode|recept|preparation|method|instructions)\s*[:.]?\s*$/i;
+const KOP_ANDERS = /^(tip|tips|variatie|serveertip|voedingswaarde|voedingswaarden|bewaren|bewaartip|wijntip|nutri)/i;
+
+function getalUit(tekst) {
+  tekst = tekst.trim().toLowerCase();
+  if (tekst in TELWOORDEN) return TELWOORDEN[tekst];
+  let m = tekst.match(/^(\d+)\s+(\d+)\/(\d+)$/); // 1 1/2
+  if (m) return +m[1] + m[2] / m[3];
+  m = tekst.match(/^(\d+)\/(\d+)$/);
+  if (m) return m[1] / m[2];
+  m = tekst.match(/^(\d+)?([½¼¾⅓⅔⅛⅕])$/);
+  if (m) return (+m[1] || 0) + BREUKEN[m[2]];
+  m = tekst.match(/^(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)$/); // 2-3: neem de hoogste
+  if (m) return parseFloat(m[2].replace(',', '.'));
+  m = tekst.match(/^\d+(?:[.,]\d+)?$/);
+  if (m) return parseFloat(tekst.replace(',', '.'));
+  return null;
+}
+
+const GETAL_PATROON = String.raw`(?:\d+\s+\d+\/\d+|\d+\/\d+|\d*[½¼¾⅓⅔⅛⅕]|\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?|een halve|een half|een hele|een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|twaalf|halve|half|anderhalve|anderhalf|paar)`;
+
+/** Eén ingrediëntregel ontleden: "250 g bloem" -> {hoeveelheid: 250, eenheid: 'g', naam: 'bloem'} */
+export function ingredientOntleden(regel) {
+  let tekst = regel.replace(/^[\s•·*\-–—>□▪◦●]+(?=\S)/, '').replace(/^[oO0]\s+(?=\D)/, '').replace(/\s+/g, ' ').trim();
+  // OCR leest de "l" van liter vaak als | of I
+  tekst = tekst.replace(/(\d)\s*[|]\s/g, '$1 l ').replace(/(\d)\s*I\s(?=[a-z])/g, '$1 l ');
+  const resultaat = { hoeveelheid: null, eenheid: '', naam: tekst };
+  const voorop = new RegExp(String.raw`^(${GETAL_PATROON})(?:\s*([a-zA-Z'.]+))?\s*(.*)$`, 'i');
+  let m = tekst.match(voorop);
+  if (m && m[1]) {
+    const hv = getalUit(m[1]);
+    if (hv !== null) {
+      resultaat.hoeveelheid = hv;
+      let rest = m[3];
+      const woord = (m[2] || '').toLowerCase().replace(/\.$/, '');
+      if (woord && EENHEID_VAN[woord]) resultaat.eenheid = EENHEID_VAN[woord];
+      else if (woord) rest = (m[2] + (rest ? ' ' + rest : '')).replace(/\s+([,;:)])/g, '$1');
+      resultaat.naam = rest.replace(/^(van de|van het|van|aan)\s+/i, '').trim();
+      if (!resultaat.eenheid) resultaat.eenheid = 'stuks';
+      return opschonen(resultaat);
+    }
+  }
+  // achteraan: "bloem 250 g" of "bloem (250 g)"
+  const achteraan = new RegExp(String.raw`^(.*?)[\s,:(]+(${GETAL_PATROON})\s*([a-zA-Z.]+)?\)?$`, 'i');
+  m = tekst.match(achteraan);
+  if (m && m[1] && /[a-z]/i.test(m[1])) {
+    const hv = getalUit(m[2]);
+    const woord = (m[3] || '').toLowerCase().replace(/\.$/, '');
+    if (hv !== null && (!woord || EENHEID_VAN[woord])) {
+      return opschonen({ hoeveelheid: hv, eenheid: EENHEID_VAN[woord] || 'stuks', naam: m[1].trim() });
+    }
+  }
+  // "snufje zout", "peper en zout"
+  const eerste = tekst.split(' ')[0].toLowerCase();
+  if (EENHEID_VAN[eerste] && tekst.includes(' ')) {
+    return opschonen({ hoeveelheid: 1, eenheid: EENHEID_VAN[eerste], naam: tekst.slice(eerste.length).trim() });
+  }
+  return opschonen(resultaat);
+}
+
+function opschonen(i) {
+  i.naam = i.naam.replace(/^[,:;\s]+|[,:;\s]+$/g, '');
+  if (i.hoeveelheid !== null) i.hoeveelheid = Math.round(i.hoeveelheid * 1000) / 1000;
+  return i;
+}
+
+function lijktIngredient(regel) {
+  const t = regel.replace(/^[\s•·*\-–—>□▪◦●]+/, '').replace(/^[oO]\s+/, '').trim();
+  if (t.length > 90) return false;
+  if (new RegExp(String.raw`^${GETAL_PATROON}\s*\S`, 'i').test(t) && !/^\d+[.)]\s/.test(t)) return true;
+  return /^[•·*\-–—▪◦●]/.test(regel.trim()) && t.length < 60;
+}
+
+/** Volledige recepttekst ontleden. */
+export function receptOntleden(ruw) {
+  const regels = ruw
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((r) => r.replace(/\s+/g, ' ').trim())
+    .filter((r) => r && !/^[\W_]{1,3}$/.test(r) && !/^(pagina|page)\s*\d+/i.test(r));
+
+  const recept = { titel: '', personen: null, bereidingstijd: '', ingredienten: [], stappen: [], notities: '' };
+  let sectie = 'begin';
+  const ingrRegels = [];
+  const stapRegels = [];
+  const overige = [];
+  const notities = [];
+
+  for (const regel of regels) {
+    const zonderDubbelepunt = regel.replace(/[:.]\s*$/, '');
+    // aantal personen en bereidingstijd
+    const pers = regel.match(/(?:voor\s+)?(\d+)\s*(?:personen|persoon|pers\b\.?|porties|portie|eters)/i)
+      || regel.match(/\b(?:aantal personen|porties|personen)\s*[:-]?\s*(\d+)/i);
+    if (pers && !recept.personen && regel.length < 70) recept.personen = parseInt(pers[1], 10);
+    const tijd = regel.match(/(?:bereidings|kook|oven|totale |totaal |voorbereidings)?tijd\s*[:-]?\s*(.+)/i);
+    if (tijd && !recept.bereidingstijd && regel.length < 70 && /\d/.test(tijd[1])) {
+      recept.bereidingstijd = tijd[1].replace(/\s*[|·•].*$/, '').trim();
+    }
+    if ((pers || tijd) && regel.length < 70 && sectie !== 'stappen') continue;
+
+    // ingrediëntenkop, eventueel met tekst erachter ("Ingrediënten voor 4 personen")
+    if (KOP_INGREDIENTEN.test(zonderDubbelepunt) && regel.length < 50) { sectie = 'ingredienten'; continue; }
+    if (KOP_BEREIDING.test(regel)) { sectie = 'stappen'; continue; }
+    if (KOP_ANDERS.test(regel) && regel.length < 40) { sectie = 'notities'; continue; }
+
+    if (sectie === 'ingredienten') {
+      // tussenkopje zoals "Voor de saus:"
+      if (/:$/.test(regel) && regel.length < 40 && !/\d/.test(regel)) continue;
+      // lange zin zonder hoeveelheid: waarschijnlijk begint de bereiding zonder kopje
+      if (regel.length > 45 && !lijktIngredient(regel)) { sectie = 'stappen'; stapRegels.push(regel); continue; }
+      ingrRegels.push(regel);
+    } else if (sectie === 'stappen') stapRegels.push(regel);
+    else if (sectie === 'notities') notities.push(regel);
+    else overige.push(regel);
+  }
+
+  // titel: eerste korte regel die geen ingrediënt is
+  const titelIndex = overige.findIndex((r) => r.length >= 3 && r.length <= 80 && !lijktIngredient(r));
+  if (titelIndex >= 0) recept.titel = overige.splice(titelIndex, 1)[0].replace(/[.:]$/, '');
+
+  // geen kopjes gevonden: raden op basis van de vorm van elke regel
+  if (!ingrRegels.length && !stapRegels.length) {
+    for (const r of overige) (lijktIngredient(r) ? ingrRegels : stapRegels).push(r);
+  } else if (!ingrRegels.length) {
+    for (const r of overige) if (lijktIngredient(r)) ingrRegels.push(r);
+  } else if (!stapRegels.length) {
+    for (const r of overige) if (!lijktIngredient(r) && r.length > 25) stapRegels.push(r);
+  }
+
+  // ingrediënten: regels die doorlopen (bv. "1 rode" + "paprika") samenvoegen
+  const samengevoegd = [];
+  for (const r of ingrRegels) {
+    const vorige = samengevoegd[samengevoegd.length - 1];
+    if (vorige && /^[a-zà-ÿ(]/.test(r) && !lijktIngredient(r) && r.split(' ').length <= 3 && /[a-z,]$/i.test(vorige) && vorige.length < 30) {
+      samengevoegd[samengevoegd.length - 1] = vorige + ' ' + r;
+    } else samengevoegd.push(r);
+  }
+  recept.ingredienten = samengevoegd.map(ingredientOntleden).filter((i) => i.naam);
+
+  // stappen: nieuwe stap bij nummering of als de vorige regel met een punt eindigde
+  const stappen = [];
+  for (const r of stapRegels) {
+    const nieuw = /^(stap\s*)?\d+\s*[.):-]\s*/i.test(r) || /^[•·*\-–—▪●]\s/.test(r);
+    const tekst = r.replace(/^(stap\s*)?\d+\s*[.):-]\s*/i, '').replace(/^[•·*\-–—▪●]\s*/, '');
+    const vorige = stappen[stappen.length - 1];
+    if (!tekst) continue;
+    if (!nieuw && vorige && !/[.!?)]$/.test(vorige)) stappen[stappen.length - 1] = vorige + ' ' + tekst;
+    else stappen.push(tekst);
+  }
+  recept.stappen = stappen.map((s) => s.replace(/(\w)- (\w)/g, '$1$2'));
+  recept.notities = notities.join('\n');
+  return recept;
+}
+
+// ---------------------------------------------------------------------------
+// Ingrediënten koppelen aan voorraadproducten
+// ---------------------------------------------------------------------------
+const ONREGELMATIG = { eieren: 'ei', eiren: 'ei', kippeneieren: 'ei', bonen: 'boon', erwten: 'erwt', uien: 'ui', sjalotten: 'sjalot' };
+const BIJWOORDEN = new Set(['vers', 'verse', 'gehakte', 'fijngehakte', 'gesnipperd', 'gesnipperde', 'grote', 'groot', 'kleine', 'klein',
+  'middelgrote', 'gesneden', 'geraspte', 'geraspt', 'gedroogde', 'gedroogd', 'biologische', 'bio', 'koude', 'warme', 'zachte', 'gesmolten',
+  'naar', 'smaak', 'eventueel', 'evt', 'ca', 'circa', 'ongeveer', 'en', 'of', 'met', 'van', 'de', 'het', 'een', 'in', 'stukjes', 'blokjes',
+  'plakjes', 'reepjes', 'fijn', 'grof', 'heel', 'hele', 'gepelde', 'geschilde', 'ontdooide', 'diepvries']);
+
+export function sleutel(woord) {
+  let w = woord.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (ONREGELMATIG[w]) return ONREGELMATIG[w];
+  if (w.endsWith("'s")) w = w.slice(0, -2);
+  else if (w.length > 4 && w.endsWith('en')) w = w.slice(0, -2);
+  else if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) w = w.slice(0, -1);
+  return w.replace(/([aeou])\1/g, '$1').replace(/([^aeiou])\1$/, '$1');
+}
+
+export function sleutelwoorden(naam) {
+  return (naam || '')
+    .toLowerCase()
+    .replace(/\(.*?\)/g, ' ')
+    .split(/[,;]/)[0]
+    .split(/[^a-zà-ÿ'-]+/i)
+    .filter((w) => w.length > 1 && !BIJWOORDEN.has(w))
+    .map(sleutel);
+}
+
+/** Zoek het best passende voorraadproduct (naam) voor een ingrediënt. */
+export function zoekVoorraadnaam(ingredientNaam, productnamen, geleerd = {}) {
+  const eigen = sleutelwoorden(ingredientNaam).join(' ');
+  if (!eigen) return '';
+  if (geleerd[eigen] && productnamen.some((n) => n.toLowerCase() === geleerd[eigen].toLowerCase())) return geleerd[eigen];
+  const ingr = new Set(eigen.split(' '));
+  let beste = '', score = 0;
+  for (const naam of productnamen) {
+    const woorden = sleutelwoorden(naam);
+    if (!woorden.length) continue;
+    let s = 0;
+    if (woorden.join(' ') === eigen) s = 4;
+    else if (woorden.every((w) => ingr.has(w))) s = 2 + woorden.length / 10; // "melk" in "volle melk"
+    else if ([...ingr].every((w) => woorden.includes(w))) s = 1.5;             // "ui" bij "rode ui"
+    else if (woorden.some((w) => w.length > 3 && ingr.has(w))) s = 1;
+    else if (woorden.length === 1 && woorden[0].length >= 3 && [...ingr].some((w) => w.length > woorden[0].length && w.endsWith(woorden[0]))) s = 1; // "slagroom" bij "room"
+    if (s > score || (s === score && s > 0 && naam.length < beste.length)) { score = s; beste = naam; }
+  }
+  return score >= 1 ? beste : '';
+}
+
+// ---------------------------------------------------------------------------
+// Eenheden
+// ---------------------------------------------------------------------------
+const GEWICHT = { g: 1, kg: 1000 };
+const VOLUME = { ml: 1, cl: 10, dl: 100, l: 1000, el: 15, tl: 5, kopje: 250 };
+
+export function omrekenen(hoeveelheid, van, naar) {
+  if (hoeveelheid === null || hoeveelheid === undefined) return null;
+  van = (van || '').toLowerCase().trim();
+  naar = (naar || '').toLowerCase().trim();
+  if (van === naar || (!van && naar === 'stuks') || (van === 'stuks' && !naar)) return hoeveelheid;
+  for (const groep of [GEWICHT, VOLUME]) if (van in groep && naar in groep) return (hoeveelheid * groep[van]) / groep[naar];
+  return null;
+}

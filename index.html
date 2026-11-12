@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161617" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Voorraad">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icoon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icoon.png">
+<title>Voorraad</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <nav class="navigatie" aria-label="Hoofdmenu">
+    <div class="merk">Voorraad</div>
+    <button data-actie="naar" data-view="voorraad"><span class="nav-icoon" data-icoon="kast"></span><span>Voorraad</span></button>
+    <button data-actie="naar" data-view="boodschappen"><span class="nav-icoon" data-icoon="mand"></span><span>Boodschappen</span><b class="teller" id="teller" hidden></b></button>
+    <button data-actie="naar" data-view="recepten"><span class="nav-icoon" data-icoon="boek"></span><span>Recepten</span></button>
+    <button data-actie="naar" data-view="instellingen" class="nav-instellingen"><span class="nav-icoon" data-icoon="tandwiel"></span><span>Instellingen</span></button>
+  </nav>
+  <main id="inhoud" tabindex="-1"></main>
+</div>
+
+<div id="sluier" class="sluier" hidden></div>
+<aside id="paneel" class="paneel" hidden aria-modal="true" role="dialog"></aside>
+
+<dialog id="vraag" class="vraag">
+  <form id="vraag-form" method="dialog">
+    <p id="vraag-tekst"></p>
+    <input id="vraag-invoer" autocomplete="off">
+    <div class="vraag-knoppen">
+      <button type="button" class="knop" id="vraag-nee">Annuleren</button>
+      <button type="submit" class="knop primair" id="vraag-ja">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden role="status"></div>
+
+<input type="file" id="bestand-scan" accept="image/*" capture="environment" hidden>
+<input type="file" id="bestand-recept" accept="application/pdf,image/*" hidden>
+<input type="file" id="bestand-camera" accept="image/*" capture="environment" hidden>
+<input type="file" id="bestand-backup" accept="application/json,.json" hidden>
+
+<script src="lokaal.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
