@@ -1,6 +1,7 @@
 // Voorraad — interface. Praat met api/..., afgehandeld in lokaal.js (opslag op dit toestel).
 import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, sleutelwoorden, omrekenen } from './parser.js';
 import { barcodeUitBestand, controleOk } from './barcode.js';
+import { tekstOpmaken, pdfStukjes } from './layout.js';
 
 // ---------------------------------------------------------------------------
 // Basis
@@ -820,9 +821,34 @@ async function tekstHerkennen(blob) {
   const a = await fetch('api/ocr', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/png' } });
   const data = await a.json().catch(() => ({}));
   if (!a.ok) throw new Error(data.fout || 'Tekstherkenning mislukt.');
+  if (data.woorden && data.woorden.length) return tekstOpmaken(data.woorden);
   return data.tekst || '';
 }
 const naarPng = (c) => new Promise((ok, nee) => c.toBlob((b) => (b ? ok(b) : nee(new Error('Afbeelding kon niet verwerkt worden.'))), 'image/png'));
+// Zwart-wit maken met een plaatselijke drempel: schaduwen en ongelijk licht op een foto
+// worden zo wit, letters blijven zwart. (Tesseract gebruikt anders één drempel voor de hele foto.)
+function zwartWit(ctx, w, h) {
+  const beeld = ctx.getImageData(0, 0, w, h), px = beeld.data;
+  const grijs = new Uint8ClampedArray(w * h);
+  for (let i = 0; i < w * h; i++) grijs[i] = px[i * 4];
+  const som = new Float64Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let rij = 0;
+    for (let x = 0; x < w; x++) { rij += grijs[y * w + x]; som[(y + 1) * (w + 1) + x + 1] = som[y * (w + 1) + x + 1] + rij; }
+  }
+  const r = Math.max(8, Math.round(Math.max(w, h) / 40));
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
+      const gem = (som[y1 * (w + 1) + x1] - som[y0 * (w + 1) + x1] - som[y1 * (w + 1) + x0] + som[y0 * (w + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+      const v = grijs[y * w + x] < gem * 0.88 ? 0 : 255;
+      const i = (y * w + x) * 4;
+      px[i] = px[i + 1] = px[i + 2] = v; px[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(beeld, 0, 0);
+}
 async function afbeeldingLezen(bestand) {
   let beeld;
   try { beeld = await createImageBitmap(bestand, { imageOrientation: 'from-image' }); } catch {
@@ -835,26 +861,15 @@ async function afbeeldingLezen(bestand) {
   c.width = Math.round(beeld.width * schaal); c.height = Math.round(beeld.height * schaal);
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.filter = 'grayscale(1) contrast(1.15)';
+  ctx.filter = 'grayscale(1)';
   ctx.drawImage(beeld, 0, 0, c.width, c.height);
+  ctx.filter = 'none';
   if (beeld.close) beeld.close();
+  zwartWit(ctx, c.width, c.height);
   toast('Tekst herkennen… de eerste keer duurt dit wat langer', null, null, true);
   const png = await naarPng(c);
   c.width = c.height = 0;
   return tekstHerkennen(png);
-}
-function pdfTekst(items) {
-  let t = '', y0 = null;
-  for (const it of items) {
-    if (typeof it.str !== 'string') continue;
-    const y = it.transform ? it.transform[5] : null;
-    if (y0 !== null && y !== null && Math.abs(y - y0) > 2 && !t.endsWith('\n')) t += '\n';
-    else if (t && !t.endsWith('\n') && !t.endsWith(' ') && it.str && !it.str.startsWith(' ')) t += ' ';
-    t += it.str;
-    if (it.hasEOL) t += '\n';
-    if (y !== null) y0 = y;
-  }
-  return t.replace(/ +\n/g, '\n').replace(/ {2,}/g, ' ');
 }
 async function pdfLezen(bestand) {
   // Eigen kopie van pdf.js; ontbreekt die (bv. map vendor niet geüpload), dan dezelfde versie van jsDelivr.
@@ -875,7 +890,8 @@ async function pdfLezen(bestand) {
     for (let n = 1; n <= aantal; n++) {
       toast(`Pagina ${n} van ${aantal} lezen…`, null, null, true);
       const pagina = await doc.getPage(n);
-      let tekst = pdfTekst((await pagina.getTextContent()).items);
+      const hoogte = pagina.getViewport({ scale: 1 }).viewBox[3];
+      let tekst = tekstOpmaken(pdfStukjes((await pagina.getTextContent()).items, hoogte));
       if (tekst.replace(/\s/g, '').length < 30) {
         toast(`Pagina ${n} van ${aantal}: tekst herkennen…`, null, null, true);
         const vp = pagina.getViewport({ scale: Math.min(4, 2200 / pagina.getViewport({ scale: 1 }).width) });

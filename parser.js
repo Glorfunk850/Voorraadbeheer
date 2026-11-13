@@ -103,6 +103,8 @@ function opschonen(i) {
   return i;
 }
 
+const ONAF = /\b(en|of|met|van|de|het|een|rode|groene|gele|witte|zwarte|verse|grote|kleine|halve|gehakte|geraspte|gerookte|zure|zoete|volle|magere|fijne|grove|extra|vierge|platte|krokante)$/i;
+
 function lijktIngredient(regel) {
   const t = regel.replace(/^[\s•·*\-–—>□▪◦●]+/, '').replace(/^[oO]\s+/, '').trim();
   if (t.length > 90) return false;
@@ -140,7 +142,10 @@ export function receptOntleden(ruw) {
     // ingrediëntenkop, eventueel met tekst erachter ("Ingrediënten voor 4 personen")
     if (KOP_INGREDIENTEN.test(zonderDubbelepunt) && regel.length < 50) { sectie = 'ingredienten'; continue; }
     if (KOP_BEREIDING.test(regel)) { sectie = 'stappen'; continue; }
-    if (KOP_ANDERS.test(regel) && regel.length < 40) { sectie = 'notities'; continue; }
+    if (KOP_ANDERS.test(regel) && regel.length < 40 && !/:\s*\S/.test(regel)) { sectie = 'notities'; continue; }
+    // "Tip: lekker met ..." op één regel
+    const tip = regel.match(/^(tip|tips|serveertip|bewaartip|wijntip|variatie)\s*[:-]\s*(.+)$/i);
+    if (tip) { notities.push(tip[2]); sectie = 'notities'; continue; }
 
     if (sectie === 'ingredienten') {
       // tussenkopje zoals "Voor de saus:"
@@ -170,7 +175,9 @@ export function receptOntleden(ruw) {
   const samengevoegd = [];
   for (const r of ingrRegels) {
     const vorige = samengevoegd[samengevoegd.length - 1];
-    if (vorige && /^[a-zà-ÿ(]/.test(r) && !lijktIngredient(r) && r.split(' ').length <= 3 && /[a-z,]$/i.test(vorige) && vorige.length < 30) {
+    // alleen samenvoegen als de vorige regel duidelijk niet af is ("1 rode" + "paprika", "2 el olie," + "gesmolten")
+    const onaf = vorige && (/[,\-–(]$/.test(vorige) || ONAF.test(vorige) || !ingredientOntleden(vorige).naam);
+    if (onaf && /^[a-zà-ÿ(]/.test(r) && !lijktIngredient(r) && r.split(' ').length <= 4) {
       samengevoegd[samengevoegd.length - 1] = vorige + ' ' + r;
     } else samengevoegd.push(r);
   }

@@ -185,7 +185,11 @@
   async function tekstUitAfbeelding(blob) {
     const w = await werker();
     const { data } = await w.recognize(blob);
-    return (data && data.text) || '';
+    // losse woorden met hun plaats, zodat de app kolommen in de juiste volgorde kan zetten
+    const woorden = ((data && data.words) || [])
+      .filter((x) => x.text && x.text.trim() && !(x.confidence < 25 && !/[a-z0-9]/i.test(x.text)))
+      .map((x) => ({ str: x.text, x0: x.bbox.x0, y0: x.bbox.y0, x1: x.bbox.x1, y1: x.bbox.y1 }));
+    return { tekst: (data && data.text) || '', woorden };
   }
 
   // ------------------------------------------------------------------ export
@@ -220,7 +224,7 @@
 
     if (bron === 'status') return { ocr: true, talen: 'nld+eng', internet: navigator.onLine, telefoonadres: null, opslag: opslagWerkt, pwa: true };
     if (bron === 'alles') return alles();
-    if (bron === 'ocr') return { tekst: await tekstUitAfbeelding(ruw) };
+    if (bron === 'ocr') return tekstUitAfbeelding(ruw);
     if (bron === 'barcode') return barcodeOpzoeken(delen[1].replace(/\D/g, ''));
     if (bron === 'statistieken') {
       const top = (soort) => Object.entries(S.gebeurtenissen.filter((g) => g.soort === soort).reduce((m, g) => ((m[g.naam] = (m[g.naam] || 0) + 1), m), {}))
