@@ -297,7 +297,7 @@ function tekenVoorraad() {
     <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
     ${lijst}
     ${(S.catalogus || []).length ? `<section class="sectie"><ul class="lijst"><li><button class="rij" id="catalogus-open">
-      <span class="naam">Catalogus<small>Alle producten die je ooit toevoegde</small></span><span class="rechts">${S.catalogus.length} ›</span></button></li></ul></section>` : ''}`);
+      <span class="naam">Catalogus<small>Alle producten die je ooit toevoegde</small></span><span class="rechts">›</span></button></li></ul></section>` : ''}`);
   installTipTekenen();
   if ($('#catalogus-open')) $('#catalogus-open').onclick = () => catalogusPaneel();
   $('#nieuw').onclick = () => productFormulier(null);
@@ -369,18 +369,14 @@ function catalogusPaneel() {
     const lijstTekenen = () => {
       const q = zoek.trim().toLowerCase();
       const items = (S.catalogus || []).filter((c) => !q || `${c.naam} ${c.categorie || ''} ${c.barcode || ''}`.toLowerCase().includes(q));
-      const inVoorraad = (naam) => S.producten.filter((p) => zelfde(p.naam, naam) && p.hoeveelheid > 0);
-      $('#cat-lijst', el).innerHTML = items.length ? `<ul class="lijst">${items.map((c, i) => {
-        const nu = inVoorraad(c.naam);
-        const rechts = nu.length ? esc(nu.map((p) => hoeveelTekst(p.hoeveelheid, p.eenheid)).join(' + ')) : 'niet in huis';
-        return `<li><button class="rij" data-cat="${i}"><span class="naam">${esc(c.naam)}<small>${esc([c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small></span>
-          <span class="rechts">${rechts}</span></button></li>`;
-      }).join('')}</ul>` : '<div class="leeg">Niets gevonden.</div>';
+      $('#cat-lijst', el).innerHTML = items.length ? `<ul class="lijst">${items.map((c, i) =>
+        `<li><button class="rij" data-cat="${i}"><span class="naam">${esc(c.naam)}<small>${esc([c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small></span></button></li>`
+      ).join('')}</ul>` : '<div class="leeg">Niets gevonden.</div>';
       $$('[data-cat]', el).forEach((b) => (b.onclick = () => catalogusItem(items[+b.dataset.cat])));
     };
     if (!el.dataset.catalogus) {
       el.dataset.catalogus = '1';
-      el.innerHTML = `${paneelKop('Catalogus', `${(S.catalogus || []).length} producten`)}
+      el.innerHTML = `${paneelKop('Catalogus', 'Alle producten die je ooit toevoegde')}
         <div class="zoek">${ICOON.zoek}<input type="search" id="cat-zoek" placeholder="Zoeken in catalogus" autocomplete="off"></div>
         <div id="cat-lijst"></div>`;
       sluitKnoppen(el);
@@ -388,8 +384,6 @@ function catalogusPaneel() {
       z.value = zoek;
       z.oninput = () => { zoek = z.value; lijstTekenen(); };
     }
-    const onder = $('.paneel-kop p', el);
-    if (onder) onder.textContent = `${(S.catalogus || []).length} producten`;
     lijstTekenen();
   });
 }
