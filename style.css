@@ -315,3 +315,7 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .demo-balk { border: 1px dashed var(--lijn); border-radius: 12px; padding: .7rem .9rem; font-size: .82rem; color: var(--stil); margin-bottom: 1.2rem; line-height: 1.5; }
 .demo-balk b { color: var(--tekst); }
 .demo-balk code { background: var(--veld); padding: 0 .3rem; border-radius: 4px; color: var(--tekst); }
+
+/* tip: installeren als app */
+.installeer-tip { display: flex; align-items: center; gap: .6rem; background: var(--accent-zacht); border-radius: 12px; padding: .55rem .5rem .55rem .9rem; margin-bottom: 1rem; font-size: .92rem; }
+.installeer-tip span { flex: 1; }

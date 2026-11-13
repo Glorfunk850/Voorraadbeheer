@@ -233,6 +233,19 @@ function tekenen() {
   ({ voorraad: tekenVoorraad, boodschappen: tekenBoodschappen, recepten: tekenRecepten, instellingen: tekenInstellingen })[ui.view]();
   if (herstel) { const el = document.getElementById(herstel.id); if (el) { el.focus(); try { el.setSelectionRange(herstel.pos, herstel.pos); } catch { /* */ } } }
 }
+/** Inhoud vervangen, maar een zoekveld waarin je typt laten staan (anders sluit het toetsenbord op de smartphone). */
+function inhoudZetten(html) {
+  const inhoud = $('#inhoud'), actief = document.activeElement;
+  const oud = actief && actief.id && actief.matches('.zoek input') && inhoud.contains(actief) ? actief.closest('.zoek') : null;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const nieuw = oud && tmp.querySelector('#' + actief.id)?.closest('.zoek');
+  if (!nieuw || nieuw.parentNode !== tmp || oud.parentNode !== inhoud) { inhoud.innerHTML = html; return; }
+  const kinderen = [...tmp.childNodes], plek = kinderen.indexOf(nieuw);
+  [...inhoud.childNodes].forEach((k) => { if (k !== oud) k.remove(); });
+  oud.before(...kinderen.slice(0, plek));
+  oud.after(...kinderen.slice(plek + 1));
+}
 const instellingenKnop = `<button class="icoon alleen-mobiel" data-actie="naar" data-view="instellingen" aria-label="Instellingen">${ICOON.tandwiel}</button>`;
 
 // ---------------------------------------------------------------------------
@@ -271,16 +284,18 @@ function tekenVoorraad() {
     if (op.length) lijst += `<section class="sectie"><div class="sectie-titel">Op</div><ul class="lijst">${op.map((x) => rij(x, false)).join('')}</ul></section>`;
   }
 
-  $('#inhoud').innerHTML = `
+  inhoudZetten(`
     <header class="kop"><h1>Voorraad</h1>
       <div class="kop-acties">
         <button class="icoon" id="scan" aria-label="Barcode scannen" title="Barcode scannen">${ICOON.scan}</button>
         ${instellingenKnop}
         <button class="knop primair" id="nieuw">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}<span>Toevoegen</span></button>
       </div></header>
+    <div class="installeer-tip" id="installeer-tip" hidden></div>
     ${S.producten.length ? `
     <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
-    ${lijst}`;
+    ${lijst}`);
+  installTipTekenen();
   $('#nieuw').onclick = () => productFormulier(null);
   $('#scan').onclick = () => scanStarten('voorraad');
   const z = $('#zoek-voorraad');
@@ -636,7 +651,7 @@ function tekenRecepten() {
     return `<li><button class="rij" data-recept="${r.id}"><span class="naam">${esc(r.titel)}<small>${esc(onder)}</small></span>
       <span class="rechts">${d.ok}/${d.totaal}</span></button></li>`;
   };
-  $('#inhoud').innerHTML = `
+  inhoudZetten(`
     <header class="kop"><h1>Recepten</h1>
       <div class="kop-acties">${instellingenKnop}<button class="knop primair" id="r-nieuw">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}<span>Recept</span></button></div></header>
     ${S.recepten.length ? `<div class="zoek">${ICOON.zoek}<input type="search" id="zoek-recept" placeholder="Zoek op recept of ingrediënt" value="${esc(ui.receptZoek)}" autocomplete="off"></div>` : ''}
@@ -646,7 +661,7 @@ function tekenRecepten() {
     ${!S.recepten.length ? `<div class="leeg"><b>Nog geen recepten</b>Importeer een pdf of foto, of typ er zelf een.</div>` : ''}
     ${lijst.length ? `<section class="sectie"><div class="sectie-titel"><span>${zoek ? 'Gevonden' : 'Alle recepten'}</span><span>in huis</span></div><ul class="lijst">
       ${lijst.map((r) => rij(r, [r.personen && `${r.personen} personen`, r.bereidingstijd].filter(Boolean).join(' · '))).join('')}</ul></section>`
-    : S.recepten.length ? '<div class="leeg">Niets gevonden.</div>' : ''}`;
+    : S.recepten.length ? '<div class="leeg">Niets gevonden.</div>' : ''}`);
   $('#r-nieuw').onclick = receptToevoegenKeuze;
   const z = $('#zoek-recept');
   if (z) z.oninput = () => { ui.receptZoek = z.value; tekenRecepten(); };
@@ -949,6 +964,52 @@ $('#bestand-camera').onchange = (e) => receptImporteren(e.target);
 // ---------------------------------------------------------------------------
 // INSTELLINGEN
 // ---------------------------------------------------------------------------
+// App installeren: knop als de browser het aanbiedt, anders uitleg per toestel
+const alsApp = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isAndroid = () => /android/i.test(navigator.userAgent);
+function installUitleg() {
+  if (isIOS()) {
+    return /crios|fxios|edgios/i.test(navigator.userAgent)
+      ? 'Open dit adres in <b>Safari</b>. Tik daar op de deelknop (vierkant met pijl omhoog) en kies <b>Zet op beginscherm</b>.'
+      : 'Tik onderaan op de deelknop (vierkant met pijl omhoog) en kies <b>Zet op beginscherm</b>. Zie je het niet staan, scrol dan wat naar beneden in dat menu.';
+  }
+  if (isAndroid()) {
+    return /samsungbrowser/i.test(navigator.userAgent)
+      ? 'Tik op het menu <b>≡</b> en kies <b>Pagina toevoegen aan</b> → <b>Startscherm</b>.'
+      : 'Tik in Chrome rechtsboven op <b>⋮</b> en kies <b>App installeren</b> of <b>Toevoegen aan startscherm</b>.';
+  }
+  return 'Klik in Chrome of Edge op het installeer-icoon rechts in de adresbalk, of kies in het menu <b>App installeren</b>.';
+}
+function installBlokTekenen() {
+  const blok = $('#installeer-blok');
+  if (!blok) return;
+  blok.hidden = alsApp();
+  if (blok.hidden) return;
+  const kan = window.voorraadKanInstalleren?.();
+  blok.innerHTML = `<div class="sectie-titel">App installeren</div>
+    <p class="stil" style="font-size:.92rem;line-height:1.6;margin-bottom:.8rem">Zet Voorraad als app op je beginscherm. Ze opent dan zonder adresbalk en werkt ook offline.</p>
+    ${kan ? '<div class="knoppenrij"><button class="knop primair" id="i-installeer">App installeren</button></div>'
+      : `<p style="font-size:.95rem;line-height:1.6">${installUitleg()}</p>`}`;
+  const k = $('#i-installeer', blok);
+  if (k) k.onclick = async () => { await window.voorraadInstalleren?.(); installBlokTekenen(); };
+}
+// Eenmalige tip op het voorraadscherm (smartphone, nog niet geïnstalleerd)
+const tipWeg = () => { try { return localStorage.getItem('installtip-weg') === '1'; } catch { return false; } };
+function installTipTekenen() {
+  const plek = $('#installeer-tip');
+  if (!plek) return;
+  const tonen = !alsApp() && !tipWeg() && window.matchMedia('(max-width: 899px)').matches;
+  plek.hidden = !tonen;
+  if (!tonen) return;
+  plek.innerHTML = `<span>Installeer Voorraad als app op je beginscherm.</span>
+    <button class="tekstknop" id="tip-hoe">Hoe?</button><button class="weg" id="tip-weg" aria-label="Tip sluiten">×</button>`;
+  $('#tip-hoe', plek).onclick = async () => {
+    if (window.voorraadKanInstalleren?.()) { await window.voorraadInstalleren(); installTipTekenen(); } else naar('instellingen');
+  };
+  $('#tip-weg', plek).onclick = () => { try { localStorage.setItem('installtip-weg', '1'); } catch { /* */ } plek.hidden = true; };
+}
+
 async function tekenInstellingen() {
   const inst = S.instellingen;
   const telling = (veld, naam) => S.producten.filter((p) => zelfde(p[veld], naam)).length;
@@ -976,6 +1037,7 @@ async function tekenInstellingen() {
       <button data-dagen="${sleutel}" data-stap="1" aria-label="Meer">+</button></span></div>`;
   $('#inhoud').innerHTML = `
     <header class="kop"><h1>Instellingen</h1></header>
+    <section class="sectie" id="installeer-blok" hidden></section>
     <section class="sectie"><div class="sectie-titel">Waarschuwen, zoveel dagen vooraf</div>
       ${dagen('Te gebruiken tot', 'tgt_dagen')}${dagen('Ten minste houdbaar tot', 'tht_dagen')}</section>
     ${lijstBlok('Plaatsen', 'locaties', 'locatie', 'Nieuwe plaats, bv. Kelder')}
@@ -987,9 +1049,8 @@ async function tekenInstellingen() {
       <button class="knop" id="i-terug">Back-up terugzetten</button></div></section>
     <section class="sectie"><div class="sectie-titel">Over</div>
       <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Alleen om een onbekende barcode op te zoeken, wordt de barcode naar Open Food Facts gestuurd (open productdatabank, geen AI). Tekstherkenning (Tesseract, geen AI) wordt bij het eerste gebruik eenmalig gedownload; je foto's en pdf's verlaten het toestel niet.<br>
-      ${navigator.onLine ? '' : 'Offline: barcodes opzoeken kan nu niet.'}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p>
-      <div class="knoppenrij" id="installeer-rij" ${window.voorraadKanInstalleren?.() ? '' : 'hidden'} style="margin-top:.8rem"><button class="knop primair" id="i-installeer">App installeren</button></div></section>`;
-  $('#i-installeer') && ($('#i-installeer').onclick = async () => { await window.voorraadInstalleren?.(); $('#installeer-rij').hidden = true; });
+      ${navigator.onLine ? '' : 'Offline: barcodes opzoeken kan nu niet.'}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
+  installBlokTekenen();
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
   $$('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
@@ -1063,7 +1124,7 @@ async function start() {
   }
 }
 const bezig = () => !$('#paneel').hidden || $('#vraag').open || document.activeElement?.matches('input, textarea');
-document.addEventListener('installeerbaar', () => { const r = $('#installeer-rij'); if (r) r.hidden = false; });
+document.addEventListener('installeerbaar', () => { installBlokTekenen(); installTipTekenen(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !bezig()) api('GET', 'alles', undefined, true).catch(() => {}); });
 window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== ui.view) naar(v); });
 start();

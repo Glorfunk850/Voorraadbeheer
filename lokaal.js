@@ -421,7 +421,9 @@
     });
   }
   let installVraag = null;
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installVraag = e; document.dispatchEvent(new Event('installeerbaar')); });
+  // geen preventDefault: zo toont Chrome op Android ook zelf de balk "App installeren"
+  window.addEventListener('beforeinstallprompt', (e) => { installVraag = e; document.dispatchEvent(new Event('installeerbaar')); });
   window.voorraadInstalleren = async () => { if (!installVraag) return false; installVraag.prompt(); await installVraag.userChoice; installVraag = null; return true; };
   window.voorraadKanInstalleren = () => !!installVraag;
+  window.addEventListener('appinstalled', () => { installVraag = null; document.dispatchEvent(new Event('installeerbaar')); });
 })();
