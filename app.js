@@ -389,12 +389,7 @@ function catalogusPaneel() {
 }
 function catalogusItem(c) {
   paneelOpenen((el) => {
-    const nu = S.producten.filter((p) => zelfde(p.naam, c.naam) && p.hoeveelheid > 0);
-    const info = [c.aantal ? `${c.aantal}× toegevoegd` : '', c.laatst ? `laatst op ${datumNL(c.laatst.slice(0, 10), true)}` : '', c.barcode ? `barcode ${c.barcode}` : '']
-      .filter(Boolean).join(' · ');
     el.innerHTML = `${paneelKop(esc(c.naam), esc([c.categorie, c.locatie].filter(Boolean).join(' · ')))}
-      <div class="datumblok"><div>${nu.length ? `In huis: ${esc(nu.map((p) => hoeveelTekst(p.hoeveelheid, p.eenheid)).join(' + '))}` : 'Nu niet in huis'}
-        <small>${esc(info)}</small></div></div>
       <ul class="acties">
         <li><button id="c-voorraad">Aan voorraad toevoegen</button></li>
         <li><button id="c-lijst">Op boodschappenlijst</button></li>
