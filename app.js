@@ -1064,15 +1064,15 @@ function installBlokTekenen() {
   const k = $('#i-installeer', blok);
   if (k) k.onclick = async () => { await window.voorraadInstalleren?.(); installBlokTekenen(); };
 }
-// Eenmalige tip op het voorraadscherm (smartphone, nog niet geïnstalleerd)
+// Tip op het voorraadscherm zolang de app niet geïnstalleerd is (smartphone en computer)
 const tipWeg = () => { try { return localStorage.getItem('installtip-weg') === '1'; } catch { return false; } };
 function installTipTekenen() {
   const plek = $('#installeer-tip');
   if (!plek) return;
-  const tonen = !alsApp() && !tipWeg() && window.matchMedia('(max-width: 899px)').matches;
+  const tonen = !alsApp() && !tipWeg();
   plek.hidden = !tonen;
   if (!tonen) return;
-  plek.innerHTML = `<span>Installeer Voorraad als app op je beginscherm.</span>
+  plek.innerHTML = `<span>Installeer Voorraad als app ${isIOS() || isAndroid() ? 'op je beginscherm' : 'op deze computer'}.</span>
     <button class="tekstknop" id="tip-hoe">Hoe?</button><button class="weg" id="tip-weg" aria-label="Tip sluiten">×</button>`;
   $('#tip-hoe', plek).onclick = async () => {
     if (window.voorraadKanInstalleren?.()) { await window.voorraadInstalleren(); installTipTekenen(); } else naar('instellingen');
