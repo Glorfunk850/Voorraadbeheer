@@ -276,8 +276,16 @@ function tekenVoorraad() {
     if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map((x) => rij(x, true)).join('')}</ul></section>`;
     // De rest van de voorraad verschijnt alleen bij zoeken
     if (zoek && rest.length) {
-      const items = rest.sort((a, b) => a.p.naam.localeCompare(b.p.naam, 'nl'));
-      lijst += `<section class="sectie"><div class="sectie-titel">Gevonden</div><ul class="lijst">${items.map((x) => rij(x, false)).join('')}</ul></section>`;
+      // Elk product maar één keer tonen (meerdere partijen van hetzelfde product samen), zonder aantallen
+      const groepen = new Map();
+      for (const x of rest) {
+        const k = x.p.naam.trim().toLowerCase();
+        if (!groepen.has(k)) groepen.set(k, []);
+        groepen.get(k).push(x.p);
+      }
+      const items = [...groepen.values()].sort((a, b) => a[0].naam.localeCompare(b[0].naam, 'nl'));
+      lijst += `<section class="sectie"><div class="sectie-titel">Gevonden</div><ul class="lijst">${items.map((g) =>
+        `<li><button class="rij" data-groep="${g.map((p) => p.id).join(',')}"><span class="naam">${esc(g[0].naam)}</span></button></li>`).join('')}</ul></section>`;
     }
     if (!zoek && !opTeGebruiken.length) {
       lijst += `<div class="leeg"><b>Niets dat binnenkort op moet</b>Zoek een product om het te bekijken of aan te passen.</div>`;
@@ -305,6 +313,26 @@ function tekenVoorraad() {
   const z = $('#zoek-voorraad');
   if (z) z.oninput = () => { ui.zoek = z.value; tekenVoorraad(); };
   $$('[data-product]').forEach((b) => (b.onclick = () => productPaneel(+b.dataset.product)));
+  $$('[data-groep]').forEach((b) => (b.onclick = () => {
+    const ids = b.dataset.groep.split(',').map(Number);
+    if (ids.length === 1) productPaneel(ids[0]); else partijenPaneel(ids);
+  }));
+}
+
+// Meerdere partijen van hetzelfde product: kies welke je wilt bekijken
+function partijenPaneel(ids) {
+  paneelOpenen((el) => {
+    const lijst = ids.map((id) => S.producten.find((p) => p.id === id)).filter(Boolean)
+      .sort((a, b) => (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
+    if (!lijst.length) return paneelSluiten();
+    if (lijst.length === 1) return productPaneel(lijst[0].id);
+    el.innerHTML = `${paneelKop(esc(lijst[0].naam), 'Kies welke je wilt bekijken')}
+      <ul class="lijst">${lijst.map((p) => `<li><button class="rij" data-partij="${p.id}"><span class="naam">${
+        esc(p.vervaldatum ? `${TYPE_LANG[p.datumtype] || TYPE_LANG.THT} ${datumNL(p.vervaldatum, true)}` : 'Geen houdbaarheidsdatum')
+      }<small>${esc([p.locatie, p.categorie].filter(Boolean).join(' · ') || ' ')}</small></span><span class="rechts">›</span></button></li>`).join('')}</ul>`;
+    sluitKnoppen(el);
+    $$('[data-partij]', el).forEach((b) => (b.onclick = () => productPaneel(+b.dataset.partij)));
+  });
 }
 
 // Productpaneel: hoeveelheid, houdbaarheid en acties
