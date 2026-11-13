@@ -141,11 +141,30 @@ function paneelSluiten() {
   $('#paneel').hidden = true;
   $('#sluier').hidden = true;
   $('#paneel').innerHTML = '';
+  $('#paneel').style.bottom = ''; $('#paneel').style.maxHeight = '';
   document.body.style.overflow = '';
   document.body.classList.remove('paneel-open');
   paneelVernieuwen = null;
 }
 $('#sluier').onclick = paneelSluiten;
+
+// Toetsenbord op de smartphone: het blad boven het toetsenbord houden, anders schuift het uit beeld
+const opTelefoon = window.matchMedia('(max-width: 899px)');
+function paneelAanToetsenbord() {
+  const p = $('#paneel'), vv = window.visualViewport;
+  if (!vv || p.hidden || !opTelefoon.matches) { p.style.bottom = ''; p.style.maxHeight = ''; return; }
+  const onder = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  p.style.bottom = onder > 1 ? onder + 'px' : '';
+  p.style.maxHeight = Math.round(vv.height * (onder > 1 ? 0.96 : 0.92)) + 'px';
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', paneelAanToetsenbord);
+  window.visualViewport.addEventListener('scroll', paneelAanToetsenbord);
+}
+$('#paneel').addEventListener('focusin', (e) => {
+  if (!opTelefoon.matches || !e.target.matches('input, textarea, select')) return;
+  setTimeout(() => { paneelAanToetsenbord(); e.target.scrollIntoView({ block: 'nearest' }); }, 300);
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#paneel').hidden && !$('#vraag').open) paneelSluiten(); });
 const paneelKop = (titel, onder = '') => `<div class="paneel-kop"><div><h2>${titel}</h2>${onder ? `<p class="stil">${onder}</p>` : ''}</div>
   <button class="icoon" data-sluit aria-label="Sluiten">${ICOON.sluit}</button></div>`;

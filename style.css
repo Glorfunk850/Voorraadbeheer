@@ -163,7 +163,7 @@ button.rij:hover .naam { color: var(--accent); }
 /* ---------- paneel (blad op telefoon, zijpaneel op computer) ---------- */
 .sluier { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 20; animation: in .15s ease; }
 .paneel {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 92vh; overflow-y: auto; overscroll-behavior: contain;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 92vh; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain;
   background: var(--achtergrond); border-radius: 18px 18px 0 0; box-shadow: var(--schaduw);
   padding: .6rem 1.4rem calc(1.4rem + env(safe-area-inset-bottom)); animation: omhoog .22s cubic-bezier(.2,.8,.2,1);
 }
@@ -180,7 +180,17 @@ button.rij:hover .naam { color: var(--accent); }
 .paneel-kop { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.3rem; }
 .paneel-kop p { margin-top: .2rem; }
 .paneel-kop .icoon { margin: -.4rem -.6rem 0 0; flex: none; }
-.paneel-voet { display: flex; gap: .6rem; margin-top: 1.6rem; }
+/* knoppen onderaan blijven altijd zichtbaar, ook als het blad hoger is dan het scherm */
+.paneel-voet {
+  display: flex; gap: .6rem; margin-top: 1.6rem;
+  position: sticky; z-index: 1; bottom: calc(-1.4rem - env(safe-area-inset-bottom));
+  margin-bottom: calc(-1.4rem - env(safe-area-inset-bottom));
+  padding: .8rem 0 calc(1.4rem + env(safe-area-inset-bottom));
+  background: var(--achtergrond); box-shadow: 0 -1px 0 var(--lijn);
+}
+@media (min-width: 900px) {
+  .paneel-voet { bottom: -2rem; margin-bottom: -2rem; padding-bottom: 2rem; }
+}
 .paneel-voet .knop { flex: 1; }
 
 /* productdetail */
