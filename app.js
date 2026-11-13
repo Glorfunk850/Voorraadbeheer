@@ -389,7 +389,23 @@ function catalogusPaneel() {
 }
 function catalogusItem(c) {
   paneelOpenen((el) => {
+    const nu = S.producten.filter((p) => zelfde(p.naam, c.naam) && p.hoeveelheid > 0);
+    // totaal in huis: verpakkingen samentellen (g en kg, ml en l ... worden omgerekend)
+    const totalen = [];
+    for (const p of nu) {
+      const t = totalen.find((x) => omrekenen(1, p.eenheid, x.eenheid) !== null);
+      if (t) t.hoeveelheid += omrekenen(p.hoeveelheid, p.eenheid, t.eenheid);
+      else totalen.push({ hoeveelheid: p.hoeveelheid, eenheid: p.eenheid });
+    }
+    for (const t of totalen) {
+      const groot = { g: 'kg', ml: 'l', cl: 'l', dl: 'l' }[t.eenheid];
+      if (groot && omrekenen(t.hoeveelheid, t.eenheid, groot) >= 1) { t.hoeveelheid = omrekenen(t.hoeveelheid, t.eenheid, groot); t.eenheid = groot; }
+    }
+    const info = [c.aantal ? `${c.aantal}× toegevoegd` : '', c.laatst ? `laatst op ${datumNL(c.laatst.slice(0, 10), true)}` : '']
+      .filter(Boolean).join(' · ');
     el.innerHTML = `${paneelKop(esc(c.naam), esc([c.categorie, c.locatie].filter(Boolean).join(' · ')))}
+      <div class="datumblok"><div>${totalen.length ? `In huis: ${esc(totalen.map((t) => hoeveelTekst(t.hoeveelheid, t.eenheid)).join(' en '))}` : 'Nu niet in huis'}
+        ${info ? `<small>${esc(info)}</small>` : ''}</div></div>
       <ul class="acties">
         <li><button id="c-voorraad">Aan voorraad toevoegen</button></li>
         <li><button id="c-lijst">Op boodschappenlijst</button></li>
