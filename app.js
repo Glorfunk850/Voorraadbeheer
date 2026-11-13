@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 
-let S = { producten: [], boodschappen: [], recepten: [], instellingen: {} };
+let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
 const ui = { view: 'voorraad', plaats: '', zoek: '', receptZoek: '', uitgeklapt: new Set() };
 
@@ -175,6 +175,7 @@ function sluitKnoppen(p) { $$('[data-sluit]', p).forEach((b) => (b.onclick = pan
 // ---------------------------------------------------------------------------
 const uniek = (lijst) => { const m = new Map(); for (const x of lijst) if (x && !m.has(x.toLowerCase())) m.set(x.toLowerCase(), x); return [...m.values()]; };
 const productnamen = () => uniek(S.producten.map((p) => p.naam)).sort((a, b) => a.localeCompare(b, 'nl'));
+const catalogusnamen = () => uniek([...S.producten.map((p) => p.naam), ...(S.catalogus || []).map((c) => c.naam)]).sort((a, b) => a.localeCompare(b, 'nl'));
 const locaties = () => uniek([...(S.instellingen.locaties || []), ...S.producten.map((p) => p.locatie)]);
 const categorieen = () => uniek([...(S.instellingen.categorieen || []), ...S.producten.map((p) => p.categorie)]);
 const opties = (lijst, gekozen, leeg) => {
@@ -294,8 +295,11 @@ function tekenVoorraad() {
     <div class="installeer-tip" id="installeer-tip" hidden></div>
     ${S.producten.length ? `
     <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
-    ${lijst}`);
+    ${lijst}
+    ${(S.catalogus || []).length ? `<section class="sectie"><ul class="lijst"><li><button class="rij" id="catalogus-open">
+      <span class="naam">Catalogus<small>Alle producten die je ooit toevoegde</small></span><span class="rechts">${S.catalogus.length} ›</span></button></li></ul></section>` : ''}`);
   installTipTekenen();
+  if ($('#catalogus-open')) $('#catalogus-open').onclick = () => catalogusPaneel();
   $('#nieuw').onclick = () => productFormulier(null);
   $('#scan').onclick = () => scanStarten('voorraad');
   const z = $('#zoek-voorraad');
@@ -355,6 +359,66 @@ function productPaneel(id) {
       await api('DELETE', `producten/${p.id}`);
       toast(`${oud.naam} verwijderd`, 'Ongedaan maken', () => api('POST', 'producten', oud));
     });
+  });
+}
+
+// Catalogus: alle producten die ooit werden toegevoegd
+function catalogusPaneel() {
+  let zoek = '';
+  paneelOpenen((el) => {
+    const lijstTekenen = () => {
+      const q = zoek.trim().toLowerCase();
+      const items = (S.catalogus || []).filter((c) => !q || `${c.naam} ${c.categorie || ''} ${c.barcode || ''}`.toLowerCase().includes(q));
+      const inVoorraad = (naam) => S.producten.filter((p) => zelfde(p.naam, naam) && p.hoeveelheid > 0);
+      $('#cat-lijst', el).innerHTML = items.length ? `<ul class="lijst">${items.map((c, i) => {
+        const nu = inVoorraad(c.naam);
+        const rechts = nu.length ? esc(nu.map((p) => hoeveelTekst(p.hoeveelheid, p.eenheid)).join(' + ')) : 'niet in huis';
+        return `<li><button class="rij" data-cat="${i}"><span class="naam">${esc(c.naam)}<small>${esc([c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small></span>
+          <span class="rechts">${rechts}</span></button></li>`;
+      }).join('')}</ul>` : '<div class="leeg">Niets gevonden.</div>';
+      $$('[data-cat]', el).forEach((b) => (b.onclick = () => catalogusItem(items[+b.dataset.cat])));
+    };
+    if (!el.dataset.catalogus) {
+      el.dataset.catalogus = '1';
+      el.innerHTML = `${paneelKop('Catalogus', `${(S.catalogus || []).length} producten`)}
+        <div class="zoek">${ICOON.zoek}<input type="search" id="cat-zoek" placeholder="Zoeken in catalogus" autocomplete="off"></div>
+        <div id="cat-lijst"></div>`;
+      sluitKnoppen(el);
+      const z = $('#cat-zoek', el);
+      z.value = zoek;
+      z.oninput = () => { zoek = z.value; lijstTekenen(); };
+    }
+    const onder = $('.paneel-kop p', el);
+    if (onder) onder.textContent = `${(S.catalogus || []).length} producten`;
+    lijstTekenen();
+  });
+}
+function catalogusItem(c) {
+  paneelOpenen((el) => {
+    const nu = S.producten.filter((p) => zelfde(p.naam, c.naam) && p.hoeveelheid > 0);
+    const info = [c.aantal ? `${c.aantal}× toegevoegd` : '', c.laatst ? `laatst op ${datumNL(c.laatst.slice(0, 10), true)}` : '', c.barcode ? `barcode ${c.barcode}` : '']
+      .filter(Boolean).join(' · ');
+    el.innerHTML = `${paneelKop(esc(c.naam), esc([c.categorie, c.locatie].filter(Boolean).join(' · ')))}
+      <div class="datumblok"><div>${nu.length ? `In huis: ${esc(nu.map((p) => hoeveelTekst(p.hoeveelheid, p.eenheid)).join(' + '))}` : 'Nu niet in huis'}
+        <small>${esc(info)}</small></div></div>
+      <ul class="acties">
+        <li><button id="c-voorraad">Aan voorraad toevoegen</button></li>
+        <li><button id="c-lijst">Op boodschappenlijst</button></li>
+        <li><button id="c-terug">Terug naar catalogus</button></li>
+        <li><button id="c-weg" class="gevaar">Uit catalogus verwijderen</button></li>
+      </ul>`;
+    sluitKnoppen(el);
+    $('#c-voorraad', el).onclick = () => productFormulier(null, { naam: c.naam, eenheid: c.eenheid || 'stuks', categorie: c.categorie || '',
+      locatie: c.locatie || locaties()[0] || '', datumtype: c.datumtype || 'THT', barcode: c.barcode || '',
+      hoeveelheid: TELBAAR.has(c.eenheid || 'stuks') ? 1 : c.hoeveelheid || 1 });
+    $('#c-lijst', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks' }); toast(`${c.naam} staat op de boodschappenlijst`); };
+    $('#c-terug', el).onclick = () => catalogusPaneel();
+    $('#c-weg', el).onclick = async () => {
+      if (!(await vraag(`${c.naam} uit de catalogus verwijderen? Je voorraad blijft zoals ze is.`, { ja: 'Verwijderen', gevaar: true }))) return;
+      await api('DELETE', 'catalogus', { naam: c.naam });
+      toast(`${c.naam} uit catalogus verwijderd`);
+      catalogusPaneel();
+    };
   });
 }
 
@@ -437,11 +501,12 @@ function productFormulier(bestaand, sjabloon = {}) {
     // bekende naam: gegevens van dat product overnemen
     const bekendeNaam = () => {
       if (!nieuw) return;
-      const b = S.producten.find((x) => zelfde(x.naam, $('#pf-naam', el).value));
-      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype });
+      const naam = $('#pf-naam', el).value;
+      const b = S.producten.find((x) => zelfde(x.naam, naam)) || (S.catalogus || []).find((x) => zelfde(x.naam, naam));
+      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype, code: b.barcode || '' });
     };
     $('#pf-naam', el).onchange = bekendeNaam;
-    suggesties($('#pf-naam', el), productnamen, bekendeNaam);
+    suggesties($('#pf-naam', el), catalogusnamen, bekendeNaam);
     const scan = $('#pf-scan', el);
     if (scan) scan.onclick = () => scanStarten('formulier', invullen);
     $('#pf', el).onsubmit = async (e) => {

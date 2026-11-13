@@ -23,7 +23,7 @@
 
   const STANDAARD = () => ({
     volgendId: 1,
-    producten: [], boodschappen: [], recepten: [], gebeurtenissen: [], barcodes: {},
+    producten: [], boodschappen: [], recepten: [], gebeurtenissen: [], barcodes: {}, catalogus: [],
     instellingen: {
       tgt_dagen: 2, tht_dagen: 3, locaties: ['Koelkast', 'Diepvries', 'Voorraadkast'],
       categorieen: ['Groenten', 'Fruit', 'Zuivel & eieren', 'Vlees & vis', 'Brood & granen', 'Pasta, rijst & peulvruchten',
@@ -78,6 +78,7 @@
       gebeurtenissen: Array.isArray(d.gebeurtenissen) ? d.gebeurtenissen : [],
       barcodes: d.barcodes && typeof d.barcodes === 'object' && !Array.isArray(d.barcodes) ? { ...d.barcodes } : {},
     };
+    uit.catalogus = Array.isArray(d.catalogus) ? d.catalogus.filter((c) => c && (c.naam || '').trim()) : null;
     // barcodes uit een oudere back-up (lijst) omzetten
     if (Array.isArray(d.barcodes)) for (const b of d.barcodes) if (b && b.code) uit.barcodes[String(b.code)] = { ...b, bron: 'eigen' };
     for (const r of uit.recepten) if (!Array.isArray(r.ingredienten)) r.ingredienten = [];
@@ -86,6 +87,14 @@
     uit.producten.forEach(zie); uit.boodschappen.forEach(zie);
     uit.recepten.forEach((r) => { zie(r); r.ingredienten.forEach(zie); });
     uit.volgendId = Math.max(+d.volgendId || 1, max + 1);
+    // catalogus ontbreekt (oudere gegevens): opbouwen uit wat er al is
+    if (!uit.catalogus) {
+      uit.catalogus = [];
+      const vorige = S; S = uit;
+      for (const p of uit.producten) catalogusBijwerken(p, false);
+      for (const [code, b] of Object.entries(uit.barcodes)) if (b && b.naam) catalogusBijwerken({ ...b, barcode: code }, false);
+      S = vorige;
+    }
     return uit;
   }
 
@@ -105,12 +114,29 @@
       }
     } else if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto);
   }
+  // Catalogus: elk product dat ooit werd toegevoegd, ook als het later op is of verwijderd werd
+  function catalogusBijwerken(p, teller = true, oudeNaam = null) {
+    const naam = (p.naam || '').trim();
+    if (!naam) return;
+    let c = S.catalogus.find((x) => zelfde(x.naam, naam));
+    if (!c && oudeNaam && !zelfde(oudeNaam, naam)) {
+      c = S.catalogus.find((x) => zelfde(x.naam, oudeNaam));
+      if (c && S.producten.some((x) => x !== p && zelfde(x.naam, oudeNaam))) c = null; // oude naam nog in gebruik
+    }
+    if (!c) { c = { naam, aantal: 0, eerst: nu() }; S.catalogus.push(c); }
+    c.naam = naam;
+    for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype', 'barcode']) if (p[k]) c[k] = p[k];
+    if (p.hoeveelheid > 0) c.hoeveelheid = p.hoeveelheid;
+    if (teller) c.aantal = (c.aantal || 0) + 1;
+    c.laatst = nu();
+  }
   const gebeurtenis = (soort, naam) => S.gebeurtenissen.push({ soort, naam, tijdstip: nu() });
 
   const alles = () => JSON.parse(JSON.stringify({
     producten: [...S.producten].sort((a, b) => (a.naam || '').localeCompare(b.naam || '', 'nl')),
     boodschappen: [...S.boodschappen].sort((a, b) => a.afgevinkt - b.afgevinkt || (a.naam || '').localeCompare(b.naam || '', 'nl')),
     recepten: [...S.recepten].sort((a, b) => (a.titel || '').localeCompare(b.titel || '', 'nl')),
+    catalogus: [...S.catalogus].sort((a, b) => (a.naam || '').localeCompare(b.naam || '', 'nl')),
     instellingen: S.instellingen,
   }));
   const fout = (status, bericht) => { const e = new Error(bericht); e.status = status; throw e; };
@@ -243,6 +269,11 @@
       return alles();
     }
 
+    if (bron === 'catalogus' && methode === 'DELETE') {
+      S.catalogus = S.catalogus.filter((c) => !zelfde(c.naam, data && data.naam));
+      return alles();
+    }
+
     if (bron === 'producten') {
       if (methode === 'POST' && ident === null) {
         if (!(data.naam || '').trim()) fout(400, 'Geef het product een naam.');
@@ -251,6 +282,7 @@
         p.naam = p.naam.trim();
         p.hoeveelheid = getal(p.hoeveelheid) || 0; p.minimum = getal(p.minimum) || 0;
         S.producten.push(p);
+        catalogusBijwerken(p);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(p.naam);
         return alles();
@@ -263,6 +295,7 @@
         if ('hoeveelheid' in data) p.hoeveelheid = getal(data.hoeveelheid) || 0;
         if ('minimum' in data) p.minimum = getal(data.minimum) || 0;
         p.gewijzigd = nu();
+        if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(oudeNaam); minimumControleren(p.naam);
         return alles();
@@ -292,11 +325,13 @@
             if (item.vervaldatum) { bestaand.vervaldatum = item.vervaldatum; bestaand.datumtype = item.datumtype; }
             if (item.locatie) bestaand.locatie = item.locatie;
             bestaand.aankoopdatum = vandaag(); bestaand.gewijzigd = nu();
+            catalogusBijwerken(bestaand);
           } else {
             const voorbeeld = S.producten.find((p) => zelfde(p.naam, b.naam));
             S.producten.push({ id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
               datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu() });
+            catalogusBijwerken(S.producten[S.producten.length - 1]);
           }
           gebeurtenis('gekocht', b.naam);
           S.boodschappen = S.boodschappen.filter((x) => x !== b);
