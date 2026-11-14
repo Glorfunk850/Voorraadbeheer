@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 16;
+const APP_VERSIE = 17;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
@@ -806,7 +806,8 @@ function receptPaneel(id, personen) {
       }).join('')}</ul>
       <div class="knoppenrij">
         <button class="knop primair" id="gekookt">Gekookt</button>
-        ${ontbreekt.length ? `<button class="knop" id="naar-lijst">${ontbreekt.length} op boodschappenlijst</button>` : '<span class="stil" style="align-self:center">Alles in huis</span>'}
+        <button class="knop" id="naar-lijst">Op boodschappenlijst…</button>
+        ${ontbreekt.length ? '' : '<span class="stil" style="align-self:center">Alles in huis</span>'}
       </div>
       ${stappen.length ? `<h3>Bereiding</h3><ol class="stappen">${stappen.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
       ${r.notities ? `<h3>Notities</h3><p style="white-space:pre-wrap">${esc(r.notities)}</p>` : ''}
@@ -822,14 +823,56 @@ function receptPaneel(id, personen) {
       await api('DELETE', `recepten/${r.id}`);
       toast('Recept verwijderd');
     };
-    const nl = $('#naar-lijst', el);
-    if (nl) nl.onclick = async () => {
-      const items = ontbreekt.map(({ i, b }) => (b.st === 'weinig' && b.nodig !== null
-        ? { naam: b.naam, hoeveelheid: Math.ceil((b.nodig - b.totaal) * 100) / 100, eenheid: b.eenheid, bron: 'recept' }
-        : { naam: b.naam || i.naam, hoeveelheid: i.hoeveelheid !== null ? Math.round(i.hoeveelheid * factor * 100) / 100 : null, eenheid: i.eenheid, bron: 'recept' }));
+    $('#naar-lijst', el).onclick = () => boodschappenKiezen(r, regels, factor, personen);
+  }, { breed: true });
+}
+
+// Zelf kiezen welke ingrediënten van een recept op de boodschappenlijst komen.
+// Wat ontbreekt of te weinig is, staat al aangevinkt; de hoeveelheid kun je aanpassen.
+function boodschappenKiezen(r, regels, factor, personen) {
+  const keuzes = regels.map(({ i, b }) => {
+    const weinig = b.st === 'weinig' && b.nodig !== null;
+    return {
+      naam: b.naam || i.naam,
+      hoeveelheid: weinig ? Math.ceil((b.nodig - b.totaal) * 100) / 100 : i.hoeveelheid !== null && i.hoeveelheid !== undefined ? Math.round(i.hoeveelheid * factor * 100) / 100 : null,
+      eenheid: weinig ? b.eenheid : i.eenheid || '',
+      aan: b.st !== 'ok',
+      st: b.altijd ? 'meestal in huis' : b.st === 'ontbreekt' ? 'niet in huis' : b.st === 'weinig' ? `te weinig: ${hoeveelTekst(b.totaal, b.eenheid)} in huis` : 'in huis',
+    };
+  });
+  paneelOpenen((el) => {
+    if (alGetekend('boodschappen-kiezen')) return; // niet opnieuw tekenen terwijl je typt
+    el.innerHTML = `${paneelKop('Op boodschappenlijst', esc(r.titel))}
+      <p class="stil" style="margin:0 0 .4rem">Vink aan wat je wilt kopen. Wat ontbreekt, staat al aangevinkt.</p>
+      <div>${keuzes.map((k, n) => `<div class="kook-rij kies">
+          <label class="vink" style="display:flex;align-items:center;gap:.7rem;flex:1;min-width:0"><input type="checkbox" data-k="${n}" ${k.aan ? 'checked' : ''}><span class="vakje"></span>
+            <span class="naam">${esc(k.naam)}<small>${esc(k.st)}</small></span></label>
+          <input type="text" inputmode="decimal" data-hv="${n}" value="${esc(k.hoeveelheid === null ? '' : fmt(k.hoeveelheid))}" placeholder="–" aria-label="Hoeveelheid ${esc(k.naam)}"><span class="eenh">${esc(eenheidKort(k.eenheid))}</span></div>`).join('')}</div>
+      <div class="snel" style="margin-top:.8rem"><button type="button" class="chip" id="bk-alles">Alles aanvinken</button><button type="button" class="chip" id="bk-niets">Niets aanvinken</button></div>
+      <div class="paneel-voet"><button class="knop" id="bk-terug">Terug</button><button class="knop primair" id="bk-toevoegen"></button></div>`;
+    sluitKnoppen(el);
+    const vinkjes = $$('input[data-k]', el);
+    const tellen = () => {
+      const n = vinkjes.filter((v) => v.checked).length;
+      $('#bk-toevoegen', el).textContent = n ? `${n} toevoegen` : 'Niets gekozen';
+    };
+    vinkjes.forEach((v) => (v.onchange = tellen));
+    // hoeveelheid aanpassen = dat ingrediënt willen kopen
+    $$('input[data-hv]', el).forEach((inv) => (inv.oninput = () => { vinkjes[+inv.dataset.hv].checked = true; tellen(); }));
+    $('#bk-alles', el).onclick = () => { vinkjes.forEach((v) => (v.checked = true)); tellen(); };
+    $('#bk-niets', el).onclick = () => { vinkjes.forEach((v) => (v.checked = false)); tellen(); };
+    $('#bk-terug', el).onclick = () => receptPaneel(r.id, personen);
+    $('#bk-toevoegen', el).onclick = async () => {
+      const items = vinkjes.filter((v) => v.checked).map((v) => {
+        const k = keuzes[+v.dataset.k];
+        return { naam: k.naam, hoeveelheid: num($(`input[data-hv="${v.dataset.k}"]`, el).value), eenheid: k.eenheid, bron: 'recept' };
+      });
+      if (!items.length) return toast('Vink eerst aan wat je wilt kopen.');
       await api('POST', 'boodschappen', { items });
+      paneelSluiten();
       toast(`${items.length} op je boodschappenlijst gezet`);
     };
+    tellen();
   }, { breed: true });
 }
 
