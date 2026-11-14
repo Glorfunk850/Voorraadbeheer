@@ -1,6 +1,6 @@
 // Service worker: laat de app installeren en offline werken.
 // Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v14';
+const VERSIE = 'voorraad-v15';
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
   './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'parser.js', 'layout.js', 'manifest.webmanifest',
@@ -16,6 +16,7 @@ const PDF_BESTANDEN = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting(); // nieuwe versie meteen in gebruik nemen
   e.waitUntil(caches.open(VERSIE).then(async (c) => {
     await c.addAll(BESTANDEN);
     await Promise.all(PDF_BESTANDEN.map((b) => c.add(b).catch(() => console.warn('Niet gevonden:', b))));
@@ -48,13 +49,19 @@ self.addEventListener('fetch', (e) => {
   }
   if (url.origin !== self.location.origin) return; // bv. Open Food Facts: gewoon online
 
-  // Eigen bestanden: meteen uit de cache, op de achtergrond verversen
+  // Eigen bestanden: eerst de nieuwste versie van internet (zodat een toestel nooit een oude app toont),
+  // zonder internet of als het te lang duurt: de bewaarde versie.
   e.respondWith((async () => {
     const c = await caches.open(VERSIE);
     const sleutel = req.mode === 'navigate' ? 'index.html' : req;
-    const bewaard = await c.match(sleutel, { ignoreSearch: true });
-    const vers = fetch(req).then((a) => { if (a.ok && req.mode !== 'navigate') c.put(req, a.clone()); return a; }).catch(() => null);
-    if (bewaard) { e.waitUntil(vers); return bewaard; }
-    return (await vers) || (await c.match('index.html')) || Response.error();
+    const vers = fetch(req, { cache: 'no-cache' }).then((a) => {
+      if (a.ok) c.put(sleutel, a.clone());
+      return a.ok ? a : null;
+    }).catch(() => null);
+    const traag = new Promise((ok) => setTimeout(() => ok(null), 4000));
+    const antwoord = await Promise.race([vers, traag]);
+    if (antwoord) return antwoord;
+    e.waitUntil(vers);
+    return (await c.match(sleutel, { ignoreSearch: true })) || (await vers) || (await c.match('index.html')) || Response.error();
   })());
 });
