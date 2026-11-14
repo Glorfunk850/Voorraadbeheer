@@ -13,11 +13,8 @@ const RECEPT_EENHEDEN = ['', 'stuks', 'g', 'kg', 'ml', 'cl', 'dl', 'l', 'el', 't
 const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water', 'lauw water', 'ijsblokjes', 'zout', 'peper',
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
-// Indeling van recepten: één soort gerecht per recept, en vrij te kiezen categorieën (meerdere mogelijk)
-const SOORTEN = ['Ontbijt', 'Lunch', 'Voorgerecht', 'Soep', 'Salade', 'Hoofdgerecht', 'Bijgerecht', 'Dessert', 'Gebak', 'Snack', 'Saus', 'Drank'];
-const STANDAARD_CATEGORIEEN = ['Vegetarisch', 'Vlees', 'Vis', 'Pasta', 'Snel', 'Feestelijk'];
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 18;
+const APP_VERSIE = 19;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
@@ -735,19 +732,16 @@ function dekking(r, namen, geleerd) {
   return { ok: telt.filter((i) => beschikbaarheid(i, 1, namen, geleerd).st === 'ok').length, totaal: telt.length };
 }
 
-// Soorten in een vaste volgorde (eigen soorten achteraan), zonder dubbels
-function soortenVolgorde(lijst) {
+// Indeling van recepten: één soort gerecht per recept en categorieën (meerdere mogelijk).
+// Beide lijsten pas je zelf aan bij Instellingen; hun volgorde daar is ook de volgorde in de app.
+const receptSoorten = () => S.instellingen.recept_soorten || [];
+const receptCategorieen = () => S.instellingen.recept_categorieen || [];
+// namen ordenen volgens een lijst uit Instellingen (wat er niet in staat achteraan), zonder dubbels
+function volgensLijst(namen, lijst) {
   const uit = [];
-  for (const x of lijst) if (!uit.some((y) => zelfde(x, y))) uit.push(x);
-  const pos = (x) => { const i = SOORTEN.findIndex((y) => zelfde(x, y)); return i < 0 ? 99 : i; };
+  for (const x of namen) if (x && !uit.some((y) => zelfde(x, y))) uit.push(x);
+  const pos = (x) => { const i = lijst.findIndex((y) => zelfde(x, y)); return i < 0 ? 9999 : i; };
   return uit.sort((a, b) => pos(a) - pos(b) || a.localeCompare(b, 'nl'));
-}
-// Alle categorieën die bij je recepten gebruikt worden (en eventueel de standaardvoorstellen)
-function alleCategorieen(metStandaard, extra = []) {
-  const uit = [];
-  const bron = [...(metStandaard ? STANDAARD_CATEGORIEEN : []), ...S.recepten.flatMap((r) => r.categorieen || []), ...extra];
-  for (const c of bron) if (c && !uit.some((y) => zelfde(c, y))) uit.push(c);
-  return metStandaard ? uit : uit.sort((a, b) => a.localeCompare(b, 'nl'));
 }
 
 function tekenRecepten() {
@@ -783,8 +777,8 @@ function tekenRecepten() {
   };
   const onderschrift = (r, metSoort) => [metSoort && r.soort, r.personen && `${r.personen} personen`, r.bereidingstijd].filter(Boolean).join(' · ');
   // filterknoppen: alleen wat er bij je recepten echt voorkomt
-  const soorten = soortenVolgorde(S.recepten.map((r) => r.soort).filter(Boolean));
-  const cats = alleCategorieen(false);
+  const soorten = volgensLijst(S.recepten.map((r) => r.soort), receptSoorten());
+  const cats = volgensLijst(S.recepten.flatMap((r) => r.categorieen || []), receptCategorieen());
   const chip = (attr, w, tekst, aan) => `<button class="chip${aan ? ' aan' : ''}" ${attr}="${esc(w)}">${tekst}</button>`;
   const filterRij = S.recepten.some((r) => r.favoriet) || soorten.length
     ? `<div class="chips recept-filter">${S.recepten.some((r) => r.favoriet) ? chip('data-rf', '1', `${ICOON.sterVol}Favorieten`, f.fav) : ''}${soorten.map((x) => chip('data-rs', x, esc(x), zelfde(x, f.soort))).join('')}</div>` : '';
@@ -1036,7 +1030,7 @@ function receptBewerken(r, ruweTekst) {
       if (!t) return;
       const box = $('#rf-cat', el);
       const aan = [...gekozen(box), t];
-      chipsZetten(box, alleCategorieen(true, [...$$('.chip', box).map((b) => b.dataset.w), t]), aan, false);
+      chipsZetten(box, volgensLijst([...$$('.chip', box).map((b) => b.dataset.w), t], receptCategorieen()), aan, false);
       catVeld.value = ''; catKnop.disabled = true;
     };
     catVeld.oninput = () => (catKnop.disabled = !catVeld.value.trim());
@@ -1044,8 +1038,8 @@ function receptBewerken(r, ruweTekst) {
     catKnop.onclick = catToevoegen;
     const vullen = (x) => {
       const soort = x.soort || '';
-      chipsZetten($('#rf-soort', el), soort && !SOORTEN.some((y) => zelfde(y, soort)) ? [...SOORTEN, soort] : SOORTEN, [soort], true);
-      chipsZetten($('#rf-cat', el), alleCategorieen(true, x.categorieen || []), x.categorieen || [], false);
+      chipsZetten($('#rf-soort', el), volgensLijst([...receptSoorten(), soort], receptSoorten()), [soort], true);
+      chipsZetten($('#rf-cat', el), volgensLijst([...receptCategorieen(), ...(x.categorieen || [])], receptCategorieen()), x.categorieen || [], false);
       $('#rf-titel', el).value = x.titel || '';
       $('#rf-pers', el).value = x.personen || 4;
       $('#rf-tijd', el).value = x.bereidingstijd || '';
@@ -1177,7 +1171,11 @@ function installTipTekenen() {
 
 async function tekenInstellingen() {
   const inst = S.instellingen;
-  const telling = (veld, naam) => S.producten.filter((p) => zelfde(p[veld], naam)).length;
+  const telling = (veld, naam) => veld === 'recept_soort' ? S.recepten.filter((r) => zelfde(r.soort, naam)).length
+    : veld === 'recept_categorie' ? S.recepten.filter((r) => (r.categorieen || []).some((c) => zelfde(c, naam))).length
+    : S.producten.filter((p) => zelfde(p[veld], naam)).length;
+  const isRecept = (veld) => veld.startsWith('recept_');
+  const aantalTekst = (veld, n) => !n ? '' : isRecept(veld) ? `${n} ${n === 1 ? 'recept' : 'recepten'}` : `${n} ${n === 1 ? 'product' : 'producten'}`;
   const lijstBlok = (titel, sleutel, veld, voorbeeld) => `
     <details class="sectie uitklap" data-uitklap="${sleutel}"${ui.uitgeklapt.has(sleutel) ? ' open' : ''}>
       <summary><span>${titel}</span><span class="stil">${(inst[sleutel] || []).length}</span></summary>
@@ -1186,7 +1184,7 @@ async function tekenInstellingen() {
         const aantal = telling(veld, n);
         return `<li class="rij beheer" data-lijst="${sleutel}" data-i="${i}">
           <button class="naam beheer-naam" data-hernoem>${esc(n)}</button>
-          <span class="rechts">${aantal ? `${aantal} ${aantal === 1 ? 'product' : 'producten'}` : ''}</span>
+          <span class="rechts">${aantalTekst(veld, aantal)}</span>
           <span class="beheer-knoppen">
             <button class="weg" data-omhoog aria-label="Omhoog" ${i === 0 ? 'disabled' : ''}>↑</button>
             <button class="weg" data-wis aria-label="${esc(n)} verwijderen">×</button>
@@ -1206,7 +1204,9 @@ async function tekenInstellingen() {
     <section class="sectie"><div class="sectie-titel">Waarschuwen, zoveel dagen vooraf</div>
       ${dagen('Te gebruiken tot', 'tgt_dagen')}${dagen('Ten minste houdbaar tot', 'tht_dagen')}</section>
     ${lijstBlok('Plaatsen', 'locaties', 'locatie', 'Nieuwe plaats, bv. Kelder')}
-    ${lijstBlok('Categorieën', 'categorieen', 'categorie', 'Nieuwe categorie, bv. Babyvoeding')}
+    ${lijstBlok('Productcategorieën', 'categorieen', 'categorie', 'Nieuwe categorie, bv. Babyvoeding')}
+    ${lijstBlok('Soorten gerechten', 'recept_soorten', 'recept_soort', 'Nieuwe soort, bv. Tapas')}
+    ${lijstBlok('Receptcategorieën', 'recept_categorieen', 'recept_categorie', 'Nieuwe categorie, bv. Italiaans')}
     <section class="sectie"><div class="sectie-titel">Overzicht</div><div id="stats" class="stil">Laden…</div></section>
     <section class="sectie"><div class="sectie-titel">Back-up</div>
       <p class="stil" style="margin-bottom:.8rem;font-size:.92rem">Je gegevens staan alleen op dit toestel, in de app. Maak af en toe een back-up; daarmee zet je alles ook over naar een ander toestel.</p>
@@ -1225,8 +1225,9 @@ async function tekenInstellingen() {
     const k = b.dataset.dagen;
     bewaar({ [k]: Math.min(60, Math.max(0, (inst[k] ?? 0) + +b.dataset.stap)) });
   }));
-  const VELD = { locaties: 'locatie', categorieen: 'categorie' };
-  const SOORT = { locaties: 'plaats', categorieen: 'categorie' };
+  const VELD = { locaties: 'locatie', categorieen: 'categorie', recept_soorten: 'recept_soort', recept_categorieen: 'recept_categorie' };
+  const SOORT = { locaties: 'plaats', categorieen: 'categorie', recept_soorten: 'soort', recept_categorieen: 'categorie' };
+  const HOOFD = { plaats: 'Plaats', categorie: 'Categorie', soort: 'Soort' };
   $$m('[data-nieuw]').forEach((f) => (f.onsubmit = async (e) => {
     e.preventDefault();
     const k = f.dataset.nieuw, naam = $m('input', f).value.trim();
@@ -1248,8 +1249,9 @@ async function tekenInstellingen() {
     $m('[data-omhoog]', rij).onclick = () => { [lijst[i - 1], lijst[i]] = [lijst[i], lijst[i - 1]]; bewaar({ [k]: lijst }); };
     $m('[data-wis]', rij).onclick = async () => {
       const aantal = telling(VELD[k], naam);
-      const tekst = aantal ? `${SOORT[k] === 'plaats' ? 'Plaats' : 'Categorie'} "${naam}" verwijderen? ${aantal} ${aantal === 1 ? 'product heeft' : 'producten hebben'} daarna geen ${SOORT[k]} meer.`
-        : `${SOORT[k] === 'plaats' ? 'Plaats' : 'Categorie'} "${naam}" verwijderen?`;
+      const wie = isRecept(VELD[k]) ? (aantal === 1 ? 'recept heeft' : 'recepten hebben') : (aantal === 1 ? 'product heeft' : 'producten hebben');
+      const tekst = aantal ? `${HOOFD[SOORT[k]]} "${naam}" verwijderen? ${aantal} ${wie} daarna ${VELD[k] === 'recept_categorie' ? 'deze categorie niet' : `geen ${SOORT[k]}`} meer.`
+        : `${HOOFD[SOORT[k]]} "${naam}" verwijderen?`;
       if (!(await vraag(tekst, { ja: 'Verwijderen', gevaar: true }))) return;
       lijst.splice(i, 1);
       await bewaar({ [k]: lijst });
