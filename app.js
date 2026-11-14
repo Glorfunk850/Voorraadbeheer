@@ -13,12 +13,15 @@ const RECEPT_EENHEDEN = ['', 'stuks', 'g', 'kg', 'ml', 'cl', 'dl', 'l', 'el', 't
 const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water', 'lauw water', 'ijsblokjes', 'zout', 'peper',
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
+// Indeling van recepten: één soort gerecht per recept, en vrij te kiezen categorieën (meerdere mogelijk)
+const SOORTEN = ['Ontbijt', 'Lunch', 'Voorgerecht', 'Soep', 'Salade', 'Hoofdgerecht', 'Bijgerecht', 'Dessert', 'Gebak', 'Snack', 'Saus', 'Drank'];
+const STANDAARD_CATEGORIEEN = ['Vegetarisch', 'Vlees', 'Vis', 'Pasta', 'Snel', 'Feestelijk'];
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 17;
+const APP_VERSIE = 18;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
-const ui = { view: 'voorraad', plaats: '', zoek: '', receptZoek: '', uitgeklapt: new Set() };
+const ui = { view: 'voorraad', plaats: '', zoek: '', receptZoek: '', receptFilter: { fav: false, soort: '', cat: '' }, uitgeklapt: new Set() };
 
 const ICOON = {
   kast: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 12h16M9 7.5h1M9 16.5h1"/></svg>',
@@ -28,6 +31,8 @@ const ICOON = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   zoek: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   sluit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  ster: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
+  sterVol: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -730,6 +735,21 @@ function dekking(r, namen, geleerd) {
   return { ok: telt.filter((i) => beschikbaarheid(i, 1, namen, geleerd).st === 'ok').length, totaal: telt.length };
 }
 
+// Soorten in een vaste volgorde (eigen soorten achteraan), zonder dubbels
+function soortenVolgorde(lijst) {
+  const uit = [];
+  for (const x of lijst) if (!uit.some((y) => zelfde(x, y))) uit.push(x);
+  const pos = (x) => { const i = SOORTEN.findIndex((y) => zelfde(x, y)); return i < 0 ? 99 : i; };
+  return uit.sort((a, b) => pos(a) - pos(b) || a.localeCompare(b, 'nl'));
+}
+// Alle categorieën die bij je recepten gebruikt worden (en eventueel de standaardvoorstellen)
+function alleCategorieen(metStandaard, extra = []) {
+  const uit = [];
+  const bron = [...(metStandaard ? STANDAARD_CATEGORIEEN : []), ...S.recepten.flatMap((r) => r.categorieen || []), ...extra];
+  for (const c of bron) if (c && !uit.some((y) => zelfde(c, y))) uit.push(c);
+  return metStandaard ? uit : uit.sort((a, b) => a.localeCompare(b, 'nl'));
+}
+
 function tekenRecepten() {
   const namen = productnamen(), geleerd = geleerdeKoppelingen();
   const dringend = S.producten.filter((p) => [1, 2, 3].includes(houdbaarheid(p).niveau));
@@ -747,23 +767,53 @@ function tekenRecepten() {
     }).filter((x) => x.gebruikt.length).sort((a, b) => b.score - a.score).slice(0, 3);
   }
   const zoek = ui.receptZoek.trim().toLowerCase();
-  const lijst = S.recepten.filter((r) => !zoek || r.titel.toLowerCase().includes(zoek) || r.ingredienten.some((i) => i.naam.toLowerCase().includes(zoek)));
+  const f = ui.receptFilter;
+  // filters die niet meer bestaan (recept verwijderd of aangepast) vanzelf loslaten
+  if (f.soort && !S.recepten.some((r) => zelfde(r.soort, f.soort))) f.soort = '';
+  if (f.cat && !S.recepten.some((r) => (r.categorieen || []).some((c) => zelfde(c, f.cat)))) f.cat = '';
+  if (f.fav && !S.recepten.some((r) => r.favoriet)) f.fav = false;
+  const gefilterd = !!(f.fav || f.soort || f.cat);
+  const lijst = S.recepten.filter((r) => (!zoek || r.titel.toLowerCase().includes(zoek) || (r.soort || '').toLowerCase().includes(zoek)
+      || (r.categorieen || []).some((c) => c.toLowerCase().includes(zoek)) || r.ingredienten.some((i) => i.naam.toLowerCase().includes(zoek)))
+    && (!f.fav || r.favoriet) && (!f.soort || zelfde(r.soort, f.soort)) && (!f.cat || (r.categorieen || []).some((c) => zelfde(c, f.cat))));
   const rij = (r, onder) => {
     const d = dekking(r, namen, geleerd);
-    return `<li><button class="rij" data-recept="${r.id}"><span class="naam">${esc(r.titel)}<small>${esc(onder)}</small></span>
+    return `<li><button class="rij" data-recept="${r.id}"><span class="naam">${r.favoriet ? `<span class="ster-mini" aria-label="Favoriet">${ICOON.sterVol}</span>` : ''}${esc(r.titel)}<small>${esc(onder)}</small></span>
       <span class="rechts">${d.ok}/${d.totaal}</span></button></li>`;
   };
+  const onderschrift = (r, metSoort) => [metSoort && r.soort, r.personen && `${r.personen} personen`, r.bereidingstijd].filter(Boolean).join(' · ');
+  // filterknoppen: alleen wat er bij je recepten echt voorkomt
+  const soorten = soortenVolgorde(S.recepten.map((r) => r.soort).filter(Boolean));
+  const cats = alleCategorieen(false);
+  const chip = (attr, w, tekst, aan) => `<button class="chip${aan ? ' aan' : ''}" ${attr}="${esc(w)}">${tekst}</button>`;
+  const filterRij = S.recepten.some((r) => r.favoriet) || soorten.length
+    ? `<div class="chips recept-filter">${S.recepten.some((r) => r.favoriet) ? chip('data-rf', '1', `${ICOON.sterVol}Favorieten`, f.fav) : ''}${soorten.map((x) => chip('data-rs', x, esc(x), zelfde(x, f.soort))).join('')}</div>` : '';
+  const catRij = cats.length ? `<div class="chips recept-filter">${cats.map((x) => chip('data-rc', x, esc(x), zelfde(x, f.cat))).join('')}</div>` : '';
+  // zonder zoeken of filter: ingedeeld per soort gerecht
+  let secties;
+  if (!zoek && !gefilterd && soorten.length) {
+    const groepen = [...soorten.map((x) => [x, lijst.filter((r) => zelfde(r.soort, x))]), ['Overige', lijst.filter((r) => !r.soort)]].filter(([, l]) => l.length);
+    secties = groepen.map(([titel, l], n) => `<section class="sectie"><div class="sectie-titel"><span>${esc(titel)}</span>${n === 0 ? '<span>in huis</span>' : ''}</div><ul class="lijst">
+      ${l.map((r) => rij(r, onderschrift(r, false))).join('')}</ul></section>`).join('');
+  } else if (lijst.length) {
+    secties = `<section class="sectie"><div class="sectie-titel"><span>${zoek || gefilterd ? `Gevonden (${lijst.length})` : 'Alle recepten'}</span><span>in huis</span></div><ul class="lijst">
+      ${lijst.map((r) => rij(r, onderschrift(r, true))).join('')}</ul></section>`;
+  } else secties = S.recepten.length ? `<div class="leeg">Niets gevonden.${gefilterd ? '<br><button class="tekstknop" id="rf-wis">Filter wissen</button>' : ''}</div>` : '';
   inhoudZetten(`
     <header class="kop"><h1>Recepten</h1>
       <div class="kop-acties">${instellingenKnop}<button class="knop primair" id="r-nieuw">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}<span>Recept</span></button></div></header>
-    ${S.recepten.length ? `<div class="zoek">${ICOON.zoek}<input type="search" id="zoek-recept" placeholder="Zoek op recept of ingrediënt" value="${esc(ui.receptZoek)}" autocomplete="off"></div>` : ''}
-    ${sugg.length && !zoek ? `<section class="sectie"><div class="sectie-titel">Gebruikt wat op moet</div><ul class="lijst">
+    ${S.recepten.length ? `<div class="zoek">${ICOON.zoek}<input type="search" id="zoek-recept" placeholder="Zoek op recept, categorie of ingrediënt" value="${esc(ui.receptZoek)}" autocomplete="off"></div>` : ''}
+    ${filterRij}${catRij}
+    ${sugg.length && !zoek && !gefilterd ? `<section class="sectie"><div class="sectie-titel">Gebruikt wat op moet</div><ul class="lijst">
       ${sugg.map(({ r, gebruikt }) => `<li><button class="rij" data-recept="${r.id}"><span class="stip ${gebruikt.some((p) => p.datumtype === 'TGT') ? 'rood' : 'oranje'}"></span>
         <span class="naam">${esc(r.titel)}<small>${esc(gebruikt.map((p) => p.naam.toLowerCase()).join(', '))}</small></span></button></li>`).join('')}</ul></section>` : ''}
     ${!S.recepten.length ? `<div class="leeg"><b>Nog geen recepten</b>Importeer een pdf of typ er zelf een.</div>` : ''}
-    ${lijst.length ? `<section class="sectie"><div class="sectie-titel"><span>${zoek ? 'Gevonden' : 'Alle recepten'}</span><span>in huis</span></div><ul class="lijst">
-      ${lijst.map((r) => rij(r, [r.personen && `${r.personen} personen`, r.bereidingstijd].filter(Boolean).join(' · '))).join('')}</ul></section>`
-    : S.recepten.length ? '<div class="leeg">Niets gevonden.</div>' : ''}`);
+    ${secties}`);
+  $$m('[data-rf]').forEach((b) => (b.onclick = () => { f.fav = !f.fav; tekenRecepten(); }));
+  $$m('[data-rs]').forEach((b) => (b.onclick = () => { f.soort = zelfde(f.soort, b.dataset.rs) ? '' : b.dataset.rs; tekenRecepten(); }));
+  $$m('[data-rc]').forEach((b) => (b.onclick = () => { f.cat = zelfde(f.cat, b.dataset.rc) ? '' : b.dataset.rc; tekenRecepten(); }));
+  const wis = $m('#rf-wis');
+  if (wis) wis.onclick = () => { ui.receptFilter = { fav: false, soort: '', cat: '' }; tekenRecepten(); };
   $m('#r-nieuw').onclick = receptToevoegenKeuze;
   const z = $m('#zoek-recept');
   if (z) z.oninput = () => { ui.receptZoek = z.value; tekenRecepten(); };
@@ -798,7 +848,9 @@ function receptPaneel(id, personen) {
       <div class="meta">
         <span class="personen"><button id="p-min" aria-label="Minder personen">−</button><span>${personen} ${personen === 1 ? 'persoon' : 'personen'}</span><button id="p-plus" aria-label="Meer personen">+</button></span>
         ${r.bereidingstijd ? `<span>${esc(r.bereidingstijd)}</span>` : ''}
+        <button class="fav-knop${r.favoriet ? ' aan' : ''}" id="r-fav" aria-pressed="${r.favoriet ? 'true' : 'false'}">${r.favoriet ? ICOON.sterVol : ICOON.ster}<span>${r.favoriet ? 'Favoriet' : 'Favoriet maken'}</span></button>
       </div>
+      ${r.soort || (r.categorieen || []).length ? `<div class="labels">${[r.soort, ...(r.categorieen || [])].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
       <ul class="ingr">${regels.map(({ i, b }) => {
         const st = b.altijd ? '' : b.st === 'ontbreekt' ? 'niet in huis' : b.st === 'weinig' ? `te weinig (${hoeveelTekst(b.totaal, b.eenheid)})` : '';
         return `<li class="${b.st === 'ontbreekt' ? 'ontbreekt' : ''}"><span class="hv">${esc(i.hoeveelheid !== null ? hoeveelTekst(i.hoeveelheid * factor, i.eenheid) : '')}</span>
@@ -817,6 +869,12 @@ function receptPaneel(id, personen) {
     $('#p-plus', el).onclick = () => receptPaneel(id, personen + 1);
     $('#gekookt', el).onclick = () => kokenPaneel(r, regels);
     $('#r-bewerk', el).onclick = () => receptBewerken(r);
+    $('#r-fav', el).onclick = async () => {
+      try {
+        await api('POST', `recepten/${r.id}/favoriet`, { favoriet: !r.favoriet });
+        receptPaneel(id, personen);
+      } catch { /* melding al getoond */ }
+    };
     $('#r-weg', el).onclick = async () => {
       if (!(await vraag(`Recept "${r.titel}" verwijderen?`, { ja: 'Verwijderen', gevaar: true }))) return;
       paneelSluiten();
@@ -926,6 +984,12 @@ function receptBewerken(r, ruweTekst) {
           <label class="veld"><span>Personen</span><input id="rf-pers" type="number" min="1" max="99"></label>
           <label class="veld"><span>Bereidingstijd</span><input id="rf-tijd" placeholder="bv. 30 minuten"></label>
         </div>
+        <span class="veld-titel">Soort gerecht</span>
+        <div class="chips" id="rf-soort"></div>
+        <span class="veld-titel" style="margin-top:1rem">Categorieën <span class="stil">(meerdere mogelijk)</span></span>
+        <div class="chips" id="rf-cat"></div>
+        <div class="cat-nieuw"><input id="rf-cat-nieuw" placeholder="Andere categorie" aria-label="Nieuwe categorie" enterkeyhint="done">
+          <button type="button" class="knop" id="rf-cat-erbij" disabled>Toevoegen</button></div>
         <span class="veld-titel">Ingrediënten</span>
         <div id="rf-ingr"></div>
         <button type="button" class="tekstknop" id="rf-erbij">+ Ingrediënt</button>
@@ -956,7 +1020,32 @@ function receptBewerken(r, ruweTekst) {
       $('.weg', div).onclick = () => div.remove();
       return div;
     };
+    // soort: één keuze (nog eens tikken = geen soort); categorieën: aan/uit
+    const chipsZetten = (box, lijst, aan, enkel) => {
+      box.innerHTML = lijst.map((w) => `<button type="button" class="chip${aan.some((a) => zelfde(a, w)) ? ' aan' : ''}" data-w="${esc(w)}">${esc(w)}</button>`).join('');
+      $$('.chip', box).forEach((b) => (b.onclick = () => {
+        const nu = !b.classList.contains('aan');
+        if (enkel) $$('.chip', box).forEach((c) => c.classList.remove('aan'));
+        b.classList.toggle('aan', nu);
+      }));
+    };
+    const gekozen = (box) => $$('.chip.aan', box).map((b) => b.dataset.w);
+    const catVeld = $('#rf-cat-nieuw', el), catKnop = $('#rf-cat-erbij', el);
+    const catToevoegen = () => {
+      const t = catVeld.value.trim();
+      if (!t) return;
+      const box = $('#rf-cat', el);
+      const aan = [...gekozen(box), t];
+      chipsZetten(box, alleCategorieen(true, [...$$('.chip', box).map((b) => b.dataset.w), t]), aan, false);
+      catVeld.value = ''; catKnop.disabled = true;
+    };
+    catVeld.oninput = () => (catKnop.disabled = !catVeld.value.trim());
+    catVeld.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); catToevoegen(); } };
+    catKnop.onclick = catToevoegen;
     const vullen = (x) => {
+      const soort = x.soort || '';
+      chipsZetten($('#rf-soort', el), soort && !SOORTEN.some((y) => zelfde(y, soort)) ? [...SOORTEN, soort] : SOORTEN, [soort], true);
+      chipsZetten($('#rf-cat', el), alleCategorieen(true, x.categorieen || []), x.categorieen || [], false);
       $('#rf-titel', el).value = x.titel || '';
       $('#rf-pers', el).value = x.personen || 4;
       $('#rf-tijd', el).value = x.bereidingstijd || '';
@@ -971,13 +1060,14 @@ function receptBewerken(r, ruweTekst) {
     $('#rf-erbij', el).onclick = () => $('#rf-ingr', el).appendChild(ingrRij({ hoeveelheid: null, eenheid: '', naam: '' }));
     if (gecontroleerd) {
       $('#rf-ruw', el).value = ruweTekst;
-      $('#rf-opnieuw', el).onclick = () => vullen(receptOntleden($('#rf-ruw', el).value));
+      $('#rf-opnieuw', el).onclick = () => vullen({ ...receptOntleden($('#rf-ruw', el).value), soort: gekozen($('#rf-soort', el))[0] || '', categorieen: gekozen($('#rf-cat', el)) });
     }
     $('#rf', el).onsubmit = async (e) => {
       e.preventDefault();
       const data = {
         titel: $('#rf-titel', el).value.trim(), personen: parseInt($('#rf-pers', el).value, 10) || 4, bereidingstijd: $('#rf-tijd', el).value.trim(),
         stappen: $('#rf-stappen', el).value, notities: $('#rf-notities', el).value,
+        soort: gekozen($('#rf-soort', el))[0] || '', categorieen: gekozen($('#rf-cat', el)),
         ingredienten: $$('.ingr-bewerk', el).map((d) => ({ hoeveelheid: num($('.i-hv', d).value), eenheid: $('.i-eenheid', d).value,
           naam: $('.i-naam', d).value.trim(), voorraadnaam: $('.i-koppel', d).value })).filter((i) => i.naam),
       };

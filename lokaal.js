@@ -20,6 +20,15 @@
     return null;
   };
   const getal = (v) => (v === null || v === undefined || v === '' ? null : parseFloat(String(v).replace(',', '.')));
+  // categorieën van een recept: getrimd, zonder dubbels (hoofdletters tellen niet)
+  const categorieLijst = (v) => {
+    const uit = [];
+    for (const c of Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []) {
+      const t = String(c || '').trim();
+      if (t && !uit.some((x) => zelfde(x, t))) uit.push(t);
+    }
+    return uit;
+  };
 
   const STANDAARD = () => ({
     volgendId: 1,
@@ -89,6 +98,10 @@
     for (const r of uit.recepten) {
       if (!Array.isArray(r.ingredienten)) r.ingredienten = losseIngr.filter((i) => String(i.recept_id) === String(r.id))
         .sort((a, b) => (a.volgorde || 0) - (b.volgorde || 0));
+      // indeling en favoriet (ontbreken in oudere gegevens)
+      r.soort = typeof r.soort === 'string' ? r.soort : '';
+      r.categorieen = categorieLijst(r.categorieen);
+      r.favoriet = !!r.favoriet;
     }
     // id's altijd als getal (anders vindt de app items met een id als tekst niet terug)
     const getalId = (x) => { if (x && x.id != null && x.id !== '' && Number.isFinite(+x.id)) x.id = +x.id; };
@@ -393,7 +406,9 @@
       const opslaan = (r) => {
         if (!(data.titel || '').trim()) fout(400, 'Geef het recept een titel.');
         Object.assign(r, { titel: data.titel.trim(), personen: parseInt(data.personen, 10) || 4, bereidingstijd: data.bereidingstijd || '',
-          stappen: data.stappen || '', notities: data.notities || '', gewijzigd: nu() });
+          stappen: data.stappen || '', notities: data.notities || '', gewijzigd: nu(),
+          soort: (data.soort || '').trim(), categorieen: categorieLijst(data.categorieen),
+          favoriet: 'favoriet' in data ? !!data.favoriet : !!r.favoriet });
         r.ingredienten = (data.ingredienten || []).filter((i) => i.naam).map((i, n) => ({ id: id(), recept_id: r.id, volgorde: n,
           hoeveelheid: getal(i.hoeveelheid), eenheid: i.eenheid || '', naam: i.naam, voorraadnaam: i.voorraadnaam || '' }));
       };
@@ -406,6 +421,7 @@
       if (!r) fout(404, 'Dit recept bestaat niet (meer).');
       if (methode === 'PUT') { opslaan(r); return alles(); }
       if (methode === 'DELETE') { S.recepten = S.recepten.filter((x) => x !== r); return alles(); }
+      if (methode === 'POST' && actie === 'favoriet') { r.favoriet = !!data.favoriet; return alles(); }
       if (methode === 'POST' && actie === 'koken') {
         const namen = new Set();
         for (const regel of data.aftrekken || []) {
