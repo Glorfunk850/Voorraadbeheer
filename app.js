@@ -13,6 +13,8 @@ const RECEPT_EENHEDEN = ['', 'stuks', 'g', 'kg', 'ml', 'cl', 'dl', 'l', 'el', 't
 const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water', 'lauw water', 'ijsblokjes', 'zout', 'peper',
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
+// Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
+const APP_VERSIE = 15;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
@@ -1028,7 +1030,7 @@ async function tekenInstellingen() {
       <div class="knoppenrij"><a class="knop" href="api/export.json" download>Back-up downloaden</a><a class="knop" href="api/export.csv" download>Voorraad als CSV</a>
       <button class="knop" id="i-terug">Back-up terugzetten</button></div></section>
     <section class="sectie"><div class="sectie-titel">Over</div>
-      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
+      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
   installBlokTekenen();
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
@@ -1085,11 +1087,27 @@ $('#bestand-backup').onchange = async (e) => {
   const bestand = e.target.files[0];
   e.target.value = '';
   if (!bestand) return;
+  let tekst = '';
+  try { tekst = (await bestand.text()).replace(/^﻿/, '').trim(); } catch { return toast('Dit bestand kon niet gelezen worden.', null, null, true); }
+  if (tekst.startsWith('SQLite format')) {
+    return toast('Dit is een databasebestand (voorraad.db) van de oude app. Kies het back-upbestand dat eindigt op .json.', null, null, true);
+  }
   let data;
-  try { data = JSON.parse(await bestand.text()); } catch { return toast('Dit is geen geldig back-upbestand.'); }
-  if (!(await vraag('Al je huidige gegevens worden vervangen door deze back-up. Doorgaan?', { ja: 'Terugzetten', gevaar: true }))) return;
-  await api('POST', 'import', data);
-  toast('Back-up teruggezet');
+  try { data = JSON.parse(tekst); } catch {
+    return toast(`"${bestand.name}" is geen back-up van Voorraad. Kies het bestand voorraad-backup-….json.`, null, null, true);
+  }
+  const g = data && typeof data === 'object' ? (Array.isArray(data.producten) || Array.isArray(data.recepten) ? data : data.gegevens || data.data || data) : {};
+  const aantal = (x) => (Array.isArray(x) ? x.length : 0);
+  if (!Array.isArray(g.producten) && !Array.isArray(g.recepten)) {
+    return toast(`"${bestand.name}" is geen back-up van Voorraad. Kies het bestand voorraad-backup-….json.`, null, null, true);
+  }
+  const inhoud = `${aantal(g.producten)} producten, ${aantal(g.recepten)} recepten en ${aantal(g.boodschappen)} boodschappen`;
+  if (!(await vraag(`Deze back-up bevat ${inhoud}. Al je huidige gegevens op dit toestel worden erdoor vervangen. Doorgaan?`, { ja: 'Terugzetten', gevaar: true }))) return;
+  try { await api('POST', 'import', g); } catch { return; /* melding al getoond */ }
+  ui.zoek = ''; ui.receptZoek = '';
+  naar('voorraad');
+  toast(`Back-up teruggezet: ${inhoud}. Zoek een product om het te bekijken.`, null, null, true);
+  setTimeout(toastWeg, 8000);
 };
 
 // ---------------------------------------------------------------------------

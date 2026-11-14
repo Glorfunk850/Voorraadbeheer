@@ -29,12 +29,16 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - Elk toestel heeft zijn eigen voorraad. Overzetten: Instellingen → **Back-up downloaden**,
   en op het andere toestel **Back-up terugzetten**.
 - Maak af en toe een back-up. Verwijder je de app of wis je de websitegegevens, dan is de voorraad weg.
+- Bij het terugzetten zie je eerst hoeveel producten, recepten en boodschappen in de back-up zitten.
+  Op het voorraadscherm staat daarna alleen wat binnenkort op moet; zoek een product om de rest te zien.
 - Een back-up uit de vorige versie (de app met voorraad.db) kun je proberen terug te zetten; lukt het niet, laat het weten.
+- Welke versie een toestel heeft, zie je onderaan bij Instellingen ("Versie …").
 
 ## Een nieuwe versie zetten
 
 Upload de gewijzigde bestanden opnieuw naar dezelfde repository. Verhoog in `sw.js` het
-nummer in `VERSIE` (bv. `voorraad-v2`). De app meldt dan zelf "Er is een nieuwe versie".
+nummer in `VERSIE` (bv. `voorraad-v16`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
+de nieuwe versie dan meteen bij het volgende openen.
 
 ## Automatische knoppentest
 

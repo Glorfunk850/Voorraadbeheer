@@ -52,17 +52,20 @@
     } catch (f) { console.error('Laden mislukt', f); opslagWerkt = false; }
   }
   let opslagWerkt = true, schrijfKetting = Promise.resolve();
+  /** Bewaart S. De belofte faalt als het bewaren mislukt, zodat de app dat kan melden (niet stil verloren gaan). */
   function bewaren() {
     const kopie = JSON.parse(JSON.stringify(S));
-    schrijfKetting = schrijfKetting.then(async () => {
+    const schrijf = schrijfKetting.then(async () => {
       const d = await db();
       await new Promise((ok, nee) => {
         const t = d.transaction(DB_TABEL, 'readwrite');
         t.objectStore(DB_TABEL).put(kopie, SLEUTEL);
-        t.oncomplete = ok; t.onerror = () => nee(t.error);
+        t.oncomplete = ok; t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
       });
-    }).catch((f) => { console.error('Bewaren mislukt', f); opslagWerkt = false; });
-    return schrijfKetting;
+      opslagWerkt = true;
+    });
+    schrijfKetting = schrijf.catch((f) => { console.error('Bewaren mislukt', f); opslagWerkt = false; });
+    return schrijf;
   }
   // Andere tabbladen/vensters van de app op hetzelfde toestel laten weten dat er iets veranderde.
   const kanaal = 'BroadcastChannel' in self ? new BroadcastChannel('voorraadbeheer') : null;
@@ -81,7 +84,22 @@
     uit.catalogus = Array.isArray(d.catalogus) ? d.catalogus.filter((c) => c && (c.naam || '').trim()) : null;
     // barcodes uit een oudere back-up (lijst) omzetten
     if (Array.isArray(d.barcodes)) for (const b of d.barcodes) if (b && b.code) uit.barcodes[String(b.code)] = { ...b, bron: 'eigen' };
-    for (const r of uit.recepten) if (!Array.isArray(r.ingredienten)) r.ingredienten = [];
+    // ingrediënten als aparte lijst (oudere back-up): bij hun recept zetten
+    const losseIngr = Array.isArray(d.ingredienten) ? d.ingredienten : [];
+    for (const r of uit.recepten) {
+      if (!Array.isArray(r.ingredienten)) r.ingredienten = losseIngr.filter((i) => String(i.recept_id) === String(r.id))
+        .sort((a, b) => (a.volgorde || 0) - (b.volgorde || 0));
+    }
+    // id's altijd als getal (anders vindt de app items met een id als tekst niet terug)
+    const getalId = (x) => { if (x && x.id != null && x.id !== '' && Number.isFinite(+x.id)) x.id = +x.id; };
+    uit.producten.forEach(getalId); uit.boodschappen.forEach(getalId);
+    uit.recepten.forEach((r) => { getalId(r); r.ingredienten.forEach(getalId); });
+    for (const b of uit.boodschappen) if (b.product_id != null && b.product_id !== '' && Number.isFinite(+b.product_id)) b.product_id = +b.product_id;
+    // items zonder id krijgen er een (anders zijn ze niet te bewerken of te verwijderen)
+    let hoogste = 0;
+    for (const x of [...uit.producten, ...uit.boodschappen, ...uit.recepten]) if (+x.id > hoogste) hoogste = +x.id;
+    for (const r of uit.recepten) for (const i of r.ingredienten) if (+i.id > hoogste) hoogste = +i.id;
+    for (const x of [...uit.producten, ...uit.boodschappen, ...uit.recepten]) if (!Number.isFinite(x.id)) x.id = ++hoogste;
     let max = 0;
     const zie = (x) => { if (x && +x.id > max) max = +x.id; };
     uit.producten.forEach(zie); uit.boodschappen.forEach(zie);
@@ -259,8 +277,10 @@
     }
     if (bron === 'instellingen') { Object.assign(S.instellingen, data); return alles(); }
     if (bron === 'import') {
-      if (!data || !Array.isArray(data.producten)) fout(400, 'Dit is geen geldig back-upbestand.');
-      S = normaliseren(data);
+      // ook een back-up die in een extra laag zit (bv. { gegevens: {...} }) of alleen recepten heeft
+      const d = data && (Array.isArray(data.producten) || Array.isArray(data.recepten) ? data : data.gegevens || data.data);
+      if (!d || (!Array.isArray(d.producten) && !Array.isArray(d.recepten))) fout(400, 'Dit is geen geldig back-upbestand.');
+      S = normaliseren(d);
       return alles();
     }
     if (bron === 'hernoemen') {
@@ -420,7 +440,12 @@
       try {
         const antwoord = await api(methode, pad, data, opties.body);
         const wijzigt = methode !== 'GET' && !LEZEN.has(bron);
-        if (wijzigt) { await bewaren(); if (kanaal) kanaal.postMessage('gewijzigd'); }
+        if (wijzigt) {
+          try { await bewaren(); } catch {
+            fout(507, 'Je gegevens konden niet bewaard worden op dit toestel. Open de app niet in een privévenster en kijk of er nog opslagruimte vrij is.');
+          }
+          if (kanaal) kanaal.postMessage('gewijzigd');
+        }
         return new Response(JSON.stringify(antwoord), { status: 200, headers: { 'Content-Type': 'application/json' } });
       } catch (e) {
         if (!e.status) console.error(e);

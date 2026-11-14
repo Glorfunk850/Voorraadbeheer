@@ -1,4 +1,4 @@
-name: Knoppentest
+name: Tests
 
 # Klikt bij elke wijziging automatisch op alle knoppen van de app (zie test/knoppen.test.cjs).
 on:
@@ -21,3 +21,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Alle knoppen aanklikken
         run: node test/knoppen.test.cjs
+      - name: Back-up van toestel A naar B terugzetten
+        run: node test/backup.test.cjs
