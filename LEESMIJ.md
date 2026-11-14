@@ -35,3 +35,9 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 
 Upload de gewijzigde bestanden opnieuw naar dezelfde repository. Verhoog in `sw.js` het
 nummer in `VERSIE` (bv. `voorraad-v2`). De app meldt dan zelf "Er is een nieuwe versie".
+
+## Automatische knoppentest
+
+Bij elke wijziging op GitHub klikt een test (`test/knoppen.test.cjs`) automatisch op álle knoppen van de app,
+ook op nieuwe knoppen. Werkt een knop niet (een fout, of er gebeurt niets), dan zie je bij de wijziging een
+rood kruisje in plaats van een groen vinkje (tabblad **Actions**). Zet dan geen nieuwe versie online.
