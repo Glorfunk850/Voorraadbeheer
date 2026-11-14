@@ -32,7 +32,14 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 // Voor de hoofdschermen: alleen zoeken binnen #inhoud, nooit in het paneel of de dialogen.
 // Zo kan een knop op het scherm nooit per ongeluk een knop in het paneel "overnemen" (of omgekeerd).
-const $m = (s, el = document.getElementById('inhoud')) => el.querySelector(s);
+// Vangnet: een vast element van de pagina met een id (bv. #bestand-backup, #toast) staat buiten #inhoud.
+// Wordt zo'n id niet in #inhoud gevonden, dan het vaste element nemen (nooit iets uit het paneel).
+const $m = (s, el = document.getElementById('inhoud')) => {
+  const gevonden = el.querySelector(s);
+  if (gevonden || !/^#[\w-]+$/.test(s)) return gevonden;
+  const vast = document.querySelector(s);
+  return vast && !vast.closest('#paneel') ? vast : null;
+};
 const $$m = (s, el = document.getElementById('inhoud')) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (v) => {
@@ -1064,7 +1071,7 @@ async function tekenInstellingen() {
       if (aantal) await api('POST', 'hernoemen', { veld: VELD[k], van: naam, naar: '' });
     };
   });
-  $m('#i-terug').onclick = () => $m('#bestand-backup').click();
+  $m('#i-terug').onclick = () => $('#bestand-backup').click();
   try {
     const st = await api('GET', 'statistieken', undefined, true);
     if (ui.view !== 'instellingen' || !$m('#stats')) return;
