@@ -145,6 +145,7 @@
     c.naam = naam;
     for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype', 'barcode']) if (p[k]) c[k] = p[k];
     if (p.hoeveelheid > 0) c.hoeveelheid = p.hoeveelheid;
+    if ('inhoud' in p) { c.inhoud = p.inhoud > 0 ? p.inhoud : null; c.inhoud_eenheid = p.inhoud > 0 ? p.inhoud_eenheid || '' : ''; }
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
   }
@@ -158,7 +159,7 @@
     instellingen: S.instellingen,
   }));
   const fout = (status, bericht) => { const e = new Error(bericht); e.status = status; throw e; };
-  const VELDEN = ['naam', 'categorie', 'hoeveelheid', 'eenheid', 'locatie', 'aankoopdatum', 'vervaldatum', 'datumtype', 'minimum', 'notitie', 'barcode'];
+  const VELDEN = ['naam', 'categorie', 'hoeveelheid', 'eenheid', 'locatie', 'aankoopdatum', 'vervaldatum', 'datumtype', 'minimum', 'notitie', 'barcode', 'inhoud', 'inhoud_eenheid'];
 
   // ------------------------------------------------------------------ barcode (Open Food Facts)
   const CAT_WOORDEN = [
@@ -238,9 +239,9 @@
 
   // ------------------------------------------------------------------ export
   function csvMaken() {
-    const kol = ['naam', 'hoeveelheid', 'eenheid', 'locatie', 'categorie', 'vervaldatum', 'datumtype', 'minimum', 'aankoopdatum', 'notitie', 'barcode'];
+    const kol = ['naam', 'hoeveelheid', 'eenheid', 'inhoud', 'inhoud_eenheid', 'locatie', 'categorie', 'vervaldatum', 'datumtype', 'minimum', 'aankoopdatum', 'notitie', 'barcode'];
     const cel = (v) => { const t = v == null ? '' : String(v); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-    const regels = [kol.join(';'), ...alles().producten.map((p) => kol.map((k) => cel(k === 'hoeveelheid' || k === 'minimum' ? String(p[k] ?? '').replace('.', ',') : p[k])).join(';'))];
+    const regels = [kol.join(';'), ...alles().producten.map((p) => kol.map((k) => cel(k === 'hoeveelheid' || k === 'minimum' || k === 'inhoud' ? String(p[k] ?? '').replace('.', ',') : p[k])).join(';'))];
     return '﻿' + regels.join('\r\n');
   }
   function downloaden(naam, inhoud, type) {
@@ -301,6 +302,7 @@
         for (const k of VELDEN) if (k in data) p[k] = data[k];
         p.naam = p.naam.trim();
         p.hoeveelheid = getal(p.hoeveelheid) || 0; p.minimum = getal(p.minimum) || 0;
+        p.inhoud = getal(p.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = '';
         S.producten.push(p);
         catalogusBijwerken(p);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
@@ -314,6 +316,7 @@
         for (const k of VELDEN) if (k in data) p[k] = data[k];
         if ('hoeveelheid' in data) p.hoeveelheid = getal(data.hoeveelheid) || 0;
         if ('minimum' in data) p.minimum = getal(data.minimum) || 0;
+        if ('inhoud' in data) { p.inhoud = getal(data.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = ''; }
         p.gewijzigd = nu();
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
@@ -350,7 +353,8 @@
             const voorbeeld = S.producten.find((p) => zelfde(p.naam, b.naam));
             S.producten.push({ id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
-              datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu() });
+              datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu(),
+              ...(voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });
             catalogusBijwerken(S.producten[S.producten.length - 1]);
           }
           gebeurtenis('gekocht', b.naam);

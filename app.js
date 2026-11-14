@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 15;
+const APP_VERSIE = 17;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
@@ -52,6 +52,31 @@ const num = (v) => {
 const fmt = (n) => (n === null || n === undefined ? '' : (Math.round(n * 100) / 100).toLocaleString('nl-BE', { maximumFractionDigits: 2 }));
 const eenheidKort = (e) => (e === 'stuks' ? '' : e || '');
 const hoeveelTekst = (n, e) => (n === null || n === undefined ? '' : `${fmt(n)}${eenheidKort(e) ? ' ' + eenheidKort(e) : ''}`);
+// Inhoud per verpakking (bv. 2 pak à 500 g). Alleen bij telbare eenheden.
+const INHOUD_EENHEDEN = ['g', 'kg', 'ml', 'cl', 'dl', 'l'];
+const inhoudVan = (p) => (p && TELBAAR.has(p.eenheid) && p.inhoud > 0 && p.inhoud_eenheid ? { per: p.inhoud, eenheid: p.inhoud_eenheid } : null);
+const voorraadTekst = (p) => { const i = inhoudVan(p); return hoeveelTekst(p.hoeveelheid, p.eenheid) + (i ? ` à ${hoeveelTekst(i.per, i.eenheid)}` : ''); };
+/** Totaal leesbaar maken: 1000 g wordt 1 kg, 1500 ml wordt 1,5 l. */
+function samenTekst(h, e) {
+  const groot = { g: 'kg', ml: 'l', cl: 'l', dl: 'l' }[e];
+  if (groot && omrekenen(h, e, groot) >= 1) { h = omrekenen(h, e, groot); e = groot; }
+  return hoeveelTekst(Math.round(h * 1000) / 1000, e);
+}
+/** Hoeveelheid h (in eenheid e) omzetten naar de eenheid van product p, desnoods via de inhoud per verpakking. */
+function naarProduct(h, e, p) {
+  const d = omrekenen(h, e, p.eenheid);
+  if (d !== null) return d;
+  const i = inhoudVan(p);
+  const x = i ? omrekenen(h, e, i.eenheid) : null;
+  return x === null ? null : x / i.per;
+}
+/** Hoeveelheid h van product p (in p.eenheid) omzetten naar eenheid e, desnoods via de inhoud per verpakking. */
+function vanProduct(h, p, e) {
+  const d = omrekenen(h, p.eenheid, e);
+  if (d !== null) return d;
+  const i = inhoudVan(p);
+  return i ? omrekenen(h * i.per, i.eenheid, e) : null;
+}
 const zelfde = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
 
 function vandaag(plus = 0) {
@@ -281,7 +306,7 @@ function tekenVoorraad() {
   const rij = ({ p, h }, metStatus) => `<li><button class="rij${p.hoeveelheid > 0 ? '' : ' op'}" data-product="${p.id}">
       ${metStatus ? `<span class="stip ${h.kleur}"></span>` : ''}
       <span class="naam">${esc(p.naam)}${metStatus ? `<small>${esc(h.uitleg)}</small>` : ''}</span>
-      <span class="rechts${metStatus ? ' ' + h.kleur : ''}">${metStatus ? esc(h.kort) : p.hoeveelheid > 0 ? esc(hoeveelTekst(p.hoeveelheid, p.eenheid)) : 'op'}</span>
+      <span class="rechts${metStatus ? ' ' + h.kleur : ''}">${metStatus ? esc(h.kort) : p.hoeveelheid > 0 ? esc(voorraadTekst(p)) : 'op'}</span>
     </button></li>`;
 
   let lijst = '';
@@ -356,6 +381,7 @@ function productPaneel(id) {
     const p = S.producten.find((x) => x.id === id);
     if (!p) return paneelSluiten();
     const telbaar = TELBAAR.has(p.eenheid);
+    const inh = inhoudVan(p);
     const h = houdbaarheid(p);
     const d = p.vervaldatum ? dagenTot(p.vervaldatum) : null;
     let datum = '<div class="datumblok"><span class="stip"></span><div>Geen houdbaarheidsdatum</div></div>';
@@ -369,7 +395,7 @@ function productPaneel(id) {
       ${paneelKop(esc(p.naam), esc([p.locatie, p.categorie].filter(Boolean).join(' · ')))}
       <div class="hoeveelheid">
         ${telbaar ? `<button class="rond" id="min" aria-label="Eén minder" ${p.hoeveelheid >= 1 ? '' : 'disabled'}>−</button>` : ''}
-        <div class="getal">${esc(fmt(p.hoeveelheid))}<span>${esc(p.eenheid === 'stuks' ? (p.hoeveelheid === 1 ? 'stuk' : 'stuks') : p.eenheid)}</span></div>
+        <div class="getal">${esc(fmt(p.hoeveelheid))}<span>${esc(p.eenheid === 'stuks' ? (p.hoeveelheid === 1 ? 'stuk' : 'stuks') : p.eenheid)}</span>${inh ? `<small class="inhoud-per">à ${esc(hoeveelTekst(inh.per, inh.eenheid))}${p.hoeveelheid > 0 && p.hoeveelheid !== 1 ? ` · samen ${esc(samenTekst(p.hoeveelheid * inh.per, inh.eenheid))}` : ''}</small>` : ''}</div>
         ${telbaar ? '<button class="rond" id="plus" aria-label="Eén meer">+</button>' : ''}
       </div>
       ${delen.length ? `<div class="gebruik"><span class="stil" style="align-self:center;margin-right:.2rem">Gebruikt:</span>${delen.map(([w, t]) => `<button class="chip" data-deel="${w ?? ''}">${t}</button>`).join('')}<button class="chip" id="ander">Andere hoeveelheid</button></div>` : ''}
@@ -391,7 +417,8 @@ function productPaneel(id) {
       if (w && w > 0) verbruiken(p, Math.min(w, p.hoeveelheid), 'verbruikt', w >= p.hoeveelheid);
     });
     knop('erbij', () => productFormulier(null, { naam: p.naam, categorie: p.categorie, eenheid: p.eenheid, locatie: p.locatie,
-      datumtype: p.datumtype, barcode: p.barcode || '', hoeveelheid: telbaar ? 1 : p.hoeveelheid || 1 }));
+      datumtype: p.datumtype, barcode: p.barcode || '', hoeveelheid: telbaar ? 1 : p.hoeveelheid || 1,
+      inhoud: p.inhoud || null, inhoud_eenheid: p.inhoud_eenheid || '' }));
     knop('lijst', async () => { await api('POST', 'boodschappen', { naam: p.naam, eenheid: p.eenheid, product_id: p.id }); toast(`${p.naam} staat op de boodschappenlijst`); });
     knop('weggooien', () => verbruiken(p, null, 'weggegooid', true));
     knop('bewerk', () => productFormulier(p));
@@ -457,7 +484,7 @@ function catalogusItem(c) {
     sluitKnoppen(el);
     $('#c-voorraad', el).onclick = () => productFormulier(null, { naam: c.naam, eenheid: c.eenheid || 'stuks', categorie: c.categorie || '',
       locatie: c.locatie || locaties()[0] || '', datumtype: c.datumtype || 'THT', barcode: c.barcode || '',
-      hoeveelheid: TELBAAR.has(c.eenheid || 'stuks') ? 1 : c.hoeveelheid || 1 });
+      hoeveelheid: TELBAAR.has(c.eenheid || 'stuks') ? 1 : c.hoeveelheid || 1, inhoud: c.inhoud || null, inhoud_eenheid: c.inhoud_eenheid || '' });
     $('#c-lijst', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks' }); toast(`${c.naam} staat op de boodschappenlijst`); };
     $('#c-terug', el).onclick = () => catalogusPaneel();
     $('#c-weg', el).onclick = async () => {
@@ -487,7 +514,7 @@ function productFormulier(bestaand, sjabloon = {}) {
   const nieuw = !bestaand;
   const p = bestaand ? { ...bestaand } : {
     naam: '', hoeveelheid: 1, eenheid: 'stuks', locatie: ui.plaats || locaties()[0] || '', categorie: '',
-    aankoopdatum: vandaag(), vervaldatum: '', datumtype: 'THT', minimum: 0, notitie: '', barcode: '', ...sjabloon,
+    aankoopdatum: vandaag(), vervaldatum: '', datumtype: 'THT', minimum: 0, notitie: '', barcode: '', inhoud: null, inhoud_eenheid: '', ...sjabloon,
   };
   paneelOpenen((el) => {
     if (alGetekend('formulier')) return; // niet opnieuw tekenen terwijl je typt
@@ -498,6 +525,10 @@ function productFormulier(bestaand, sjabloon = {}) {
         <div class="rij2">
           <label class="veld"><span>Hoeveelheid</span><input id="pf-hv" inputmode="decimal" value="${esc(fmt(p.hoeveelheid))}" required></label>
           <label class="veld"><span>Eenheid</span><select id="pf-eenheid">${opties(EENHEDEN, p.eenheid)}</select></label>
+        </div>
+        <div class="rij2" id="pf-inhoud-rij">
+          <label class="veld"><span id="pf-inhoud-titel">Inhoud per stuk</span><input id="pf-inhoud" inputmode="decimal" value="${p.inhoud > 0 ? esc(fmt(p.inhoud)) : ''}" placeholder="bv. 500"></label>
+          <label class="veld"><span>Eenheid inhoud</span><select id="pf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, p.inhoud_eenheid || 'g')}</select></label>
         </div>
         <div class="veld" style="margin-bottom:1rem"><span class="veld-titel">Plaats</span>
           <div class="chips" id="pf-plaats">${locaties().map((l) => `<button type="button" class="chip${zelfde(l, p.locatie) ? ' aan' : ''}" data-w="${esc(l)}">${esc(l)}</button>`).join('')}</div></div>
@@ -526,6 +557,14 @@ function productFormulier(bestaand, sjabloon = {}) {
         : 'Kwaliteitsdatum: daarna meestal nog goed. Typisch voor kast- en diepvriesproducten.';
     };
     typeTekenen();
+    // inhoud per verpakking: alleen tonen bij telbare eenheden (stuks, pak, fles ...)
+    const inhoudTonen = () => {
+      const e = $('#pf-eenheid', el).value;
+      $('#pf-inhoud-rij', el).hidden = !TELBAAR.has(e);
+      $('#pf-inhoud-titel', el).textContent = `Inhoud per ${e === 'stuks' ? 'stuk' : e} (mag leeg)`;
+    };
+    inhoudTonen();
+    $('#pf-eenheid', el).onchange = inhoudTonen;
     $$('#pf-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; typeTekenen(); }));
     $$('#pf-plaats .chip', el).forEach((b) => (b.onclick = () => {
       plaats = b.dataset.w;
@@ -535,7 +574,11 @@ function productFormulier(bestaand, sjabloon = {}) {
     const invullen = (info) => {
       if (info.naam) $('#pf-naam', el).value = info.naam;
       if (info.hoeveelheid) $('#pf-hv', el).value = fmt(info.hoeveelheid);
-      if (info.eenheid) $('#pf-eenheid', el).innerHTML = opties(EENHEDEN, info.eenheid);
+      if (info.eenheid) { $('#pf-eenheid', el).innerHTML = opties(EENHEDEN, info.eenheid); inhoudTonen(); }
+      if (info.inhoud > 0 && !$('#pf-inhoud', el).value) {
+        $('#pf-inhoud', el).value = fmt(info.inhoud);
+        if (info.inhoud_eenheid) $('#pf-inhoud-eenheid', el).innerHTML = opties(INHOUD_EENHEDEN, info.inhoud_eenheid);
+      }
       if (info.categorie) $('#pf-cat', el).innerHTML = opties(categorieen(), info.categorie, 'Geen');
       if (info.merk && !$('#pf-notitie', el).value) $('#pf-notitie', el).value = info.merk;
       if (info.locatie) { plaats = info.locatie; $$('#pf-plaats .chip', el).forEach((c) => c.classList.toggle('aan', zelfde(c.dataset.w, plaats))); }
@@ -546,7 +589,7 @@ function productFormulier(bestaand, sjabloon = {}) {
       if (!nieuw) return;
       const naam = $('#pf-naam', el).value;
       const b = S.producten.find((x) => zelfde(x.naam, naam)) || (S.catalogus || []).find((x) => zelfde(x.naam, naam));
-      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype });
+      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype, inhoud: b.inhoud, inhoud_eenheid: b.inhoud_eenheid });
     };
     $('#pf-naam', el).onchange = bekendeNaam;
     suggesties($('#pf-naam', el), catalogusnamen, bekendeNaam);
@@ -554,7 +597,11 @@ function productFormulier(bestaand, sjabloon = {}) {
       e.preventDefault();
       const hv = num($('#pf-hv', el).value);
       if (hv === null || hv < 0) return toast('Vul een geldige hoeveelheid in.');
+      const telbaar = TELBAAR.has($('#pf-eenheid', el).value);
+      const inhoud = telbaar ? num($('#pf-inhoud', el).value) : null;
+      if (telbaar && $('#pf-inhoud', el).value.trim() && !(inhoud > 0)) return toast('Vul een geldige inhoud in, of laat het veld leeg.');
       const data = {
+        inhoud: inhoud > 0 ? inhoud : null, inhoud_eenheid: inhoud > 0 ? $('#pf-inhoud-eenheid', el).value : '',
         naam: $('#pf-naam', el).value.trim(), hoeveelheid: hv, eenheid: $('#pf-eenheid', el).value, locatie: plaats || '',
         vervaldatum: $('#pf-datum', el).value, datumtype: type, categorie: $('#pf-cat', el).value.trim(),
         minimum: num($('#pf-min', el).value) || 0, barcode: p.barcode || '', // barcodes staan voorlopig uit; een bestaande code blijft bewaard
@@ -669,8 +716,11 @@ function beschikbaarheid(ingr, factor = 1, namen = productnamen(), geleerd = gel
   const partijen = S.producten.filter((p) => zelfde(p.naam, naam) && p.hoeveelheid > 0 && houdbaarheid(p).niveau !== 4)
     .sort((a, b) => (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
   if (!partijen.length) return { st: 'ontbreekt', naam };
-  const eenheid = partijen[0].eenheid;
-  const totaal = partijen.reduce((s, p) => s + (omrekenen(p.hoeveelheid, p.eenheid, eenheid) ?? 0), 0);
+  // eenheid om in te rekenen: die van de voorraad, of de inhoud per verpakking als het recept bv. in gram rekent
+  let eenheid = partijen[0].eenheid;
+  const re = ingr.eenheid || 'stuks', inh0 = inhoudVan(partijen[0]);
+  if (omrekenen(1, re, eenheid) === null && inh0 && omrekenen(1, re, inh0.eenheid) !== null) eenheid = inh0.eenheid;
+  const totaal = partijen.reduce((s, p) => s + (vanProduct(p.hoeveelheid, p, eenheid) ?? 0), 0);
   const nodigRecept = ingr.hoeveelheid !== null && ingr.hoeveelheid !== undefined ? ingr.hoeveelheid * factor : null;
   const nodig = omrekenen(nodigRecept, ingr.eenheid || 'stuks', eenheid);
   return { st: nodig !== null && totaal + 1e-9 < nodig ? 'weinig' : 'ok', naam, partijen, eenheid, totaal, nodig, nodigRecept };
@@ -756,7 +806,8 @@ function receptPaneel(id, personen) {
       }).join('')}</ul>
       <div class="knoppenrij">
         <button class="knop primair" id="gekookt">Gekookt</button>
-        ${ontbreekt.length ? `<button class="knop" id="naar-lijst">${ontbreekt.length} op boodschappenlijst</button>` : '<span class="stil" style="align-self:center">Alles in huis</span>'}
+        <button class="knop" id="naar-lijst">Op boodschappenlijst…</button>
+        ${ontbreekt.length ? '' : '<span class="stil" style="align-self:center">Alles in huis</span>'}
       </div>
       ${stappen.length ? `<h3>Bereiding</h3><ol class="stappen">${stappen.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
       ${r.notities ? `<h3>Notities</h3><p style="white-space:pre-wrap">${esc(r.notities)}</p>` : ''}
@@ -772,14 +823,56 @@ function receptPaneel(id, personen) {
       await api('DELETE', `recepten/${r.id}`);
       toast('Recept verwijderd');
     };
-    const nl = $('#naar-lijst', el);
-    if (nl) nl.onclick = async () => {
-      const items = ontbreekt.map(({ i, b }) => (b.st === 'weinig' && b.nodig !== null
-        ? { naam: b.naam, hoeveelheid: Math.ceil((b.nodig - b.totaal) * 100) / 100, eenheid: b.eenheid, bron: 'recept' }
-        : { naam: b.naam || i.naam, hoeveelheid: i.hoeveelheid !== null ? Math.round(i.hoeveelheid * factor * 100) / 100 : null, eenheid: i.eenheid, bron: 'recept' }));
+    $('#naar-lijst', el).onclick = () => boodschappenKiezen(r, regels, factor, personen);
+  }, { breed: true });
+}
+
+// Zelf kiezen welke ingrediënten van een recept op de boodschappenlijst komen.
+// Wat ontbreekt of te weinig is, staat al aangevinkt; de hoeveelheid kun je aanpassen.
+function boodschappenKiezen(r, regels, factor, personen) {
+  const keuzes = regels.map(({ i, b }) => {
+    const weinig = b.st === 'weinig' && b.nodig !== null;
+    return {
+      naam: b.naam || i.naam,
+      hoeveelheid: weinig ? Math.ceil((b.nodig - b.totaal) * 100) / 100 : i.hoeveelheid !== null && i.hoeveelheid !== undefined ? Math.round(i.hoeveelheid * factor * 100) / 100 : null,
+      eenheid: weinig ? b.eenheid : i.eenheid || '',
+      aan: b.st !== 'ok',
+      st: b.altijd ? 'meestal in huis' : b.st === 'ontbreekt' ? 'niet in huis' : b.st === 'weinig' ? `te weinig: ${hoeveelTekst(b.totaal, b.eenheid)} in huis` : 'in huis',
+    };
+  });
+  paneelOpenen((el) => {
+    if (alGetekend('boodschappen-kiezen')) return; // niet opnieuw tekenen terwijl je typt
+    el.innerHTML = `${paneelKop('Op boodschappenlijst', esc(r.titel))}
+      <p class="stil" style="margin:0 0 .4rem">Vink aan wat je wilt kopen. Wat ontbreekt, staat al aangevinkt.</p>
+      <div>${keuzes.map((k, n) => `<div class="kook-rij kies">
+          <label class="vink" style="display:flex;align-items:center;gap:.7rem;flex:1;min-width:0"><input type="checkbox" data-k="${n}" ${k.aan ? 'checked' : ''}><span class="vakje"></span>
+            <span class="naam">${esc(k.naam)}<small>${esc(k.st)}</small></span></label>
+          <input type="text" inputmode="decimal" data-hv="${n}" value="${esc(k.hoeveelheid === null ? '' : fmt(k.hoeveelheid))}" placeholder="–" aria-label="Hoeveelheid ${esc(k.naam)}"><span class="eenh">${esc(eenheidKort(k.eenheid))}</span></div>`).join('')}</div>
+      <div class="snel" style="margin-top:.8rem"><button type="button" class="chip" id="bk-alles">Alles aanvinken</button><button type="button" class="chip" id="bk-niets">Niets aanvinken</button></div>
+      <div class="paneel-voet"><button class="knop" id="bk-terug">Terug</button><button class="knop primair" id="bk-toevoegen"></button></div>`;
+    sluitKnoppen(el);
+    const vinkjes = $$('input[data-k]', el);
+    const tellen = () => {
+      const n = vinkjes.filter((v) => v.checked).length;
+      $('#bk-toevoegen', el).textContent = n ? `${n} toevoegen` : 'Niets gekozen';
+    };
+    vinkjes.forEach((v) => (v.onchange = tellen));
+    // hoeveelheid aanpassen = dat ingrediënt willen kopen
+    $$('input[data-hv]', el).forEach((inv) => (inv.oninput = () => { vinkjes[+inv.dataset.hv].checked = true; tellen(); }));
+    $('#bk-alles', el).onclick = () => { vinkjes.forEach((v) => (v.checked = true)); tellen(); };
+    $('#bk-niets', el).onclick = () => { vinkjes.forEach((v) => (v.checked = false)); tellen(); };
+    $('#bk-terug', el).onclick = () => receptPaneel(r.id, personen);
+    $('#bk-toevoegen', el).onclick = async () => {
+      const items = vinkjes.filter((v) => v.checked).map((v) => {
+        const k = keuzes[+v.dataset.k];
+        return { naam: k.naam, hoeveelheid: num($(`input[data-hv="${v.dataset.k}"]`, el).value), eenheid: k.eenheid, bron: 'recept' };
+      });
+      if (!items.length) return toast('Vink eerst aan wat je wilt kopen.');
       await api('POST', 'boodschappen', { items });
+      paneelSluiten();
       toast(`${items.length} op je boodschappenlijst gezet`);
     };
+    tellen();
   }, { breed: true });
 }
 
@@ -804,11 +897,11 @@ function kokenPaneel(r, regels) {
         if (!rest || rest <= 0) continue;
         for (const p of b.partijen) {
           if (rest <= 1e-9) break;
-          const inEenheid = omrekenen(rest, b.eenheid, p.eenheid);
+          const inEenheid = naarProduct(rest, b.eenheid, p);
           if (inEenheid === null) continue;
           const neem = Math.min(inEenheid, p.hoeveelheid);
           aftrekken.push({ product_id: p.id, hoeveelheid: Math.round(neem * 1000) / 1000 });
-          rest -= omrekenen(neem, p.eenheid, b.eenheid);
+          rest -= vanProduct(neem, p, b.eenheid);
         }
       }
       await api('POST', `recepten/${r.id}/koken`, { aftrekken });

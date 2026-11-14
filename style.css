@@ -319,3 +319,5 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 /* tip: installeren als app */
 .installeer-tip { display: flex; align-items: center; gap: .6rem; background: var(--accent-zacht); border-radius: 12px; padding: .55rem .5rem .55rem .9rem; margin-bottom: 1rem; font-size: .92rem; }
 .installeer-tip span { flex: 1; }
+.hoeveelheid .getal .inhoud-per { display: block; font-size: .95rem; color: var(--stil); font-weight: 500; letter-spacing: 0; margin-top: .1rem; }
+.kook-rij.kies .vink input:checked ~ .naam { color: inherit; text-decoration: none; }
