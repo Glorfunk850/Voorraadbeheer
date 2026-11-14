@@ -20,6 +20,12 @@
     return null;
   };
   const getal = (v) => (v === null || v === undefined || v === '' ? null : parseFloat(String(v).replace(',', '.')));
+  // wat bij een recept gebruikt wordt maar (nog) niet in de lijst bij Instellingen staat, achteraan toevoegen
+  const lijstAanvullen = (inst, sleutel, namen) => {
+    const lijst = Array.isArray(inst[sleutel]) ? inst[sleutel].filter((x) => typeof x === 'string' && x.trim()) : [];
+    for (const n of namen) if (n && !lijst.some((x) => zelfde(x, n))) lijst.push(n);
+    inst[sleutel] = lijst;
+  };
   // categorieën van een recept: getrimd, zonder dubbels (hoofdletters tellen niet)
   const categorieLijst = (v) => {
     const uit = [];
@@ -37,6 +43,9 @@
       tgt_dagen: 2, tht_dagen: 3, locaties: ['Koelkast', 'Diepvries', 'Voorraadkast'],
       categorieen: ['Groenten', 'Fruit', 'Zuivel & eieren', 'Vlees & vis', 'Brood & granen', 'Pasta, rijst & peulvruchten',
         'Conserven', 'Kruiden & sauzen', 'Snacks & zoet', 'Dranken', 'Diepvriesproducten', 'Overig'],
+      // indeling van recepten (zelf aan te passen bij Instellingen)
+      recept_soorten: ['Ontbijt', 'Lunch', 'Voorgerecht', 'Soep', 'Salade', 'Hoofdgerecht', 'Bijgerecht', 'Dessert', 'Gebak', 'Snack', 'Saus', 'Drank'],
+      recept_categorieen: ['Vegetarisch', 'Vlees', 'Vis', 'Pasta', 'Snel', 'Feestelijk'],
     },
   });
   let S = STANDAARD();
@@ -103,6 +112,8 @@
       r.categorieen = categorieLijst(r.categorieen);
       r.favoriet = !!r.favoriet;
     }
+    lijstAanvullen(uit.instellingen, 'recept_soorten', uit.recepten.map((r) => r.soort));
+    lijstAanvullen(uit.instellingen, 'recept_categorieen', uit.recepten.flatMap((r) => r.categorieen));
     // id's altijd als getal (anders vindt de app items met een id als tekst niet terug)
     const getalId = (x) => { if (x && x.id != null && x.id !== '' && Number.isFinite(+x.id)) x.id = +x.id; };
     uit.producten.forEach(getalId); uit.boodschappen.forEach(getalId);
@@ -298,6 +309,17 @@
       return alles();
     }
     if (bron === 'hernoemen') {
+      if (data.veld === 'recept_soort') {
+        for (const r of S.recepten) if (zelfde(r.soort, data.van)) r.soort = data.naar || '';
+        return alles();
+      }
+      if (data.veld === 'recept_categorie') {
+        for (const r of S.recepten) {
+          if (!(r.categorieen || []).some((c) => zelfde(c, data.van))) continue;
+          r.categorieen = categorieLijst(r.categorieen.map((c) => (zelfde(c, data.van) ? data.naar || '' : c)));
+        }
+        return alles();
+      }
       const veld = data.veld === 'categorie' ? 'categorie' : 'locatie';
       for (const p of S.producten) if (zelfde(p[veld], data.van)) p[veld] = data.naar || '';
       return alles();
@@ -409,6 +431,8 @@
           stappen: data.stappen || '', notities: data.notities || '', gewijzigd: nu(),
           soort: (data.soort || '').trim(), categorieen: categorieLijst(data.categorieen),
           favoriet: 'favoriet' in data ? !!data.favoriet : !!r.favoriet });
+        lijstAanvullen(S.instellingen, 'recept_soorten', [r.soort]);
+        lijstAanvullen(S.instellingen, 'recept_categorieen', r.categorieen);
         r.ingredienten = (data.ingredienten || []).filter((i) => i.naam).map((i, n) => ({ id: id(), recept_id: r.id, volgorde: n,
           hoeveelheid: getal(i.hoeveelheid), eenheid: i.eenheid || '', naam: i.naam, voorraadnaam: i.voorraadnaam || '' }));
       };
