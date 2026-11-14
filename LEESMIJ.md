@@ -1,9 +1,11 @@
 # Voorraadbeheer – installeerbare webapp
 
 Alles werkt in de browser: je gegevens staan op het toestel zelf (ook offline).
-Er is geen server en geen AI-dienst. Alleen:
-- een onbekende barcode wordt opgezocht bij Open Food Facts;
-- de tekstherkenning (Tesseract) wordt bij het eerste gebruik één keer gedownload.
+Er is geen server en geen AI-dienst; er wordt niets naar buiten gestuurd.
+
+Voorlopig uitgeschakeld: barcodes scannen en recepten inlezen vanaf een foto (of een gescande pdf).
+Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf te typen.
+(Het bestand `barcode.js` wordt niet meer gebruikt en is bewaard voor later.)
 
 ## Online zetten met GitHub Pages (gratis, eenmalig ±10 minuten)
 
