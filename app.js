@@ -1,6 +1,5 @@
 // Voorraad — interface. Praat met api/..., afgehandeld in lokaal.js (opslag op dit toestel).
 import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, sleutelwoorden, omrekenen } from './parser.js';
-import { barcodeUitBestand, controleOk } from './barcode.js';
 import { tekstOpmaken, pdfStukjes } from './layout.js';
 
 // ---------------------------------------------------------------------------
@@ -25,13 +24,16 @@ const ICOON = {
   boek: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v16H5.5A1.5 1.5 0 0 0 4 20.5z"/><path d="M4 20.5A1.5 1.5 0 0 0 5.5 22H20v-3"/></svg>',
   tandwiel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
-  scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>',
   zoek: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   sluit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
 };
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+// Voor de hoofdschermen: alleen zoeken binnen #inhoud, nooit in het paneel of de dialogen.
+// Zo kan een knop op het scherm nooit per ongeluk een knop in het paneel "overnemen" (of omgekeerd).
+const $m = (s, el = document.getElementById('inhoud')) => el.querySelector(s);
+const $$m = (s, el = document.getElementById('inhoud')) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (v) => {
   if (v === null || v === undefined || String(v).trim() === '') return null;
@@ -125,8 +127,14 @@ function vraag(tekst, { invoer = false, standaard = '', ja = 'OK', gevaar = fals
 }
 
 let paneelVernieuwen = null;
+// Toestand van het open paneel (bv. "formulier staat er al"). Bewust GEEN data-attributen op #paneel:
+// die kunnen botsen met selectors als [data-recept] en dan knoppen kapen.
+let paneelStaat = {};
+/** true als dit stuk van het paneel al getekend is; markeert het anders als getekend. */
+const alGetekend = (naam) => { if (paneelStaat[naam]) return true; paneelStaat[naam] = true; return false; };
 function paneelOpenen(teken, { breed = false } = {}) {
   const p = $('#paneel');
+  paneelStaat = {};
   for (const k of Object.keys(p.dataset)) delete p.dataset[k];
   p.classList.toggle('breed', breed);
   p.hidden = false;
@@ -145,6 +153,7 @@ function paneelSluiten() {
   document.body.style.overflow = '';
   document.body.classList.remove('paneel-open');
   paneelVernieuwen = null;
+  paneelStaat = {};
 }
 $('#sluier').onclick = paneelSluiten;
 
@@ -184,7 +193,6 @@ const opties = (lijst, gekozen, leeg) => {
   return (leeg !== undefined ? `<option value="">${esc(leeg)}</option>` : '')
     + items.map((x) => `<option value="${esc(x)}"${zelfde(x, gekozen) ? ' selected' : ''}>${esc(x || '–')}</option>`).join('');
 };
-const codeNormaal = (c) => { c = (c || '').replace(/\D/g, ''); return c.length === 12 ? '0' + c : c; };
 
 /** Suggesties onder een invoerveld: pas na 2 letters, als kleine knoppen (geen uitklapmenu). */
 function suggesties(veld, bron, gekozen) {
@@ -296,7 +304,6 @@ function tekenVoorraad() {
   inhoudZetten(`
     <header class="kop"><h1>Voorraad</h1>
       <div class="kop-acties">
-        <button class="icoon" id="scan" aria-label="Barcode scannen" title="Barcode scannen">${ICOON.scan}</button>
         ${instellingenKnop}
         <button class="knop primair" id="nieuw">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}<span>Toevoegen</span></button>
       </div></header>
@@ -307,13 +314,12 @@ function tekenVoorraad() {
     ${(S.catalogus || []).length ? `<section class="sectie"><ul class="lijst"><li><button class="rij" id="catalogus-open">
       <span class="naam">Catalogus<small>Alle producten die je ooit toevoegde</small></span><span class="rechts">›</span></button></li></ul></section>` : ''}`);
   installTipTekenen();
-  if ($('#catalogus-open')) $('#catalogus-open').onclick = () => catalogusPaneel();
-  $('#nieuw').onclick = () => productFormulier(null);
-  $('#scan').onclick = () => scanStarten('voorraad');
-  const z = $('#zoek-voorraad');
+  if ($m('#catalogus-open')) $m('#catalogus-open').onclick = () => catalogusPaneel();
+  $m('#nieuw').onclick = () => productFormulier(null);
+  const z = $m('#zoek-voorraad');
   if (z) z.oninput = () => { ui.zoek = z.value; tekenVoorraad(); };
-  $$('[data-product]').forEach((b) => (b.onclick = () => productPaneel(+b.dataset.product)));
-  $$('[data-groep]').forEach((b) => (b.onclick = () => {
+  $$m('[data-product]').forEach((b) => (b.onclick = () => productPaneel(+b.dataset.product)));
+  $$m('[data-groep]').forEach((b) => (b.onclick = () => {
     const ids = b.dataset.groep.split(',').map(Number);
     if (ids.length === 1) productPaneel(ids[0]); else partijenPaneel(ids);
   }));
@@ -402,8 +408,7 @@ function catalogusPaneel() {
       ).join('')}</ul>` : '<div class="leeg">Niets gevonden.</div>';
       $$('[data-cat]', el).forEach((b) => (b.onclick = () => catalogusItem(items[+b.dataset.cat])));
     };
-    if (!el.dataset.catalogus) {
-      el.dataset.catalogus = '1';
+    if (!alGetekend('catalogus')) {
       el.innerHTML = `${paneelKop('Catalogus', 'Alle producten die je ooit toevoegde')}
         <div class="zoek">${ICOON.zoek}<input type="search" id="cat-zoek" placeholder="Zoeken in catalogus" autocomplete="off"></div>
         <div id="cat-lijst"></div>`;
@@ -476,12 +481,10 @@ function productFormulier(bestaand, sjabloon = {}) {
     aankoopdatum: vandaag(), vervaldatum: '', datumtype: 'THT', minimum: 0, notitie: '', barcode: '', ...sjabloon,
   };
   paneelOpenen((el) => {
-    if (el.dataset.formulier) return; // niet opnieuw tekenen terwijl je typt
-    el.dataset.formulier = '1';
+    if (alGetekend('formulier')) return; // niet opnieuw tekenen terwijl je typt
     el.innerHTML = `
       ${paneelKop(nieuw ? 'Toevoegen' : 'Bewerken')}
       <form id="pf" autocomplete="off">
-        ${nieuw ? `<button type="button" class="knop breed" id="pf-scan" style="margin-bottom:1.1rem">${ICOON.scan.replace('<svg', '<svg width="20" height="20"')} Barcode scannen</button>` : ''}
         <label class="veld"><span>Naam</span><input id="pf-naam" value="${esc(p.naam)}" required autocomplete="off" autocapitalize="sentences"></label>
         <div class="rij2">
           <label class="veld"><span>Hoeveelheid</span><input id="pf-hv" inputmode="decimal" value="${esc(fmt(p.hoeveelheid))}" required></label>
@@ -501,7 +504,6 @@ function productFormulier(bestaand, sjabloon = {}) {
         <details class="meer"${nieuw ? '' : ' open'} style="margin-top:.8rem"><summary>Meer</summary>
           <label class="veld"><span>Categorie</span><select id="pf-cat">${opties(categorieen(), p.categorie || '', 'Geen')}</select></label>
           <label class="veld"><span>Minimumvoorraad (eronder komt het op je boodschappenlijst)</span><input id="pf-min" inputmode="decimal" value="${p.minimum ? esc(fmt(p.minimum)) : ''}" placeholder="Geen"></label>
-          <label class="veld"><span>Barcode</span><input id="pf-code" inputmode="numeric" value="${esc(p.barcode || '')}" placeholder="Geen"></label>
           <label class="veld"><span>Gekocht op</span><input type="date" id="pf-aankoop" value="${esc(p.aankoopdatum || '')}"></label>
           <label class="veld"><span>Notitie</span><input id="pf-notitie" value="${esc(p.notitie || '')}"></label>
         </details>
@@ -529,19 +531,16 @@ function productFormulier(bestaand, sjabloon = {}) {
       if (info.merk && !$('#pf-notitie', el).value) $('#pf-notitie', el).value = info.merk;
       if (info.locatie) { plaats = info.locatie; $$('#pf-plaats .chip', el).forEach((c) => c.classList.toggle('aan', zelfde(c.dataset.w, plaats))); }
       if (info.datumtype) { type = info.datumtype === 'TGT' ? 'TGT' : 'THT'; typeTekenen(); }
-      if (info.code) $('#pf-code', el).value = info.code;
     };
     // bekende naam: gegevens van dat product overnemen
     const bekendeNaam = () => {
       if (!nieuw) return;
       const naam = $('#pf-naam', el).value;
       const b = S.producten.find((x) => zelfde(x.naam, naam)) || (S.catalogus || []).find((x) => zelfde(x.naam, naam));
-      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype, code: b.barcode || '' });
+      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype });
     };
     $('#pf-naam', el).onchange = bekendeNaam;
     suggesties($('#pf-naam', el), catalogusnamen, bekendeNaam);
-    const scan = $('#pf-scan', el);
-    if (scan) scan.onclick = () => scanStarten('formulier', invullen);
     $('#pf', el).onsubmit = async (e) => {
       e.preventDefault();
       const hv = num($('#pf-hv', el).value);
@@ -549,7 +548,7 @@ function productFormulier(bestaand, sjabloon = {}) {
       const data = {
         naam: $('#pf-naam', el).value.trim(), hoeveelheid: hv, eenheid: $('#pf-eenheid', el).value, locatie: plaats || '',
         vervaldatum: $('#pf-datum', el).value, datumtype: type, categorie: $('#pf-cat', el).value.trim(),
-        minimum: num($('#pf-min', el).value) || 0, barcode: $('#pf-code', el).value.replace(/\D/g, ''),
+        minimum: num($('#pf-min', el).value) || 0, barcode: p.barcode || '', // barcodes staan voorlopig uit; een bestaande code blijft bewaard
         aankoopdatum: $('#pf-aankoop', el).value, notitie: $('#pf-notitie', el).value.trim(),
       };
       try {
@@ -560,58 +559,6 @@ function productFormulier(bestaand, sjabloon = {}) {
     if (nieuw && !p.naam && fijneMuis()) setTimeout(() => $('#pf-naam', el)?.focus(), 60); // op de telefoon geen toetsenbord ongevraagd
   });
   if (sjabloon.melding) toast(sjabloon.melding);
-}
-
-// ---------------------------------------------------------------------------
-// BARCODES
-// ---------------------------------------------------------------------------
-let scanDoel = null;
-function scanStarten(doel, invullen) {
-  scanDoel = { doel, invullen };
-  $('#bestand-scan').click();
-}
-$('#bestand-scan').onchange = async (e) => {
-  const bestand = e.target.files && e.target.files[0];
-  e.target.value = '';
-  if (!bestand || !scanDoel) return;
-  const { doel, invullen } = scanDoel;
-  toast('Barcode lezen…', null, null, true);
-  let code = null;
-  try { code = await barcodeUitBestand(bestand); } catch (f) { console.error(f); }
-  toastWeg();
-  if (!code) {
-    const ingetypt = await vraag('Geen barcode herkend. Maak een scherpere foto van dichtbij, of typ de cijfers onder de streepjes:', { invoer: true, numeriek: true, ja: 'Opzoeken' });
-    if (ingetypt === null) return;
-    code = codeNormaal(ingetypt);
-    if (![8, 13].includes(code.length) || !controleOk(code)) return toast('Dat lijkt geen geldige barcode.');
-  }
-  code = codeNormaal(code);
-
-  if (doel === 'voorraad') {
-    const al = S.producten.filter((p) => codeNormaal(p.barcode) === code)
-      .sort((a, b) => (b.hoeveelheid > 0) - (a.hoeveelheid > 0) || (a.vervaldatum || '9').localeCompare(b.vervaldatum || '9'));
-    if (al.length) return productPaneel(al[0].id);
-  }
-  const info = await barcodeInfo(code);
-  const gegevens = info && info.gevonden ? { ...info, code } : { code };
-  if (doel === 'boodschappen') {
-    const bekend = S.producten.find((p) => codeNormaal(p.barcode) === code);
-    const naam = bekend?.naam || (info && info.gevonden ? info.naam : null);
-    if (!naam) return toast('Onbekende barcode. Typ de naam zelf.');
-    await api('POST', 'boodschappen', { naam, product_id: bekend?.id || null });
-    return toast(`${naam} staat op je lijst`);
-  }
-  const melding = info && !info.gevonden ? 'Product niet gevonden. Vul het zelf in; de app onthoudt het voor de volgende keer.'
-    : info && info.bron === 'off' ? 'Gevonden in Open Food Facts. Kijk het even na.' : '';
-  if (doel === 'formulier' && invullen) { invullen(gegevens); if (melding) toast(melding); return; }
-  productFormulier(null, {
-    barcode: code, naam: gegevens.naam || '', categorie: gegevens.categorie || '', eenheid: gegevens.eenheid || 'stuks',
-    hoeveelheid: gegevens.hoeveelheid || 1, datumtype: gegevens.datumtype || 'THT', notitie: gegevens.merk || '',
-    ...(gegevens.locatie ? { locatie: gegevens.locatie } : {}), melding,
-  });
-};
-async function barcodeInfo(code) {
-  try { return await api('GET', 'barcode/' + code, undefined, true); } catch (f) { toast(f.message); return null; }
 }
 
 // ---------------------------------------------------------------------------
@@ -627,7 +574,7 @@ function tekenBoodschappen() {
       <button class="weg" data-weg="${b.id}" aria-label="Verwijderen">×</button></label></li>`;
   $('#inhoud').innerHTML = `
     <header class="kop"><h1>Boodschappen</h1>
-      <div class="kop-acties"><button class="icoon" id="scan-b" aria-label="Barcode scannen" title="Barcode scannen">${ICOON.scan}</button>${instellingenKnop}</div></header>
+      <div class="kop-acties">${instellingenKnop}</div></header>
     <form class="toevoegen" id="b-form" autocomplete="off">
       <div style="flex:1;min-width:0"><input id="b-invoer" placeholder="Toevoegen, bv. 2 l melk" autocomplete="off" autocapitalize="sentences"></div>
       <button class="knop primair" aria-label="Toevoegen">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</button>
@@ -636,28 +583,27 @@ function tekenBoodschappen() {
     ${open.length ? `<ul class="lijst">${open.map(rij).join('')}</ul>` : ''}
     ${af.length ? `<section class="sectie"><div class="sectie-titel"><span>In je mandje</span></div><ul class="lijst">${af.map(rij).join('')}</ul>
       <div style="margin-top:1rem"><button class="knop primair breed" id="klaar">Klaar met winkelen</button></div></section>` : ''}`;
-  $('#b-form').onsubmit = async (e) => {
+  $m('#b-form').onsubmit = async (e) => {
     e.preventDefault();
-    const tekst = $('#b-invoer').value.trim();
+    const tekst = $m('#b-invoer').value.trim();
     if (!tekst) return;
     const i = ingredientOntleden(tekst);
     const bekend = S.producten.find((p) => zelfde(p.naam, i.naam));
     const eenheid = i.hoeveelheid === null ? '' : i.eenheid === 'stuks' && bekend ? bekend.eenheid : i.eenheid;
-    $('#b-invoer').value = '';
+    $m('#b-invoer').value = '';
     await api('POST', 'boodschappen', { naam: i.naam ? i.naam.charAt(0).toUpperCase() + i.naam.slice(1) : tekst, hoeveelheid: i.hoeveelheid, eenheid, product_id: bekend?.id || null });
-    if (fijneMuis()) $('#b-invoer')?.focus();
+    if (fijneMuis()) $m('#b-invoer')?.focus();
   };
-  $('#scan-b').onclick = () => scanStarten('boodschappen');
-  suggesties($('#b-invoer'), productnamen);
-  $$('[data-vink]').forEach((c) => (c.onchange = () => api('PUT', `boodschappen/${c.dataset.vink}`, { afgevinkt: c.checked })));
-  $$('[data-weg]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); api('DELETE', `boodschappen/${b.dataset.weg}`); }));
-  $$('[data-hv]').forEach((s) => (s.onclick = async (e) => {
+  suggesties($m('#b-invoer'), productnamen);
+  $$m('[data-vink]').forEach((c) => (c.onchange = () => api('PUT', `boodschappen/${c.dataset.vink}`, { afgevinkt: c.checked })));
+  $$m('[data-weg]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); api('DELETE', `boodschappen/${b.dataset.weg}`); }));
+  $$m('[data-hv]').forEach((s) => (s.onclick = async (e) => {
     e.preventDefault();
     const b = S.boodschappen.find((x) => x.id === +s.dataset.hv);
     const w = await vraag(`Hoeveel ${b.naam}${b.eenheid && b.eenheid !== 'stuks' ? ' (' + b.eenheid + ')' : ''}?`, { invoer: true, numeriek: true, standaard: fmt(b.hoeveelheid), ja: 'Bewaren' });
     if (w !== null) api('PUT', `boodschappen/${b.id}`, { hoeveelheid: num(w) });
   }));
-  const klaar = $('#klaar');
+  const klaar = $m('#klaar');
   if (klaar) klaar.onclick = winkelenAfronden;
 }
 
@@ -667,8 +613,7 @@ function winkelenAfronden() {
     return { b, eenheid: b.eenheid || bekend?.eenheid || 'stuks', locatie: bekend?.locatie || locaties()[0] || '', type: bekend?.datumtype || 'THT', datum: '' };
   });
   paneelOpenen((el) => {
-    if (el.dataset.af) return;
-    el.dataset.af = '1';
+    if (alGetekend('af')) return; // niet opnieuw tekenen terwijl je typt
     el.innerHTML = `${paneelKop('In je voorraad zetten', 'Vul een datum in als je die bij de hand hebt.')}
       <div id="af-lijst">${items.map((x, n) => `
         <div class="afronden-rij" data-n="${n}">
@@ -756,27 +701,25 @@ function tekenRecepten() {
     ${sugg.length && !zoek ? `<section class="sectie"><div class="sectie-titel">Gebruikt wat op moet</div><ul class="lijst">
       ${sugg.map(({ r, gebruikt }) => `<li><button class="rij" data-recept="${r.id}"><span class="stip ${gebruikt.some((p) => p.datumtype === 'TGT') ? 'rood' : 'oranje'}"></span>
         <span class="naam">${esc(r.titel)}<small>${esc(gebruikt.map((p) => p.naam.toLowerCase()).join(', '))}</small></span></button></li>`).join('')}</ul></section>` : ''}
-    ${!S.recepten.length ? `<div class="leeg"><b>Nog geen recepten</b>Importeer een pdf of foto, of typ er zelf een.</div>` : ''}
+    ${!S.recepten.length ? `<div class="leeg"><b>Nog geen recepten</b>Importeer een pdf of typ er zelf een.</div>` : ''}
     ${lijst.length ? `<section class="sectie"><div class="sectie-titel"><span>${zoek ? 'Gevonden' : 'Alle recepten'}</span><span>in huis</span></div><ul class="lijst">
       ${lijst.map((r) => rij(r, [r.personen && `${r.personen} personen`, r.bereidingstijd].filter(Boolean).join(' · '))).join('')}</ul></section>`
     : S.recepten.length ? '<div class="leeg">Niets gevonden.</div>' : ''}`);
-  $('#r-nieuw').onclick = receptToevoegenKeuze;
-  const z = $('#zoek-recept');
+  $m('#r-nieuw').onclick = receptToevoegenKeuze;
+  const z = $m('#zoek-recept');
   if (z) z.oninput = () => { ui.receptZoek = z.value; tekenRecepten(); };
-  $$('[data-recept]').forEach((b) => (b.onclick = () => receptPaneel(+b.dataset.recept)));
+  $$m('[data-recept]').forEach((b) => (b.onclick = () => receptPaneel(+b.dataset.recept)));
 }
 
 function receptToevoegenKeuze() {
   paneelOpenen((el) => {
     el.innerHTML = `${paneelKop('Recept toevoegen')}
       <ul class="acties">
-        <li><button id="k-bestand">Pdf of afbeelding kiezen<br><small class="stil">De tekst wordt op dit toestel gelezen; het bestand wordt niet bewaard.</small></button></li>
-        <li><button id="k-camera">Foto maken van een recept</button></li>
+        <li><button id="k-bestand">Pdf kiezen<br><small class="stil">De tekst wordt op dit toestel gelezen; het bestand wordt niet bewaard.</small></button></li>
         <li><button id="k-typen">Zelf typen</button></li>
       </ul>`;
     sluitKnoppen(el);
     $('#k-bestand', el).onclick = () => { paneelSluiten(); $('#bestand-recept').click(); };
-    $('#k-camera', el).onclick = () => { paneelSluiten(); $('#bestand-camera').click(); };
     $('#k-typen', el).onclick = () => receptBewerken(null);
   });
 }
@@ -835,8 +778,7 @@ function kokenPaneel(r, regels) {
   const bruikbaar = regels.filter(({ b }) => b.partijen && b.partijen.length);
   if (!bruikbaar.length) return toast('Geen van de ingrediënten staat in je voorraad.');
   paneelOpenen((el) => {
-    if (el.dataset.koken) return;
-    el.dataset.koken = '1';
+    if (alGetekend('koken')) return; // niet opnieuw tekenen terwijl je typt
     el.innerHTML = `${paneelKop('Van je voorraad aftrekken', 'Pas aan wat niet klopt. Wat het eerst vervalt, gaat eerst.')}
       <div>${bruikbaar.map(({ i, b }, n) => {
         const voorstel = b.nodig !== null ? Math.min(b.nodig, b.totaal) : null;
@@ -873,8 +815,7 @@ function receptBewerken(r, ruweTekst) {
   const recept = r || { titel: '', personen: 4, bereidingstijd: '', ingredienten: [], stappen: '' };
   const gecontroleerd = ruweTekst !== undefined;
   paneelOpenen((el) => {
-    if (el.dataset.recept) return;
-    el.dataset.recept = '1';
+    if (alGetekend('recept')) return; // niet opnieuw tekenen terwijl je typt
     el.innerHTML = `${paneelKop(gecontroleerd ? 'Klopt dit?' : bewerkId ? 'Recept bewerken' : 'Nieuw recept')}
       ${gecontroleerd ? '<p class="melding">Kijk na wat er herkend is en verbeter waar nodig. Het bestand zelf is niet bewaard.</p>' : ''}
       <form id="rf" autocomplete="off">
@@ -948,61 +889,7 @@ function receptBewerken(r, ruweTekst) {
   }, { breed: true });
 }
 
-// Importeren uit pdf of afbeelding (lokaal; het bestand wordt niet bewaard)
-async function tekstHerkennen(blob) {
-  const a = await fetch('api/ocr', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/png' } });
-  const data = await a.json().catch(() => ({}));
-  if (!a.ok) throw new Error(data.fout || 'Tekstherkenning mislukt.');
-  if (data.woorden && data.woorden.length) return tekstOpmaken(data.woorden);
-  return data.tekst || '';
-}
-const naarPng = (c) => new Promise((ok, nee) => c.toBlob((b) => (b ? ok(b) : nee(new Error('Afbeelding kon niet verwerkt worden.'))), 'image/png'));
-// Zwart-wit maken met een plaatselijke drempel: schaduwen en ongelijk licht op een foto
-// worden zo wit, letters blijven zwart. (Tesseract gebruikt anders één drempel voor de hele foto.)
-function zwartWit(ctx, w, h) {
-  const beeld = ctx.getImageData(0, 0, w, h), px = beeld.data;
-  const grijs = new Uint8ClampedArray(w * h);
-  for (let i = 0; i < w * h; i++) grijs[i] = px[i * 4];
-  const som = new Float64Array((w + 1) * (h + 1));
-  for (let y = 0; y < h; y++) {
-    let rij = 0;
-    for (let x = 0; x < w; x++) { rij += grijs[y * w + x]; som[(y + 1) * (w + 1) + x + 1] = som[y * (w + 1) + x + 1] + rij; }
-  }
-  const r = Math.max(8, Math.round(Math.max(w, h) / 40));
-  for (let y = 0; y < h; y++) {
-    const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
-    for (let x = 0; x < w; x++) {
-      const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1);
-      const gem = (som[y1 * (w + 1) + x1] - som[y0 * (w + 1) + x1] - som[y1 * (w + 1) + x0] + som[y0 * (w + 1) + x0]) / ((x1 - x0) * (y1 - y0));
-      const v = grijs[y * w + x] < gem * 0.88 ? 0 : 255;
-      const i = (y * w + x) * 4;
-      px[i] = px[i + 1] = px[i + 2] = v; px[i + 3] = 255;
-    }
-  }
-  ctx.putImageData(beeld, 0, 0);
-}
-async function afbeeldingLezen(bestand) {
-  let beeld;
-  try { beeld = await createImageBitmap(bestand, { imageOrientation: 'from-image' }); } catch {
-    const url = URL.createObjectURL(bestand);
-    try { beeld = new Image(); beeld.src = url; await beeld.decode(); } catch { throw new Error('Deze afbeelding kan niet geopend worden. Probeer jpg of png.'); } finally { URL.revokeObjectURL(url); }
-  }
-  const lang = Math.max(beeld.width, beeld.height);
-  const schaal = lang < 1800 ? 1800 / lang : lang > 3200 ? 3200 / lang : 1;
-  const c = document.createElement('canvas');
-  c.width = Math.round(beeld.width * schaal); c.height = Math.round(beeld.height * schaal);
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.filter = 'grayscale(1)';
-  ctx.drawImage(beeld, 0, 0, c.width, c.height);
-  ctx.filter = 'none';
-  if (beeld.close) beeld.close();
-  zwartWit(ctx, c.width, c.height);
-  toast('Tekst herkennen… de eerste keer duurt dit wat langer', null, null, true);
-  const png = await naarPng(c);
-  c.width = c.height = 0;
-  return tekstHerkennen(png);
-}
+// Importeren uit pdf (lokaal; het bestand wordt niet bewaard). Foto's en gescande pdf's (tekstherkenning) staan voorlopig uit.
 async function pdfLezen(bestand) {
   // Eigen kopie van pdf.js; ontbreekt die (bv. map vendor niet geüpload), dan dezelfde versie van jsDelivr.
   const CDN = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/';
@@ -1023,23 +910,14 @@ async function pdfLezen(bestand) {
       toast(`Pagina ${n} van ${aantal} lezen…`, null, null, true);
       const pagina = await doc.getPage(n);
       const hoogte = pagina.getViewport({ scale: 1 }).viewBox[3];
-      let tekst = tekstOpmaken(pdfStukjes((await pagina.getTextContent()).items, hoogte));
-      if (tekst.replace(/\s/g, '').length < 30) {
-        toast(`Pagina ${n} van ${aantal}: tekst herkennen…`, null, null, true);
-        const vp = pagina.getViewport({ scale: Math.min(4, 2200 / pagina.getViewport({ scale: 1 }).width) });
-        const c = document.createElement('canvas');
-        c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-        await pagina.render({ canvasContext: ctx, canvas: c, viewport: vp }).promise;
-        tekst = await tekstHerkennen(await naarPng(c));
-        c.width = c.height = 0;
-      }
+      const tekst = tekstOpmaken(pdfStukjes((await pagina.getTextContent()).items, hoogte));
       delen.push(tekst);
       pagina.cleanup();
     }
   } finally { await taak.destroy(); }
-  return delen.join('\n');
+  const tekst = delen.join('\n');
+  if (tekst.replace(/\s/g, '').length < 30) throw new Error('In deze pdf staat geen leesbare tekst (bv. een scan of foto). Typ het recept zelf.');
+  return tekst;
 }
 async function receptImporteren(invoer) {
   const bestand = invoer.files && invoer.files[0];
@@ -1047,17 +925,14 @@ async function receptImporteren(invoer) {
   if (!bestand) return;
   try {
     const isPdf = bestand.type === 'application/pdf' || /\.pdf$/i.test(bestand.name);
-    const isBeeld = bestand.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff?)$/i.test(bestand.name);
-    if (!isPdf && !isBeeld) throw new Error('Kies een pdf of een afbeelding.');
-    toast(isPdf ? 'Pdf openen…' : 'Afbeelding voorbereiden…', null, null, true);
-    const tekst = isPdf ? await pdfLezen(bestand) : await afbeeldingLezen(bestand);
-    if (!tekst.trim()) throw new Error('Geen tekst gevonden. Probeer een scherpere foto, recht van boven en goed belicht.');
+    if (!isPdf) throw new Error('Kies een pdf. Foto\'s van recepten kunnen voorlopig niet ingelezen worden.');
+    toast('Pdf openen…', null, null, true);
+    const tekst = await pdfLezen(bestand);
     toastWeg();
     receptBewerken(receptOntleden(tekst), tekst);
   } catch (f) { toast(f.message || 'Importeren mislukt.'); console.error(f); }
 }
 $('#bestand-recept').onchange = (e) => receptImporteren(e.target);
-$('#bestand-camera').onchange = (e) => receptImporteren(e.target);
 
 // ---------------------------------------------------------------------------
 // INSTELLINGEN
@@ -1146,32 +1021,31 @@ async function tekenInstellingen() {
       <div class="knoppenrij"><a class="knop" href="api/export.json" download>Back-up downloaden</a><a class="knop" href="api/export.csv" download>Voorraad als CSV</a>
       <button class="knop" id="i-terug">Back-up terugzetten</button></div></section>
     <section class="sectie"><div class="sectie-titel">Over</div>
-      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Alleen om een onbekende barcode op te zoeken, wordt de barcode naar Open Food Facts gestuurd (open productdatabank, geen AI). Tekstherkenning (Tesseract, geen AI) wordt bij het eerste gebruik eenmalig gedownload; je foto's en pdf's verlaten het toestel niet.<br>
-      ${navigator.onLine ? '' : 'Offline: barcodes opzoeken kan nu niet.'}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
+      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
   installBlokTekenen();
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
-  $$('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
+  $$m('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
     if (d.open) ui.uitgeklapt.add(d.dataset.uitklap); else ui.uitgeklapt.delete(d.dataset.uitklap);
   }));
   const bewaar = (wijziging) => api('PUT', 'instellingen', wijziging);
-  $$('[data-dagen]').forEach((b) => (b.onclick = () => {
+  $$m('[data-dagen]').forEach((b) => (b.onclick = () => {
     const k = b.dataset.dagen;
     bewaar({ [k]: Math.min(60, Math.max(0, (inst[k] ?? 0) + +b.dataset.stap)) });
   }));
   const VELD = { locaties: 'locatie', categorieen: 'categorie' };
   const SOORT = { locaties: 'plaats', categorieen: 'categorie' };
-  $$('[data-nieuw]').forEach((f) => (f.onsubmit = async (e) => {
+  $$m('[data-nieuw]').forEach((f) => (f.onsubmit = async (e) => {
     e.preventDefault();
-    const k = f.dataset.nieuw, naam = $('input', f).value.trim();
+    const k = f.dataset.nieuw, naam = $m('input', f).value.trim();
     if (!naam) return;
     if ((inst[k] || []).some((x) => zelfde(x, naam))) return toast(`"${naam}" bestaat al.`);
     await bewaar({ [k]: [...(inst[k] || []), naam] });
     toast(`${naam} toegevoegd`);
   }));
-  $$('.beheer').forEach((rij) => {
+  $$m('.beheer').forEach((rij) => {
     const k = rij.dataset.lijst, i = +rij.dataset.i, lijst = [...(inst[k] || [])], naam = lijst[i];
-    $('[data-hernoem]', rij).onclick = async () => {
+    $m('[data-hernoem]', rij).onclick = async () => {
       const nieuw = ((await vraag(`Nieuwe naam voor ${SOORT[k]} "${naam}":`, { invoer: true, standaard: naam, ja: 'Bewaren' })) || '').trim();
       if (!nieuw || nieuw === naam) return;
       if (lijst.some((x, j) => j !== i && zelfde(x, nieuw))) return toast(`"${nieuw}" bestaat al.`);
@@ -1179,8 +1053,8 @@ async function tekenInstellingen() {
       await bewaar({ [k]: lijst });
       await api('POST', 'hernoemen', { veld: VELD[k], van: naam, naar: nieuw });
     };
-    $('[data-omhoog]', rij).onclick = () => { [lijst[i - 1], lijst[i]] = [lijst[i], lijst[i - 1]]; bewaar({ [k]: lijst }); };
-    $('[data-wis]', rij).onclick = async () => {
+    $m('[data-omhoog]', rij).onclick = () => { [lijst[i - 1], lijst[i]] = [lijst[i], lijst[i - 1]]; bewaar({ [k]: lijst }); };
+    $m('[data-wis]', rij).onclick = async () => {
       const aantal = telling(VELD[k], naam);
       const tekst = aantal ? `${SOORT[k] === 'plaats' ? 'Plaats' : 'Categorie'} "${naam}" verwijderen? ${aantal} ${aantal === 1 ? 'product heeft' : 'producten hebben'} daarna geen ${SOORT[k]} meer.`
         : `${SOORT[k] === 'plaats' ? 'Plaats' : 'Categorie'} "${naam}" verwijderen?`;
@@ -1190,14 +1064,14 @@ async function tekenInstellingen() {
       if (aantal) await api('POST', 'hernoemen', { veld: VELD[k], van: naam, naar: '' });
     };
   });
-  $('#i-terug').onclick = () => $('#bestand-backup').click();
+  $m('#i-terug').onclick = () => $m('#bestand-backup').click();
   try {
     const st = await api('GET', 'statistieken', undefined, true);
-    if (ui.view !== 'instellingen' || !$('#stats')) return;
+    if (ui.view !== 'instellingen' || !$m('#stats')) return;
     const blok = (titel, items) => items.length ? `<h3 style="margin-top:.6rem">${titel}</h3>${items.slice(0, 5).map((x) => `<div class="stat"><span>${esc(x.naam)}</span><span class="stil">${x.aantal}×</span></div>`).join('')}` : '';
     const html = blok('Vaakst weggegooid', st.weggegooid) + blok('Vaakst gekocht', st.gekocht) + blok('Vaakst gekookt', st.gekookt);
-    $('#stats').innerHTML = html || 'Nog niets om te tonen.';
-    $('#stats').classList.toggle('stil', !html);
+    $m('#stats').innerHTML = html || 'Nog niets om te tonen.';
+    $m('#stats').classList.toggle('stil', !html);
   } catch { /* stil */ }
 }
 $('#bestand-backup').onchange = async (e) => {
