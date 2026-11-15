@@ -14,6 +14,9 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   Het menu blijft open, zodat je meteen meer kunt toevoegen; tik op **Klaar** als je klaar bent.
 - Op de lijst verander je het aantal met **−** en **+** naast elke boodschap
   (per stuk, of per 100 g / 100 ml / 0,5 kg / 0,5 l). Tik op het getal zelf om een ander aantal te typen.
+- Tik op de **naam** van een boodschap om ze te bewerken: naam, aantal en eenheid aanpassen, de prijzen per winkel,
+  het product in je voorraad bewerken (of er een product van maken), of ze van de lijst halen.
+  Afvinken doe je door op het rondje te tikken.
 
 ## Prijzen en winkels
 
