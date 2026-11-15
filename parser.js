@@ -36,7 +36,8 @@ const EENHEDEN = {
 const EENHEID_VAN = {};
 for (const [eenheid, vormen] of Object.entries(EENHEDEN)) for (const v of vormen) EENHEID_VAN[v] = eenheid;
 
-const KOP_INGREDIENTEN = /^(ingredi[eëé]nten|benodigdheden|nodig|wat heb je nodig|je hebt nodig|boodschappen(lijst)?|ingredients)\b/i;
+// Kopje: alleen het woord, eventueel gevolgd door ":", "(…)" of "voor 4 personen" — niet een zin die met "ingrediënten" begint.
+const KOP_INGREDIENTEN = /^(ingredi[eëé]nten|benodigdheden|nodig|wat heb je nodig|je hebt nodig|boodschappen(lijst)?|ingredients)\s*(?:[:(-]|voor\b|$)/i;
 const KOP_BEREIDING = /^(bereiding(swijze)?|werkwijze|instructies|zo maak je (het|dit)|aan de slag|bereiden|methode|recept|preparation|method|instructions)\s*[:.]?\s*$/i;
 const KOP_ANDERS = /^(tip|tips|variatie|serveertip|voedingswaarde|voedingswaarden|bewaren|bewaartip|wijntip|nutri)/i;
 
@@ -131,16 +132,16 @@ export function receptOntleden(ruw) {
     const zonderDubbelepunt = regel.replace(/[:.]\s*$/, '');
     // aantal personen en bereidingstijd
     const pers = regel.match(/(?:voor\s+)?(\d+)\s*(?:personen|persoon|pers\b\.?|porties|portie|eters)/i)
-      || regel.match(/\b(?:aantal personen|porties|personen)\s*[:-]?\s*(\d+)/i);
+      || regel.match(/\b(?:aantal personen|portiegrootte|porties|portie|personen|aantal)\s*[:-]?\s*(\d+)\s*(?:p\b\.?|pers\b\.?)?/i);
     if (pers && !recept.personen && regel.length < 70) recept.personen = parseInt(pers[1], 10);
     const tijd = regel.match(/(?:bereidings|kook|oven|totale |totaal |voorbereidings)?tijd\s*[:-]?\s*(.+)/i);
     if (tijd && !recept.bereidingstijd && regel.length < 70 && /\d/.test(tijd[1])) {
       recept.bereidingstijd = tijd[1].replace(/\s*[|·•].*$/, '').trim();
     }
-    if ((pers || tijd) && regel.length < 70 && sectie !== 'stappen') continue;
-
     // ingrediëntenkop, eventueel met tekst erachter ("Ingrediënten voor 4 personen")
     if (KOP_INGREDIENTEN.test(zonderDubbelepunt) && regel.length < 50) { sectie = 'ingredienten'; continue; }
+    if ((pers || tijd) && regel.length < 70 && sectie !== 'stappen') continue;
+
     if (KOP_BEREIDING.test(regel)) { sectie = 'stappen'; continue; }
     if (KOP_ANDERS.test(regel) && regel.length < 40 && !/:\s*\S/.test(regel)) { sectie = 'notities'; continue; }
     // "Tip: lekker met ..." op één regel
@@ -160,7 +161,15 @@ export function receptOntleden(ruw) {
 
   // titel: eerste korte regel die geen ingrediënt is
   const titelIndex = overige.findIndex((r) => r.length >= 3 && r.length <= 80 && !lijktIngredient(r));
-  if (titelIndex >= 0) recept.titel = overige.splice(titelIndex, 1)[0].replace(/[.:]$/, '');
+  if (titelIndex >= 0) {
+    recept.titel = overige.splice(titelIndex, 1)[0];
+    // titel over twee regels: "Courgettenbrood met roerei en" + "gezonde coleslaw"
+    const volgende = overige[titelIndex];
+    if (volgende && volgende.length <= 60 && !lijktIngredient(volgende) && (ONAF.test(recept.titel) || /^[a-zà-ÿ]/.test(volgende))) {
+      recept.titel += ' ' + overige.splice(titelIndex, 1)[0];
+    }
+    recept.titel = recept.titel.replace(/[.:]$/, '');
+  }
 
   // geen kopjes gevonden: raden op basis van de vorm van elke regel
   if (!ingrRegels.length && !stapRegels.length) {
@@ -172,28 +181,38 @@ export function receptOntleden(ruw) {
   }
 
   // ingrediënten: regels die doorlopen (bv. "1 rode" + "paprika") samenvoegen
+  // Begint (bijna) elk ingrediënt met een hoeveelheid, dan is een regel zonder hoeveelheid die met een kleine letter
+  // of een haakje begint het vervolg van de vorige ("400 g volkoren" + "speltmeel (plus extra" + "om te bestuiven)").
+  const metHoeveelheid = ingrRegels.filter(lijktIngredient).length;
+  const meestalHoeveelheid = ingrRegels.length >= 3 && metHoeveelheid >= ingrRegels.length * 0.5;
   const samengevoegd = [];
   for (const r of ingrRegels) {
     const vorige = samengevoegd[samengevoegd.length - 1];
-    // alleen samenvoegen als de vorige regel duidelijk niet af is ("1 rode" + "paprika", "2 el olie," + "gesmolten")
-    const onaf = vorige && (/[,\-–(]$/.test(vorige) || ONAF.test(vorige) || !ingredientOntleden(vorige).naam);
-    if (onaf && /^[a-zà-ÿ(]/.test(r) && !lijktIngredient(r) && r.split(' ').length <= 4) {
+    // samenvoegen als de vorige regel duidelijk niet af is ("1 rode" + "paprika", "2 el olie," + "gesmolten",
+    // "Peper en zout van de" + "molen") of als de lijst duidelijk uit regels met hoeveelheden bestaat
+    const onaf = vorige && (/[,\-–(]$/.test(vorige) || ONAF.test(vorige) || !ingredientOntleden(vorige).naam
+      || (/\([^)]*$/.test(vorige)) || (meestalHoeveelheid && /^[a-zà-ÿ(]/.test(r)));
+    if (onaf && /^[a-zà-ÿ(]/.test(r) && !lijktIngredient(r) && r.split(' ').length <= 6) {
       samengevoegd[samengevoegd.length - 1] = vorige + ' ' + r;
     } else samengevoegd.push(r);
   }
   recept.ingredienten = samengevoegd.map(ingredientOntleden).filter((i) => i.naam);
 
   // stappen: nieuwe stap bij nummering of als de vorige regel met een punt eindigde
+  // zijn de stappen genummerd, dan begint alleen een nummer een nieuwe stap (een stap kan meerdere zinnen hebben)
+  const NUMMER = /^(stap\s*)?\d+\s*[.):-]\s*/i;
+  const genummerd = stapRegels.filter((r) => NUMMER.test(r)).length >= 2;
   const stappen = [];
   for (const r of stapRegels) {
-    const nieuw = /^(stap\s*)?\d+\s*[.):-]\s*/i.test(r) || /^[•·*\-–—▪●]\s/.test(r);
-    const tekst = r.replace(/^(stap\s*)?\d+\s*[.):-]\s*/i, '').replace(/^[•·*\-–—▪●]\s*/, '');
+    const nieuw = NUMMER.test(r) || /^[•·*\-–—▪●]\s/.test(r);
+    const tekst = r.replace(NUMMER, '').replace(/^[•·*\-–—▪●]\s*/, '');
     const vorige = stappen[stappen.length - 1];
     if (!tekst) continue;
-    if (!nieuw && vorige && !/[.!?)]$/.test(vorige)) stappen[stappen.length - 1] = vorige + ' ' + tekst;
+    if (!nieuw && vorige && (genummerd || !/[.!?)]$/.test(vorige))) stappen[stappen.length - 1] = vorige + ' ' + tekst;
     else stappen.push(tekst);
   }
-  recept.stappen = stappen.map((s) => s.replace(/(\w)- (\w)/g, '$1$2'));
+  // afgebroken woorden aan elkaar ("voorver- warmen"), maar niet "boven- en onderwarmte"
+  recept.stappen = stappen.map((s) => s.replace(/([a-zà-ÿ])- (?!(?:en|of|tot|als|t\/m)\b)([a-zà-ÿ])/g, '$1$2'));
   recept.notities = notities.join('\n');
   return recept;
 }

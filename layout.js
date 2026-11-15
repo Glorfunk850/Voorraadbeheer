@@ -118,6 +118,26 @@ export function tekstOpmaken(stukjes) {
   return regels.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/**
+ * Pagina's onder elkaar plakken tot één lange pagina, zodat kolommen die op de volgende pagina
+ * doorlopen (ingrediënten links, bereiding rechts) ook als één kolom gelezen worden.
+ * De witruimte tussen twee pagina's wordt teruggebracht tot een gewone regelafstand.
+ */
+export function paginasStapelen(paginas) {
+  const uit = [];
+  let onder = null;
+  for (const stukjes of paginas) {
+    const tekst = stukjes.filter((s) => s.str && s.str.trim());
+    if (!tekst.length) continue;
+    const boven = Math.min(...tekst.map((s) => s.y0));
+    const regel = Math.max(1, mediaan(tekst.map((s) => s.y1 - s.y0)));
+    const verschuiving = onder === null ? 0 : onder + regel * 0.6 - boven;
+    for (const s of tekst) uit.push({ ...s, y0: s.y0 + verschuiving, y1: s.y1 + verschuiving });
+    onder = Math.max(...tekst.map((s) => s.y1 + verschuiving));
+  }
+  return uit;
+}
+
 /** pdf.js textContent-items (één pagina) omzetten. */
 export function pdfStukjes(items, paginaHoogte) {
   const uit = [];
