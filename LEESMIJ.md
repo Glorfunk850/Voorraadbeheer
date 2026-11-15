@@ -53,3 +53,11 @@ de nieuwe versie dan meteen bij het volgende openen.
 Bij elke wijziging op GitHub klikt een test (`test/knoppen.test.cjs`) automatisch op álle knoppen van de app,
 ook op nieuwe knoppen. Werkt een knop niet (een fout, of er gebeurt niets), dan zie je bij de wijziging een
 rood kruisje in plaats van een groen vinkje (tabblad **Actions**). Zet dan geen nieuwe versie online.
+
+## Automatische recepttest
+
+`test/recepten.test.cjs` controleert bij elke wijziging of recepten uit pdf's goed ingelezen worden
+(twee kolommen, kolommen die op de volgende pagina doorlopen, afgebroken ingrediëntregels, voedingswaarden, …).
+De recepten in die test zijn verzonnen, maar hebben dezelfde opmaak als echte pdf's die eerder misliepen.
+Wordt een pdf niet goed ingelezen, dan wordt die opmaak na de oplossing aan de test toegevoegd,
+zodat hetzelfde probleem niet terugkomt.

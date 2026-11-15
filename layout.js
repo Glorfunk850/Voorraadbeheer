@@ -30,7 +30,9 @@ function regelsMaken(stukjes, fs) {
     r.stukjes.sort((a, b) => a.x0 - b.x0);
     let huidig = null;
     for (const s of r.stukjes) {
-      const grens = Math.max(fs, r.h) * 1.4;
+      // een gewone spatie is ±0,3 × de lettergrootte; vanaf 0,8 × is het een aparte kolom of een tab
+      // (een smalle goot tussen kolommen, bv. 15 pt bij 11 pt-letters, mag niet als spatie gelezen worden)
+      const grens = Math.max(fs, r.h) * 0.8;
       if (huidig && s.x0 - huidig.x1 <= grens) {
         const tussen = s.x0 - huidig.x1 > Math.max(fs, r.h) * 0.12 && !huidig.str.endsWith(' ') && !s.str.startsWith(' ') ? ' ' : '';
         huidig.str += tussen + s.str;
