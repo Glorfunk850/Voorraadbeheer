@@ -1,6 +1,6 @@
 // Voorraad — interface. Praat met api/..., afgehandeld in lokaal.js (opslag op dit toestel).
 import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, sleutelwoorden, omrekenen } from './parser.js';
-import { tekstOpmaken, pdfStukjes } from './layout.js';
+import { tekstOpmaken, pdfStukjes, paginasStapelen } from './layout.js';
 
 // ---------------------------------------------------------------------------
 // Basis
@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 20;
+const APP_VERSIE = 21;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
@@ -1250,12 +1250,12 @@ async function pdfLezen(bestand) {
       toast(`Pagina ${n} van ${aantal} lezen…`, null, null, true);
       const pagina = await doc.getPage(n);
       const hoogte = pagina.getViewport({ scale: 1 }).viewBox[3];
-      const tekst = tekstOpmaken(pdfStukjes((await pagina.getTextContent()).items, hoogte));
-      delen.push(tekst);
+      delen.push(pdfStukjes((await pagina.getTextContent()).items, hoogte));
       pagina.cleanup();
     }
   } finally { await taak.destroy(); }
-  const tekst = delen.join('\n');
+  // alle pagina's samen lezen: een kolom die op de volgende pagina doorloopt, blijft één kolom
+  const tekst = tekstOpmaken(paginasStapelen(delen));
   if (tekst.replace(/\s/g, '').length < 30) throw new Error('In deze pdf staat geen leesbare tekst (bv. een scan of foto). Typ het recept zelf.');
   return tekst;
 }
