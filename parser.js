@@ -120,7 +120,8 @@ export function receptOntleden(ruw) {
     .replace(/\r/g, '')
     .split('\n')
     .map((r) => r.replace(/\s+/g, ' ').trim())
-    .filter((r) => r && !/^[\W_]{1,3}$/.test(r) && !/^(pagina|page)\s*\d+/i.test(r));
+    // witregels blijven staan: in de bereiding scheiden ze de stappen
+    .filter((r) => !r || (!/^[\W_]{1,3}$/.test(r) && !/^(pagina|page)\s*\d+/i.test(r)));
 
   const recept = { titel: '', personen: null, bereidingstijd: '', ingredienten: [], stappen: [], notities: '' };
   let sectie = 'begin';
@@ -130,6 +131,7 @@ export function receptOntleden(ruw) {
   const notities = [];
 
   for (const regel of regels) {
+    if (!regel) { if (sectie === 'stappen') stapRegels.push(''); continue; }
     const zonderDubbelepunt = regel.replace(/[:.]\s*$/, '');
     // aantal personen en bereidingstijd
     const pers = regel.match(/(?:voor\s+)?(\d+)\s*(?:personen|persoon|pers\b\.?|porties|portie|eters)/i)
@@ -205,8 +207,19 @@ export function receptOntleden(ruw) {
   // zijn de stappen genummerd, dan begint alleen een nummer een nieuwe stap (een stap kan meerdere zinnen hebben)
   const NUMMER = /^(stap\s*)?\d+\s*[.):-]\s*/i;
   const genummerd = stapRegels.filter((r) => NUMMER.test(r)).length >= 2;
+  // niet genummerd maar wel in alinea's (witregel ertussen): elke alinea is één stap
+  const inhoud = stapRegels.map((r) => r !== '');
+  const alineas = !genummerd && inhoud.some((v, i) => !v && inhoud.slice(0, i).includes(true) && inhoud.slice(i).includes(true));
   const stappen = [];
+  let nieuweAlinea = false;
   for (const r of stapRegels) {
+    if (!r) { nieuweAlinea = true; continue; }
+    if (alineas) {
+      const tekst = r.replace(/^[•·*\-–—▪●]\s*/, '');
+      if (nieuweAlinea || !stappen.length || /^[•·*\-–—▪●]\s/.test(r)) stappen.push(tekst); else stappen[stappen.length - 1] += ' ' + tekst;
+      nieuweAlinea = false;
+      continue;
+    }
     const nieuw = NUMMER.test(r) || /^[•·*\-–—▪●]\s/.test(r);
     const tekst = r.replace(NUMMER, '').replace(/^[•·*\-–—▪●]\s*/, '');
     const vorige = stappen[stappen.length - 1];
