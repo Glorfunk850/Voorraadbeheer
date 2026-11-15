@@ -7,6 +7,14 @@ Voorlopig uitgeschakeld: barcodes scannen en recepten inlezen vanaf een foto (of
 Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf te typen.
 (Het bestand `barcode.js` wordt niet meer gebruikt en is bewaard voor later.)
 
+## Prijzen en winkels
+
+- Vul bij een product (Bewerken → **Prijs per winkel**) de prijs per eenheid in bij één of meer winkels
+  (per kg of per l bij gewicht of volume, anders per stuk, pak, fles …). Winkels beheer je bij Instellingen → **Winkels**.
+- Op de boodschappenlijst staat elk product op de **algemene lijst** (Alles) én op de lijst van de winkel
+  waar het het goedkoopst is. Het is telkens dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere.
+- Tik op de prijs (of op "Prijs invullen") onder een boodschap om de prijzen meteen aan te passen.
+
 ## Online zetten met GitHub Pages (gratis, eenmalig ±10 minuten)
 
 1. Maak een gratis account op https://github.com (als je er nog geen hebt).

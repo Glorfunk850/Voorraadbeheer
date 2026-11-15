@@ -23,3 +23,5 @@ jobs:
         run: node test/knoppen.test.cjs
       - name: Back-up van toestel A naar B terugzetten
         run: node test/backup.test.cjs
+      - name: Prijzen per winkel en winkellijsten
+        run: node test/winkels.test.cjs
