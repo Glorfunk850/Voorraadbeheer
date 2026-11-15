@@ -356,3 +356,16 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .prijs-link { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .prijs-link.leeg { opacity: .75; }
 .vink input:checked ~ .naam .prijs-link { text-decoration: none; }
+
+/* boodschappen: aantal met − en + */
+.aantal-stap { display: inline-flex; align-items: center; gap: .15rem; flex: none; }
+.aantal-stap .stap { width: 30px; height: 30px; border-radius: 50%; border: 0; background: var(--veld); color: var(--tekst); font-size: 1.1rem; line-height: 1; display: grid; place-items: center; }
+.aantal-stap .stap:disabled { opacity: .35; }
+.aantal-stap .stap-getal { background: none; border: 0; color: var(--stil); font: inherit; font-size: .95rem; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 2.6rem; padding: .3rem .2rem; text-align: center; border-radius: 8px; }
+.aantal-stap .stap-getal:hover { background: var(--veld); color: var(--tekst); }
+.aantal-kies { display: flex; align-items: center; gap: .5rem; }
+.aantal-kies .rond { width: 44px; height: 44px; font-size: 1.4rem; color: var(--tekst); }
+.aantal-kies input { width: 5rem; text-align: center; font-variant-numeric: tabular-nums; }
+.aantal-kies select { flex: 1; min-width: 0; }
+#bt-lijst .rij .rechts { color: var(--accent); }
+.aantal-stap .stap.verborgen { visibility: hidden; }
