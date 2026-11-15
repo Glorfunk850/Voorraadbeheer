@@ -337,3 +337,22 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .cat-nieuw { display: flex; gap: .5rem; margin: .6rem 0 1.2rem; }
 .cat-nieuw input { flex: 1; min-width: 0; }
 #rf-soort { margin-bottom: .2rem; }
+
+/* ---------- prijzen per winkel ---------- */
+.pz-uitleg { font-size: .82rem; margin: .1rem 0 .6rem; }
+.prijs-rij { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem 32px; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.prijs-rij .pz-naam { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prijs-rij input { padding: .5rem .65rem; font-size: .95rem; min-width: 0; }
+.pz-euro { display: flex; align-items: center; gap: .35rem; }
+.pz-euro > span { color: var(--stil); }
+.pz-euro input { text-align: right; width: 100%; }
+.pz-erbij { margin-top: .1rem; }
+.prijzen-blok > div { flex: 1; }
+.prijzen-blok .stat { margin-top: .3rem; }
+.goedkoopst { display: inline; color: var(--accent); font-weight: 600; font-size: .75rem; margin-left: .3rem; }
+.winkel-tabs { margin-bottom: .9rem; }
+.winkel-tabs .tab-tel { opacity: .7; font-variant-numeric: tabular-nums; margin-left: .15rem; }
+.lijst-totaal { margin-top: .2rem; }
+.prijs-link { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.prijs-link.leeg { opacity: .75; }
+.vink input:checked ~ .naam .prijs-link { text-decoration: none; }

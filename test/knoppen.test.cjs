@@ -42,6 +42,10 @@ async function voorbeelddata(page) {
     await api('POST', 'producten', { naam: 'Eieren', hoeveelheid: 0, eenheid: 'stuks', locatie: '' });
     await api('POST', 'recepten', { titel: 'Rijstpap', personen: 2, stappen: 'Koken', notities: 'Lekker',
       ingredienten: [{ naam: 'melk', hoeveelheid: 1, eenheid: 'l' }, { naam: 'rijst', hoeveelheid: 100, eenheid: 'g' }, { naam: 'suiker', hoeveelheid: 50, eenheid: 'g' }] });
+    await api('PUT', 'instellingen', { winkels: ['Colruyt', 'Aldi'] });
+    await api('POST', 'prijzen', { naam: 'Melk', eenheid: 'l', prijzen: [{ winkel: 'Colruyt', prijs: 1.05, per: 'l' }, { winkel: 'Aldi', prijs: 1.15, per: 'l' }] });
+    await api('POST', 'prijzen', { naam: 'Kaas', eenheid: 'stuks', prijzen: [{ winkel: 'Aldi', prijs: 3.2, per: 'stuks' }] });
+    await api('POST', 'boodschappen', { naam: 'Melk', hoeveelheid: 2, eenheid: 'l' });
     await api('POST', 'boodschappen', { naam: 'Brood' });
     const d = await api('POST', 'boodschappen', { naam: 'Kaas', hoeveelheid: 1, eenheid: 'stuks' });
     const kaas = d.boodschappen.find((b) => b.naam === 'Kaas');

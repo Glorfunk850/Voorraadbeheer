@@ -35,6 +35,16 @@
     }
     return uit;
   };
+  // prijzen van een product: [{ winkel, prijs, per }] — prijs in euro per eenheid `per`, één regel per winkel
+  const prijzenLijst = (v) => {
+    const uit = [];
+    for (const x of Array.isArray(v) ? v : []) {
+      const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs);
+      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel))) continue;
+      uit.push({ winkel, prijs: Math.round(prijs * 1000) / 1000, per: String((x && x.per) || '').trim() });
+    }
+    return uit;
+  };
 
   const STANDAARD = () => ({
     volgendId: 1,
@@ -46,6 +56,7 @@
       // indeling van recepten (zelf aan te passen bij Instellingen)
       recept_soorten: ['Ontbijt', 'Lunch', 'Voorgerecht', 'Soep', 'Salade', 'Hoofdgerecht', 'Bijgerecht', 'Dessert', 'Gebak', 'Snack', 'Saus', 'Drank'],
       recept_categorieen: ['Vegetarisch', 'Vlees', 'Vis', 'Pasta', 'Snel', 'Feestelijk'],
+      winkels: [], // waar je boodschappen doet (zelf aan te vullen); prijzen per winkel staan in de catalogus
     },
   });
   let S = STANDAARD();
@@ -137,6 +148,8 @@
       for (const [code, b] of Object.entries(uit.barcodes)) if (b && b.naam) catalogusBijwerken({ ...b, barcode: code }, false);
       S = vorige;
     }
+    for (const c of uit.catalogus) c.prijzen = prijzenLijst(c.prijzen);
+    lijstAanvullen(uit.instellingen, 'winkels', uit.catalogus.flatMap((c) => c.prijzen.map((p) => p.winkel)));
     return uit;
   }
 
@@ -172,6 +185,15 @@
     if ('inhoud' in p) { c.inhoud = p.inhoud > 0 ? p.inhoud : null; c.inhoud_eenheid = p.inhoud > 0 ? p.inhoud_eenheid || '' : ''; }
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
+  }
+  // prijzen van een product (per naam, in de catalogus) vervangen
+  function prijzenZetten(naam, prijzen, eenheid) {
+    naam = (naam || '').trim();
+    if (!naam) return;
+    let c = S.catalogus.find((x) => zelfde(x.naam, naam));
+    if (!c) { catalogusBijwerken({ naam, eenheid: eenheid || '' }, false); c = S.catalogus.find((x) => zelfde(x.naam, naam)); }
+    c.prijzen = prijzenLijst(prijzen);
+    lijstAanvullen(S.instellingen, 'winkels', c.prijzen.map((p) => p.winkel));
   }
   const gebeurtenis = (soort, naam) => S.gebeurtenissen.push({ soort, naam, tijdstip: nu() });
 
@@ -320,11 +342,20 @@
         }
         return alles();
       }
+      if (data.veld === 'winkel') {
+        // winkel hernoemd of verwijderd (naar leeg): prijzen bij die winkel mee aanpassen
+        for (const c of S.catalogus) {
+          if (!(c.prijzen || []).some((p) => zelfde(p.winkel, data.van))) continue;
+          c.prijzen = prijzenLijst(c.prijzen.map((p) => (zelfde(p.winkel, data.van) ? { ...p, winkel: data.naar || '' } : p)));
+        }
+        return alles();
+      }
       const veld = data.veld === 'categorie' ? 'categorie' : 'locatie';
       for (const p of S.producten) if (zelfde(p[veld], data.van)) p[veld] = data.naar || '';
       return alles();
     }
 
+    if (bron === 'prijzen') { prijzenZetten(data.naam, data.prijzen, data.eenheid); return alles(); }
     if (bron === 'catalogus' && methode === 'DELETE') {
       S.catalogus = S.catalogus.filter((c) => !zelfde(c.naam, data && data.naam));
       return alles();
@@ -340,6 +371,7 @@
         p.inhoud = getal(p.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = '';
         S.producten.push(p);
         catalogusBijwerken(p);
+        if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(p.naam);
         return alles();
@@ -354,6 +386,7 @@
         if ('inhoud' in data) { p.inhoud = getal(data.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = ''; }
         p.gewijzigd = nu();
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
+        if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(oudeNaam); minimumControleren(p.naam);
         return alles();
@@ -398,7 +431,11 @@
         }
         return alles();
       }
-      if (methode === 'POST' && actie === 'afgevinkte-wissen') { S.boodschappen = S.boodschappen.filter((b) => !b.afgevinkt); return alles(); }
+      if (methode === 'POST' && actie === 'afgevinkte-wissen') {
+        const ids = Array.isArray(data.ids) ? data.ids.map(Number) : null; // alleen die van één winkel, of alles
+        S.boodschappen = S.boodschappen.filter((b) => !b.afgevinkt || (ids && !ids.includes(b.id)));
+        return alles();
+      }
       if (methode === 'POST') {
         for (const item of data.items || [data]) {
           const naam = (item.naam || '').trim();
