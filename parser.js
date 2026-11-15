@@ -39,7 +39,7 @@ for (const [eenheid, vormen] of Object.entries(EENHEDEN)) for (const v of vormen
 // Kopje: alleen het woord, eventueel gevolgd door ":", "(…)" of "voor 4 personen" — niet een zin die met "ingrediënten" begint.
 const KOP_INGREDIENTEN = /^(ingredi[eëé]nten|benodigdheden|nodig|wat heb je nodig|je hebt nodig|boodschappen(lijst)?|ingredients)\s*(?:[:(-]|voor\b|$)/i;
 const KOP_BEREIDING = /^(bereiding(swijze)?|werkwijze|instructies|zo maak je (het|dit)|aan de slag|bereiden|methode|recept|preparation|method|instructions)\s*[:.]?\s*$/i;
-const KOP_ANDERS = /^(tip|tips|variatie|serveertip|voedingswaarde|voedingswaarden|bewaren|bewaartip|wijntip|nutri)/i;
+const KOP_ANDERS = /^(tip|tips|variatie|serveertip|voedingswaarden?|voeding|nutritionele waarde|bewaren|bewaartip|wijntip|nutri)/i;
 
 function getalUit(tekst) {
   tekst = tekst.trim().toLowerCase();
@@ -192,7 +192,11 @@ export function receptOntleden(ruw) {
     // "Peper en zout van de" + "molen") of als de lijst duidelijk uit regels met hoeveelheden bestaat
     const onaf = vorige && (/[,\-–(]$/.test(vorige) || ONAF.test(vorige) || !ingredientOntleden(vorige).naam
       || (/\([^)]*$/.test(vorige)) || (meestalHoeveelheid && /^[a-zà-ÿ(]/.test(r)));
-    if (onaf && /^[a-zà-ÿ(]/.test(r) && !lijktIngredient(r) && r.split(' ').length <= 6) {
+    // eindigt de vorige regel op een bijvoeglijk naamwoord ("175 g geraspte"), dan mag het vervolg met een hoofdletter beginnen ("Goudse belegen kaas")
+    const hoofdletterMag = vorige && /\b(?:geraspte|gerookte|verse|gedroogde|gehakte|halve|hele|rode|groene|gele|witte|zwarte|extra)$/i.test(vorige);
+    if (vorige && /^\d+\s*[+%]$/.test(r)) { // "Goudse belegen kaas" + "48+"
+      samengevoegd[samengevoegd.length - 1] = vorige + ' ' + r;
+    } else if (onaf && (/^[a-zà-ÿ(]/.test(r) || hoofdletterMag) && !lijktIngredient(r) && r.split(' ').length <= 6) {
       samengevoegd[samengevoegd.length - 1] = vorige + ' ' + r;
     } else samengevoegd.push(r);
   }
@@ -213,7 +217,14 @@ export function receptOntleden(ruw) {
   }
   // afgebroken woorden aan elkaar ("voorver- warmen"), maar niet "boven- en onderwarmte"
   recept.stappen = stappen.map((s) => s.replace(/([a-zà-ÿ])- (?!(?:en|of|tot|als|t\/m)\b)([a-zà-ÿ])/g, '$1$2'));
-  recept.notities = notities.join('\n');
+  // afgebroken notitieregels samenvoegen ("Hoeveelheid per" + "portie", "Totaal Koolhydraten:" + "52g")
+  const notitieRegels = [];
+  for (const r of notities) {
+    const vorige = notitieRegels[notitieRegels.length - 1];
+    const vervolg = vorige && ((/^[a-zà-ÿ(]/.test(r) && !r.includes(':')) || (/:$/.test(vorige) && r.length < 20));
+    if (vervolg) notitieRegels[notitieRegels.length - 1] = vorige + ' ' + r; else notitieRegels.push(r);
+  }
+  recept.notities = notitieRegels.join('\n');
   return recept;
 }
 
