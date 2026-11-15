@@ -455,6 +455,12 @@
       if (b && methode === 'PUT') {
         if ('afgevinkt' in data) b.afgevinkt = data.afgevinkt ? 1 : 0;
         if ('hoeveelheid' in data) b.hoeveelheid = getal(data.hoeveelheid);
+        if ('eenheid' in data) b.eenheid = data.eenheid || '';
+        if ('naam' in data && String(data.naam || '').trim() && !zelfde(data.naam, b.naam)) {
+          b.naam = String(data.naam).trim();
+          b.product_id = S.producten.find((p) => zelfde(p.naam, b.naam))?.id || null;
+          if (b.bron === 'minimum') b.bron = 'handmatig'; // zelf hernoemd: niet meer vanzelf weghalen
+        }
         return alles();
       }
       if (b && methode === 'DELETE') { S.boodschappen = S.boodschappen.filter((x) => x !== b); return alles(); }

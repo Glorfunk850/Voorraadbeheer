@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 26;
+const APP_VERSIE = 27;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
 let status = {};
@@ -769,7 +769,7 @@ function tekenBoodschappen() {
     const prijs = !p ? 'Prijs invullen' : `${ui.winkel ? '' : p.winkel + ' · '}${k !== null ? euro(k) : prijsRegelTekst(p)}`;
     return `<li><label class="rij vink">
       <input type="checkbox" data-vink="${b.id}" ${b.afgevinkt ? 'checked' : ''}><span class="vakje"></span>
-      <span class="naam">${esc(b.naam)}<small>${b.bron === 'minimum' && !b.afgevinkt ? 'Onder je minimumvoorraad · ' : ''}<button type="button" class="prijs-link${p ? '' : ' leeg'}" data-prijs="${b.id}">${esc(prijs)}</button></small></span>
+      <span class="naam"><button type="button" class="naam-knop" data-bewerk="${b.id}" aria-label="${esc(b.naam)} bewerken">${esc(b.naam)}</button><small>${b.bron === 'minimum' && !b.afgevinkt ? 'Onder je minimumvoorraad · ' : ''}<button type="button" class="prijs-link${p ? '' : ' leeg'}" data-prijs="${b.id}">${esc(prijs)}</button></small></span>
       <span class="aantal-stap">
         <button type="button" class="stap${b.hoeveelheid === null ? ' verborgen' : ''}" data-min="${b.id}" aria-label="Minder ${esc(b.naam)}" ${b.hoeveelheid > stapVan(b.eenheid) ? '' : 'disabled'}>−</button>
         <button type="button" class="stap-getal" data-hv="${b.id}" aria-label="Hoeveelheid ${esc(b.naam)} aanpassen">${esc(hoeveelTekst(b.hoeveelheid, b.eenheid))}</button>
@@ -814,6 +814,7 @@ function tekenBoodschappen() {
   stappen('[data-plus]', 1);
   stappen('[data-min]', -1);
   $$m('[data-winkel]').forEach((b) => (b.onclick = () => { ui.winkel = b.dataset.winkel; tekenBoodschappen(); }));
+  $$m('[data-bewerk]').forEach((k) => (k.onclick = (e) => { e.preventDefault(); boodschapBewerken(+k.dataset.bewerk); }));
   $$m('[data-vink]').forEach((c) => (c.onchange = () => api('PUT', `boodschappen/${c.dataset.vink}`, { afgevinkt: c.checked })));
   $$m('[data-weg]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); api('DELETE', `boodschappen/${b.dataset.weg}`); }));
   $$m('[data-prijs]').forEach((k) => (k.onclick = (e) => {
@@ -896,6 +897,59 @@ function boodschapToevoegen() {
       };
     }
     lijstTekenen();
+  });
+}
+
+/** Een boodschap op de lijst bewerken: naam, hoeveelheid en eenheid, en doorgaan naar het product zelf. */
+function boodschapBewerken(id) {
+  paneelOpenen((el) => {
+    const b = S.boodschappen.find((x) => x.id === id);
+    if (!b) return paneelSluiten();
+    if (alGetekend('boodschap-bewerken')) return; // niet opnieuw tekenen terwijl je typt
+    const product = S.producten.find((p) => zelfde(p.naam, b.naam));
+    el.innerHTML = `${paneelKop('Boodschap bewerken', b.afgevinkt ? 'Ligt al in je mandje' : 'Staat op je boodschappenlijst')}
+      <label class="veld"><span>Wat</span><input id="bb-naam" value="${esc(b.naam)}" autocomplete="off" autocapitalize="sentences"></label>
+      <div style="margin-bottom:1rem"><span class="veld-titel">Hoeveel</span><div class="aantal-kies">
+        <button type="button" class="rond" id="bb-min" aria-label="Minder">−</button>
+        <input id="bb-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid))}" placeholder="–" aria-label="Hoeveelheid">
+        <button type="button" class="rond" id="bb-plus" aria-label="Meer">+</button>
+        <select id="bb-eenheid" aria-label="Eenheid">${opties(EENHEDEN, b.eenheid || 'stuks')}</select></div></div>
+      <ul class="acties">
+        <li><button id="bb-prijs">Prijzen per winkel</button></li>
+        <li><button id="bb-product">${product ? 'Product in je voorraad bewerken' : 'Als product in je voorraad zetten'}</button></li>
+        <li><button id="bb-weg" class="gevaar">Van de lijst halen</button></li>
+      </ul>
+      <div class="paneel-voet"><button class="knop" data-sluit>Annuleren</button><button class="knop primair" id="bb-ok">Bewaren</button></div>`;
+    sluitKnoppen(el);
+    const naam = $('#bb-naam', el), hv = $('#bb-hv', el), eenheid = $('#bb-eenheid', el);
+    suggesties(naam, catalogusnamen, (n) => { const e = S.producten.find((p) => zelfde(p.naam, n))?.eenheid || catalogusVan(n)?.eenheid; if (e) eenheid.value = e; });
+    const minKnopZetten = () => { $('#bb-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
+    $('#bb-plus', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, 1)); minKnopZetten(); };
+    $('#bb-min', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, -1)); minKnopZetten(); };
+    hv.oninput = minKnopZetten;
+    eenheid.onchange = minKnopZetten;
+    minKnopZetten();
+    const bewaren = async () => {
+      const n = naam.value.trim();
+      if (!n) { toast('Vul een naam in.'); naam.focus(); return false; }
+      const h = num(hv.value);
+      await api('PUT', `boodschappen/${b.id}`, { naam: n.charAt(0).toUpperCase() + n.slice(1), hoeveelheid: h, eenheid: h === null ? '' : eenheid.value });
+      return true;
+    };
+    $('#bb-ok', el).onclick = async () => { if (await bewaren()) { paneelSluiten(); toast('Bewaard'); } };
+    $('#bb-prijs', el).onclick = async () => {
+      if (!(await bewaren())) return;
+      const nb = S.boodschappen.find((x) => x.id === b.id) || b;
+      prijzenPaneel(nb.naam, catalogusVan(nb.naam)?.eenheid || S.producten.find((p) => zelfde(p.naam, nb.naam))?.eenheid || nb.eenheid || 'stuks');
+    };
+    $('#bb-product', el).onclick = async () => {
+      if (!(await bewaren())) return;
+      const nb = S.boodschappen.find((x) => x.id === b.id) || b;
+      const p = S.producten.find((x) => zelfde(x.naam, nb.naam));
+      if (p) productFormulier(p);
+      else productFormulier(null, { naam: nb.naam, eenheid: nb.eenheid || 'stuks', hoeveelheid: nb.hoeveelheid ?? 1 });
+    };
+    $('#bb-weg', el).onclick = async () => { await api('DELETE', `boodschappen/${b.id}`); paneelSluiten(); toast(`${b.naam} van je lijst gehaald`); };
   });
 }
 
