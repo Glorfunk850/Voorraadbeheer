@@ -7,6 +7,14 @@ Voorlopig uitgeschakeld: barcodes scannen en recepten inlezen vanaf een foto (of
 Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf te typen.
 (Het bestand `barcode.js` wordt niet meer gebruikt en is bewaard voor later.)
 
+## Boodschappen toevoegen
+
+- Typ bovenaan iets in (bv. `2 l melk`) en tik op **+**, of tik op de knop met het **lijstje** ernaast.
+  Daar kies je uit je producten (of typ je zelf iets), stel je het aantal in met **−** en **+** en kies je de eenheid.
+  Het menu blijft open, zodat je meteen meer kunt toevoegen; tik op **Klaar** als je klaar bent.
+- Op de lijst verander je het aantal met **−** en **+** naast elke boodschap
+  (per stuk, of per 100 g / 100 ml / 0,5 kg / 0,5 l). Tik op het getal zelf om een ander aantal te typen.
+
 ## Prijzen en winkels
 
 - Vul bij een product (Bewerken → **Prijs per winkel**) de prijs per eenheid in bij één of meer winkels
