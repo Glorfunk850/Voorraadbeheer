@@ -41,7 +41,9 @@ function regelsMaken(stukjes, fs) {
       }
     }
   }
-  for (const s of segmenten) s.str = s.str.replace(/\s+/g, ' ').trim();
+  // elk segment krijgt zijn eigen hoogte (niet het gemiddelde van de hele rij, waarin ook de andere kolom zit),
+  // zodat de regelafstand binnen een kolom zuiver blijft
+  for (const s of segmenten) { s.str = s.str.replace(/\s+/g, ' ').trim(); s.mid = (s.y0 + s.y1) / 2; }
   return segmenten.filter((s) => s.str);
 }
 
@@ -100,13 +102,29 @@ function lezen(seg, fs, diepte = 0) {
     const sleutel = [...opRegel.keys()].find((k) => Math.abs(k - s.mid) < fs * 0.5);
     if (sleutel === undefined) opRegel.set(s.mid, [s]); else opRegel.get(sleutel).push(s);
   }
-  let vorigeOnder = null;
-  for (const k of [...opRegel.keys()].sort((a, b) => a - b)) {
+  const lijnen = [...opRegel.keys()].sort((a, b) => a - b).map((k) => {
     const delen = opRegel.get(k).sort((a, b) => a.x0 - b.x0);
-    const boven = Math.min(...delen.map((d) => d.y0));
-    if (vorigeOnder !== null && boven - vorigeOnder > fs * 0.9) regels.push('');
-    regels.push(delen.map((d) => d.str).join('  '));
-    vorigeOnder = Math.max(...delen.map((d) => d.y1));
+    return { mid: k, boven: Math.min(...delen.map((d) => d.y0)), onder: Math.max(...delen.map((d) => d.y1)), tekst: delen.map((d) => d.str).join('  ') };
+  });
+  // Lijst met afgebroken regels: staan nieuwe items iets verder uit elkaar dan de regels binnen een item
+  // (bv. 15 pt tussen ingrediënten, 13 pt binnen "400 g volkoren / speltmeel"), dan wordt elk item één regel.
+  // Dat wordt per alinea (blok tussen witregels) bekeken.
+  const alineas = [];
+  for (let i = 0; i < lijnen.length; i++) {
+    if (!i || lijnen[i].boven - lijnen[i - 1].onder > fs * 0.9) alineas.push([]);
+    alineas[alineas.length - 1].push(lijnen[i]);
+  }
+  for (const alinea of alineas) {
+    if (regels.length) regels.push('');
+    const afstanden = alinea.slice(1).map((l, i) => l.mid - alinea[i].mid);
+    const krap = afstanden.length ? Math.min(...afstanden) : 0;
+    const marge = Math.max(0.6, krap * 0.04);
+    const ruim = afstanden.filter((a) => a > krap + Math.max(1.2, krap * 0.08) && a < krap * 1.5).length;
+    const doorlopend = ruim >= 2;
+    alinea.forEach((l, i) => {
+      if (i && doorlopend && afstanden[i - 1] <= krap + marge) regels[regels.length - 1] += ' ' + l.tekst;
+      else regels.push(l.tekst);
+    });
   }
   return regels;
 }
@@ -131,7 +149,7 @@ export function paginasStapelen(paginas) {
     if (!tekst.length) continue;
     const boven = Math.min(...tekst.map((s) => s.y0));
     const regel = Math.max(1, mediaan(tekst.map((s) => s.y1 - s.y0)));
-    const verschuiving = onder === null ? 0 : onder + regel * 0.6 - boven;
+    const verschuiving = onder === null ? 0 : onder + regel - boven; // als een witregel: geen regelafstand die iets betekent
     for (const s of tekst) uit.push({ ...s, y0: s.y0 + verschuiving, y1: s.y1 + verschuiving });
     onder = Math.max(...tekst.map((s) => s.y1 + verschuiving));
   }

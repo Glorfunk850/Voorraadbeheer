@@ -50,14 +50,15 @@ function getalUit(tekst) {
   if (m) return m[1] / m[2];
   m = tekst.match(/^(\d+)?([½¼¾⅓⅔⅛⅕])$/);
   if (m) return (+m[1] || 0) + BREUKEN[m[2]];
-  m = tekst.match(/^(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)$/); // 2-3: neem de hoogste
+  m = tekst.match(/^(\d+(?:[.,]\d+)?)\s*(?:[-–]|tot|à|a)\s*(\d+(?:[.,]\d+)?)$/); // 2-3, 200 tot 240, 2 à 3: neem de hoogste
   if (m) return parseFloat(m[2].replace(',', '.'));
   m = tekst.match(/^\d+(?:[.,]\d+)?$/);
   if (m) return parseFloat(tekst.replace(',', '.'));
   return null;
 }
 
-const GETAL_PATROON = String.raw`(?:\d+\s+\d+\/\d+|\d+\/\d+|\d*[½¼¾⅓⅔⅛⅕]|\d+(?:[.,]\d+)?\s*[-–]\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?|een halve|een half|een hele|een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|twaalf|halve|half|anderhalve|anderhalf|paar)`;
+const GETAL_PATROON = String.raw`(?:\d+\s+\d+\/\d+|\d+\/\d+|\d*[½¼¾⅓⅔⅛⅕]|\d+(?:[.,]\d+)?\s*(?:[-–]|tot\b|à)\s*\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?|(?:een halve|een half|een hele|een|één|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|twaalf|halve|half|anderhalve|anderhalf|paar)(?![a-zà-ÿ]))`;
+// (telwoorden alleen als los woord: "zeste" is geen "zes te")
 
 /** Eén ingrediëntregel ontleden: "250 g bloem" -> {hoeveelheid: 250, eenheid: 'g', naam: 'bloem'} */
 export function ingredientOntleden(regel) {
@@ -152,7 +153,8 @@ export function receptOntleden(ruw) {
       // tussenkopje zoals "Voor de saus:"
       if (/:$/.test(regel) && regel.length < 40 && !/\d/.test(regel)) continue;
       // lange zin zonder hoeveelheid: waarschijnlijk begint de bereiding zonder kopje
-      if (regel.length > 45 && !lijktIngredient(regel)) { sectie = 'stappen'; stapRegels.push(regel); continue; }
+      // (een ingrediënt kan lang zijn als de pdf-regels al samengevoegd zijn; een zin eindigt meestal op een punt)
+      if (!lijktIngredient(regel) && (regel.length > 90 || (regel.length > 45 && /[.!?]$/.test(regel)))) { sectie = 'stappen'; stapRegels.push(regel); continue; }
       ingrRegels.push(regel);
     } else if (sectie === 'stappen') stapRegels.push(regel);
     else if (sectie === 'notities') notities.push(regel);
@@ -181,17 +183,14 @@ export function receptOntleden(ruw) {
   }
 
   // ingrediënten: regels die doorlopen (bv. "1 rode" + "paprika") samenvoegen
-  // Begint (bijna) elk ingrediënt met een hoeveelheid, dan is een regel zonder hoeveelheid die met een kleine letter
-  // of een haakje begint het vervolg van de vorige ("400 g volkoren" + "speltmeel (plus extra" + "om te bestuiven)").
-  const metHoeveelheid = ingrRegels.filter(lijktIngredient).length;
-  const meestalHoeveelheid = ingrRegels.length >= 3 && metHoeveelheid >= ingrRegels.length * 0.5;
+  // (afgebroken regels in een pdf worden al bij het inlezen samengevoegd, zie layout.js)
   const samengevoegd = [];
   for (const r of ingrRegels) {
     const vorige = samengevoegd[samengevoegd.length - 1];
     // samenvoegen als de vorige regel duidelijk niet af is ("1 rode" + "paprika", "2 el olie," + "gesmolten",
     // "Peper en zout van de" + "molen") of als de lijst duidelijk uit regels met hoeveelheden bestaat
     const onaf = vorige && (/[,\-–(]$/.test(vorige) || ONAF.test(vorige) || !ingredientOntleden(vorige).naam
-      || (/\([^)]*$/.test(vorige)) || (meestalHoeveelheid && /^[a-zà-ÿ(]/.test(r)));
+      || (/\([^)]*$/.test(vorige)));
     // eindigt de vorige regel op een bijvoeglijk naamwoord ("175 g geraspte"), dan mag het vervolg met een hoofdletter beginnen ("Goudse belegen kaas")
     const hoofdletterMag = vorige && /\b(?:geraspte|gerookte|verse|gedroogde|gehakte|halve|hele|rode|groene|gele|witte|zwarte|extra)$/i.test(vorige);
     if (vorige && /^\d+\s*[+%]$/.test(r)) { // "Goudse belegen kaas" + "48+"
