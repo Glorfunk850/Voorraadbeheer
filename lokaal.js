@@ -46,9 +46,22 @@
     return uit;
   };
 
+  // één geplande maaltijd opschonen: velden uit `data`, aangevuld met wat er al was (`oud`)
+  const planItem = (data, oud = {}) => {
+    const veld = (k) => (k in data ? data[k] : oud[k]);
+    const rid = veld('recept_id');
+    return {
+      id: oud.id, datum: String(veld('datum') || '').slice(0, 10), maaltijd: String(veld('maaltijd') || '').trim(),
+      recept_id: rid !== null && rid !== undefined && rid !== '' && Number.isFinite(+rid) ? +rid : null,
+      tekst: String(veld('tekst') || '').trim(), personen: parseInt(veld('personen'), 10) > 0 ? parseInt(veld('personen'), 10) : null,
+      klaar: !!veld('klaar'),
+    };
+  };
+
   const STANDAARD = () => ({
     volgendId: 1,
     producten: [], boodschappen: [], recepten: [], gebeurtenissen: [], barcodes: {}, catalogus: [],
+    planning: [], // maaltijdplanner: [{ id, datum, maaltijd, recept_id | null, tekst, personen, klaar }]
     instellingen: {
       tgt_dagen: 2, tht_dagen: 3, locaties: ['Koelkast', 'Diepvries', 'Voorraadkast'],
       categorieen: ['Groenten', 'Fruit', 'Zuivel & eieren', 'Vlees & vis', 'Brood & granen', 'Pasta, rijst & peulvruchten',
@@ -57,6 +70,7 @@
       recept_soorten: ['Ontbijt', 'Lunch', 'Voorgerecht', 'Soep', 'Salade', 'Hoofdgerecht', 'Bijgerecht', 'Dessert', 'Gebak', 'Snack', 'Saus', 'Drank'],
       recept_categorieen: ['Vegetarisch', 'Vlees', 'Vis', 'Pasta', 'Snel', 'Feestelijk'],
       winkels: [], // waar je boodschappen doet (zelf aan te vullen); prijzen per winkel staan in de catalogus
+      maaltijden: ['Ontbijt', 'Lunch', 'Avondeten'], // momenten in de maaltijdplanner
     },
   });
   let S = STANDAARD();
@@ -110,6 +124,8 @@
       gebeurtenissen: Array.isArray(d.gebeurtenissen) ? d.gebeurtenissen : [],
       barcodes: d.barcodes && typeof d.barcodes === 'object' && !Array.isArray(d.barcodes) ? { ...d.barcodes } : {},
     };
+    uit.planning = (Array.isArray(d.planning) ? d.planning : []).filter((m) => m && /^\d{4}-\d{2}-\d{2}$/.test(m.datum || ''))
+      .map((m) => planItem(m, m));
     uit.catalogus = Array.isArray(d.catalogus) ? d.catalogus.filter((c) => c && (c.naam || '').trim()) : null;
     // barcodes uit een oudere back-up (lijst) omzetten
     if (Array.isArray(d.barcodes)) for (const b of d.barcodes) if (b && b.code) uit.barcodes[String(b.code)] = { ...b, bron: 'eigen' };
@@ -127,17 +143,20 @@
     lijstAanvullen(uit.instellingen, 'recept_categorieen', uit.recepten.flatMap((r) => r.categorieen));
     // id's altijd als getal (anders vindt de app items met een id als tekst niet terug)
     const getalId = (x) => { if (x && x.id != null && x.id !== '' && Number.isFinite(+x.id)) x.id = +x.id; };
-    uit.producten.forEach(getalId); uit.boodschappen.forEach(getalId);
+    uit.producten.forEach(getalId); uit.boodschappen.forEach(getalId); uit.planning.forEach(getalId);
     uit.recepten.forEach((r) => { getalId(r); r.ingredienten.forEach(getalId); });
+    // geplande maaltijd met een recept dat er niet (meer) is: de titel als tekst houden
+    for (const m of uit.planning) if (m.recept_id !== null && !uit.recepten.some((r) => r.id === m.recept_id)) m.recept_id = null;
+    lijstAanvullen(uit.instellingen, 'maaltijden', uit.planning.map((m) => m.maaltijd));
     for (const b of uit.boodschappen) if (b.product_id != null && b.product_id !== '' && Number.isFinite(+b.product_id)) b.product_id = +b.product_id;
     // items zonder id krijgen er een (anders zijn ze niet te bewerken of te verwijderen)
     let hoogste = 0;
-    for (const x of [...uit.producten, ...uit.boodschappen, ...uit.recepten]) if (+x.id > hoogste) hoogste = +x.id;
+    for (const x of [...uit.producten, ...uit.boodschappen, ...uit.recepten, ...uit.planning]) if (+x.id > hoogste) hoogste = +x.id;
     for (const r of uit.recepten) for (const i of r.ingredienten) if (+i.id > hoogste) hoogste = +i.id;
-    for (const x of [...uit.producten, ...uit.boodschappen, ...uit.recepten]) if (!Number.isFinite(x.id)) x.id = ++hoogste;
+    for (const x of [...uit.producten, ...uit.boodschappen, ...uit.recepten, ...uit.planning]) if (!Number.isFinite(x.id)) x.id = ++hoogste;
     let max = 0;
     const zie = (x) => { if (x && +x.id > max) max = +x.id; };
-    uit.producten.forEach(zie); uit.boodschappen.forEach(zie);
+    uit.producten.forEach(zie); uit.boodschappen.forEach(zie); uit.planning.forEach(zie);
     uit.recepten.forEach((r) => { zie(r); r.ingredienten.forEach(zie); });
     uit.volgendId = Math.max(+d.volgendId || 1, max + 1);
     // catalogus ontbreekt (oudere gegevens): opbouwen uit wat er al is
@@ -202,6 +221,7 @@
     boodschappen: [...S.boodschappen].sort((a, b) => a.afgevinkt - b.afgevinkt || (a.naam || '').localeCompare(b.naam || '', 'nl')),
     recepten: [...S.recepten].sort((a, b) => (a.titel || '').localeCompare(b.titel || '', 'nl')),
     catalogus: [...S.catalogus].sort((a, b) => (a.naam || '').localeCompare(b.naam || '', 'nl')),
+    planning: [...S.planning].sort((a, b) => a.datum.localeCompare(b.datum)),
     instellingen: S.instellingen,
   }));
   const fout = (status, bericht) => { const e = new Error(bericht); e.status = status; throw e; };
@@ -342,6 +362,10 @@
         }
         return alles();
       }
+      if (data.veld === 'maaltijd') {
+        for (const m of S.planning) if (zelfde(m.maaltijd, data.van)) m.maaltijd = data.naar || '';
+        return alles();
+      }
       if (data.veld === 'winkel') {
         // winkel hernoemd of verwijderd (naar leeg): prijzen bij die winkel mee aanpassen
         for (const c of S.catalogus) {
@@ -359,6 +383,26 @@
     if (bron === 'catalogus' && methode === 'DELETE') {
       S.catalogus = S.catalogus.filter((c) => !zelfde(c.naam, data && data.naam));
       return alles();
+    }
+
+    if (bron === 'planning') {
+      const controleren = (m) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(m.datum)) fout(400, 'Kies een dag.');
+        if (m.recept_id !== null && !S.recepten.some((r) => r.id === m.recept_id)) fout(404, 'Dit recept bestaat niet (meer).');
+        if (m.recept_id === null && !m.tekst) fout(400, 'Kies een recept of typ wat je eet.');
+        if (m.recept_id !== null) m.tekst = '';
+        lijstAanvullen(S.instellingen, 'maaltijden', [m.maaltijd]);
+        return m;
+      };
+      if (methode === 'POST' && ident === null) {
+        const m = controleren(planItem(data, { id: id() }));
+        S.planning.push(m);
+        return { ...alles(), nieuw_id: m.id };
+      }
+      const i = S.planning.findIndex((x) => x.id === ident);
+      if (i < 0) fout(404, 'Deze maaltijd staat niet (meer) in je planning.');
+      if (methode === 'PUT') { S.planning[i] = controleren(planItem(data, S.planning[i])); return alles(); }
+      if (methode === 'DELETE') { S.planning.splice(i, 1); return alles(); }
     }
 
     if (bron === 'producten') {
@@ -487,7 +531,12 @@
       const r = S.recepten.find((x) => x.id === ident);
       if (!r) fout(404, 'Dit recept bestaat niet (meer).');
       if (methode === 'PUT') { opslaan(r); return alles(); }
-      if (methode === 'DELETE') { S.recepten = S.recepten.filter((x) => x !== r); return alles(); }
+      if (methode === 'DELETE') {
+        S.recepten = S.recepten.filter((x) => x !== r);
+        // ingeplande maaltijden blijven staan, met de titel als tekst
+        for (const m of S.planning) if (m.recept_id === r.id) { m.recept_id = null; m.tekst = r.titel; }
+        return alles();
+      }
       if (methode === 'POST' && actie === 'favoriet') { r.favoriet = !!data.favoriet; return alles(); }
       if (methode === 'POST' && actie === 'koken') {
         const namen = new Set();

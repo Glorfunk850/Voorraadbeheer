@@ -14,11 +14,11 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 27;
+const APP_VERSIE = 28;
 
-let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], instellingen: {} };
+let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
-const ui = { view: 'voorraad', winkel: '', plaats: '', zoek: '', receptZoek: '', receptFilter: { fav: false, inHuis: false, soort: '', cat: '' }, uitgeklapt: new Set() };
+const ui = { view: 'voorraad', week: 0, winkel: '', plaats: '', zoek: '', receptZoek: '', receptFilter: { fav: false, inHuis: false, soort: '', cat: '' }, uitgeklapt: new Set() };
 
 const ICOON = {
   kast: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 12h16M9 7.5h1M9 16.5h1"/></svg>',
@@ -30,6 +30,7 @@ const ICOON = {
   zoek: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   sluit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   ster: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
+  kalender: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/></svg>',
   sterVol: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
 };
 
@@ -82,10 +83,16 @@ function vanProduct(h, p, e) {
 }
 const zelfde = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
 
+const isoDatum = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function vandaag(plus = 0) {
   const d = new Date();
   d.setDate(d.getDate() + plus);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return isoDatum(d);
+}
+function datumPlus(datum, dagen) {
+  const d = new Date(datum + 'T12:00');
+  d.setDate(d.getDate() + dagen);
+  return isoDatum(d);
 }
 function dagenTot(datum) {
   const [j, m, d] = datum.split('-').map(Number);
@@ -238,6 +245,10 @@ const winkels = () => S.instellingen.winkels || [];
 /** Eenheid waarin je een prijs invult: per kg in plaats van per g, per l in plaats van per ml ... */
 const prijsEenheid = (e) => ({ g: 'kg', ml: 'l', cl: 'l', dl: 'l', '': 'stuks' })[e || ''] || e;
 const perTekst = (e) => (e === 'stuks' ? 'stuk' : e);
+// Eenheden waarin je een prijs kunt invullen (bv. een pak à 500 g, maar de prijs per kg zoals op het prijskaartje)
+const PRIJS_EENHEDEN = ['kg', 'g', 'l', 'ml', 'stuks', 'pak', 'blik', 'fles', 'pot', 'zak', 'doos'];
+/** Eenheid van de prijzen die er al zijn, anders die die bij de eenheid van het product past. */
+const prijsPerVan = (prijzen, eenheid) => (prijzen || []).find((p) => p.per)?.per || prijsEenheid(eenheid);
 const euro = (n) => '€ ' + n.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const catalogusVan = (naam) => (S.catalogus || []).find((c) => zelfde(c.naam, naam));
 const prijzenVan = (naam) => catalogusVan(naam)?.prijzen || [];
@@ -263,14 +274,17 @@ function kostprijs(b, p) {
 const lijstMelding = (naam) => { const g = goedkoopste(naam); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
 const prijsRegelTekst = (p) => `${euro(p.prijs)} per ${perTekst(p.per)}`;
 
-/** Invulvelden voor de prijzen: één regel per winkel uit Instellingen, plus zelf winkels toevoegen. */
+/** Invulvelden voor de prijzen: kies de eenheid (per kg, per stuk ...), één regel per winkel uit Instellingen, plus zelf winkels toevoegen. */
 function prijzenVeldenHtml(prijzen, eenheid) {
-  // een prijs die in een andere eenheid bewaard werd (bv. per g) tonen in de eenheid van nu (per kg)
-  const per = prijsEenheid(eenheid);
+  const per = prijsPerVan(prijzen, eenheid);
+  // een prijs die in een andere eenheid bewaard werd (bv. per g) tonen in de gekozen eenheid (per kg)
   prijzen = prijzen.map((p) => { const f = omrekenen(1, per, p.per); return f === null || p.per === per ? p : { ...p, prijs: Math.round(p.prijs * f * 1000) / 1000 }; });
   const vast = winkels().map((w) => ({ winkel: w, prijs: prijzen.find((p) => zelfde(p.winkel, w))?.prijs ?? null }));
   const extra = prijzen.filter((p) => !winkels().some((w) => zelfde(w, p.winkel)));
-  return `<p class="stil pz-uitleg">Prijs per <b class="pz-per">${esc(perTekst(prijsEenheid(eenheid)))}</b>. Laat leeg als je de prijs niet kent.</p>
+  const keuzes = PRIJS_EENHEDEN.includes(per) ? PRIJS_EENHEDEN : [...PRIJS_EENHEDEN, per];
+  return `<label class="pz-per-rij"><span>Prijs per</span><select class="pz-per" aria-label="Prijs per eenheid">${keuzes.map((e) => `<option value="${esc(e)}"${e === per ? ' selected' : ''}>${esc(perTekst(e))}</option>`).join('')}</select></label>
+    <p class="stil pz-uitleg">Bv. per kg zoals op het prijskaartje, ook als je per stuk of pak koopt. Laat leeg als je de prijs niet kent.</p>
+    <p class="pz-uitleg pz-hint" hidden></p>
     <div class="pz-lijst">${vast.map((p) => prijsRijHtml(p, true)).join('')}${extra.map((p) => prijsRijHtml(p, false)).join('')}
       ${!vast.length && !extra.length ? prijsRijHtml({ winkel: '', prijs: null }, false) : ''}</div>
     <button type="button" class="chip pz-erbij">+ Andere winkel</button>`;
@@ -279,8 +293,25 @@ const prijsRijHtml = (p, vast) => `<div class="prijs-rij"${vast ? ` data-winkel=
     ${vast ? `<span class="pz-naam">${esc(p.winkel)}</span>` : `<input class="pz-winkel" placeholder="Winkel" value="${esc(p.winkel || '')}" autocapitalize="sentences" aria-label="Winkel">`}
     <span class="pz-euro"><span>€</span><input class="pz-prijs" inputmode="decimal" placeholder="–" value="${p.prijs !== null && p.prijs !== undefined ? esc(p.prijs.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 3, useGrouping: false })) : ''}" aria-label="Prijs bij ${esc(p.winkel || 'deze winkel')}"></span>
     ${vast ? '<span></span>' : '<button type="button" class="weg" data-pz-weg aria-label="Winkel weghalen">×</button>'}</div>`;
-function prijzenKoppelen(el) {
-  const lijst = $('.pz-lijst', el);
+/** Uitleg als de prijs niet om te rekenen is naar wat je koopt (bv. per kg, maar het product per stuk zonder inhoud). */
+function prijsHintZetten(el, eenheid, inhoudEenheid) {
+  const hint = $('.pz-hint', el), per = $('select.pz-per', el)?.value;
+  if (!hint || !per) return;
+  const e = eenheid || 'stuks';
+  const kan = omrekenen(1, e, per) !== null || (!!inhoudEenheid && TELBAAR.has(e) && omrekenen(1, inhoudEenheid, per) !== null);
+  hint.hidden = kan;
+  hint.textContent = kan ? '' : TELBAAR.has(e) && ['kg', 'g', 'l', 'ml'].includes(per)
+    ? `Vul ook de inhoud per ${perTekst(e)} in (bij Bewerken), dan kan de prijs van je boodschappen berekend worden.`
+    : `Een prijs per ${perTekst(per)} kan niet omgerekend worden naar ${perTekst(e)}: de prijs van je boodschappen wordt dan niet berekend.`;
+}
+/** Knoppen van de prijsvelden koppelen. `product` geeft { eenheid, inhoud_eenheid } van het product (voor de uitleg). */
+function prijzenKoppelen(el, product = () => ({})) {
+  const lijst = $('.pz-lijst', el), per = $('select.pz-per', el);
+  const hint = () => { const p = product() || {}; prijsHintZetten(el, p.eenheid, p.inhoud_eenheid); };
+  // zelf een eenheid gekozen: niet meer vanzelf aanpassen als de eenheid van het product verandert
+  per.onchange = () => { per.dataset.zelf = '1'; hint(); };
+  el.prijsHint = hint;
+  hint();
   $$('.pz-winkel', lijst).forEach((v) => suggesties(v, winkels));
   $('.pz-erbij', el).onclick = () => {
     lijst.insertAdjacentHTML('beforeend', prijsRijHtml({ winkel: '', prijs: null }, false));
@@ -290,10 +321,19 @@ function prijzenKoppelen(el) {
   };
   lijst.onclick = (e) => { const w = e.target.closest('[data-pz-weg]'); if (w) w.closest('.prijs-rij').remove(); };
 }
-const prijsPerZetten = (el, eenheid) => $$('.pz-per', el).forEach((b) => (b.textContent = perTekst(prijsEenheid(eenheid))));
+/** Eenheid van het product veranderd: de prijs-eenheid mee aanpassen (tenzij je die zelf koos). */
+const prijsPerZetten = (el, eenheid) => $$('select.pz-per', el).forEach((s) => {
+  if (!s.dataset.zelf) {
+    const e = prijsEenheid(eenheid);
+    if (![...s.options].some((o) => o.value === e)) s.insertAdjacentHTML('beforeend', `<option value="${esc(e)}">${esc(perTekst(e))}</option>`);
+    s.value = e;
+  }
+  const blok = s.closest('details, form, #paneel');
+  if (blok && blok.prijsHint) blok.prijsHint();
+});
 /** Ingevulde prijzen lezen; null (met melding) als er iets niet klopt. */
 function prijzenLezen(el, eenheid) {
-  const uit = [];
+  const uit = [], per = $('select.pz-per', el)?.value || prijsEenheid(eenheid);
   for (const r of $$('.prijs-rij', el)) {
     const winkel = (r.dataset.winkel || $('.pz-winkel', r)?.value || '').trim(), tekst = $('.pz-prijs', r).value.trim();
     if (!tekst) continue;
@@ -301,7 +341,7 @@ function prijzenLezen(el, eenheid) {
     if (prijs === null || prijs < 0) { toast(`Vul een geldige prijs in${winkel ? ' bij ' + winkel : ''}.`); return null; }
     if (!winkel) { toast('Vul bij elke prijs ook de winkel in.'); return null; }
     if (uit.some((p) => zelfde(p.winkel, winkel))) { toast(`${winkel} staat er twee keer bij.`); return null; }
-    uit.push({ winkel, prijs, per: prijsEenheid(eenheid) });
+    uit.push({ winkel, prijs, per });
   }
   return uit;
 }
@@ -309,8 +349,15 @@ function prijzenLezen(el, eenheid) {
 function prijzenBlok(naam) {
   const lijst = prijzenGesorteerd(naam);
   if (!lijst.length) return '';
+  const c = catalogusVan(naam);
+  // bv. € 12,50 per kg · € 6,25 per pak (als de inhoud per pak bekend is)
+  const perStuk = (p) => {
+    if (!c || !TELBAAR.has(c.eenheid) || zelfde(c.eenheid, p.per)) return '';
+    const n = vanProduct(1, c, p.per);
+    return n === null ? '' : ` · ${euro(n * p.prijs)} per ${perTekst(c.eenheid)}`;
+  };
   return `<div class="datumblok prijzen-blok"><div><b>Prijzen</b>${lijst.map((p, i) => `<div class="stat"><span>${esc(p.winkel)}${i === 0 && lijst.length > 1 ? ' <small class="goedkoopst">goedkoopst</small>' : ''}</span>
-    <span class="stil">${esc(prijsRegelTekst(p))}</span></div>`).join('')}</div></div>`;
+    <span class="stil">${esc(prijsRegelTekst(p) + perStuk(p))}</span></div>`).join('')}</div></div>`;
 }
 /** Paneel om alleen de prijzen van een product aan te passen. */
 function prijzenPaneel(naam, eenheid, terug) {
@@ -323,7 +370,7 @@ function prijzenPaneel(naam, eenheid, terug) {
         <p class="stil pz-uitleg" style="margin-top:.8rem">Op je boodschappenlijst komt ${esc(naam)} bij de goedkoopste winkel.</p>
         <div class="paneel-voet"><button type="submit" class="knop primair">Bewaren</button></div></form>`;
     sluitKnoppen(el);
-    prijzenKoppelen(el);
+    prijzenKoppelen(el, () => ({ eenheid: e, inhoud_eenheid: c?.inhoud > 0 ? c.inhoud_eenheid : '' }));
     $('#pz-form', el).onsubmit = async (ev) => {
       ev.preventDefault();
       const prijzen = prijzenLezen(el, e);
@@ -361,7 +408,7 @@ const fijneMuis = () => window.matchMedia('(pointer: fine)').matches;
 // Navigatie
 // ---------------------------------------------------------------------------
 $$('[data-icoon]').forEach((el) => (el.innerHTML = ICOON[el.dataset.icoon]));
-const VIEWS = ['voorraad', 'boodschappen', 'recepten', 'instellingen'];
+const VIEWS = ['voorraad', 'boodschappen', 'recepten', 'planner', 'instellingen'];
 function naar(view) {
   ui.view = VIEWS.includes(view) ? view : 'voorraad';
   if (location.hash !== '#' + ui.view) history.replaceState(null, '', '#' + ui.view);
@@ -380,7 +427,7 @@ function tekenen() {
   $('#teller').textContent = open;
   const actief = document.activeElement;
   const herstel = actief && actief.id && actief.matches('input') ? { id: actief.id, pos: actief.selectionStart } : null;
-  ({ voorraad: tekenVoorraad, boodschappen: tekenBoodschappen, recepten: tekenRecepten, instellingen: tekenInstellingen })[ui.view]();
+  ({ voorraad: tekenVoorraad, boodschappen: tekenBoodschappen, recepten: tekenRecepten, planner: tekenPlanner, instellingen: tekenInstellingen })[ui.view]();
   if (herstel) { const el = document.getElementById(herstel.id); if (el) { el.focus(); try { el.setSelectionRange(herstel.pos, herstel.pos); } catch { /* */ } } }
 }
 /** Inhoud vervangen, maar een zoekveld waarin je typt laten staan (anders sluit het toetsenbord op de smartphone). */
@@ -681,8 +728,11 @@ function productFormulier(bestaand, sjabloon = {}) {
       $('#pf-inhoud-titel', el).textContent = `Inhoud per ${e === 'stuks' ? 'stuk' : e} (mag leeg)`;
     };
     inhoudTonen();
-    prijzenKoppelen($('#pf-prijzen', el));
+    const productInfo = () => ({ eenheid: $('#pf-eenheid', el).value, inhoud_eenheid: $('#pf-inhoud', el).value.trim() ? $('#pf-inhoud-eenheid', el).value : '' });
+    prijzenKoppelen($('#pf-prijzen', el), productInfo);
     $('#pf-eenheid', el).onchange = () => { inhoudTonen(); prijsPerZetten(el, $('#pf-eenheid', el).value); };
+    $('#pf-inhoud', el).oninput = () => $('#pf-prijzen', el).prijsHint?.();
+    $('#pf-inhoud-eenheid', el).onchange = () => $('#pf-prijzen', el).prijsHint?.();
     $$('#pf-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; typeTekenen(); }));
     $$('#pf-plaats .chip', el).forEach((b) => (b.onclick = () => {
       plaats = b.dataset.w;
@@ -713,7 +763,7 @@ function productFormulier(bestaand, sjabloon = {}) {
       if (prijzenVan(naam).length && !$$('.pz-prijs', pz).some((v) => v.value.trim())) {
         pz.innerHTML = `<summary>Prijs per winkel</summary>${prijzenVeldenHtml(prijzenVan(naam), $('#pf-eenheid', el).value)}`;
         pz.open = true;
-        prijzenKoppelen(pz);
+        prijzenKoppelen(pz, productInfo);
       }
     };
     $('#pf-naam', el).onchange = bekendeNaam;
@@ -1138,12 +1188,14 @@ function receptPaneel(id, personen) {
     const regels = r.ingredienten.map((i) => ({ i, b: beschikbaarheid(i, factor, namen, geleerd) }));
     const ontbreekt = regels.filter(({ b }) => b.st !== 'ok');
     const stappen = (r.stappen || '').split('\n').filter((s) => s.trim());
+    const gepland = (S.planning || []).filter((m) => m.recept_id === r.id && !m.klaar && m.datum >= vandaag());
     el.innerHTML = `${paneelKop(esc(r.titel))}
       <div class="meta">
         <span class="personen"><button id="p-min" aria-label="Minder personen">−</button><span>${personen} ${personen === 1 ? 'persoon' : 'personen'}</span><button id="p-plus" aria-label="Meer personen">+</button></span>
         ${r.bereidingstijd ? `<span>${esc(r.bereidingstijd)}</span>` : ''}
         <button class="fav-knop${r.favoriet ? ' aan' : ''}" id="r-fav" aria-pressed="${r.favoriet ? 'true' : 'false'}">${r.favoriet ? ICOON.sterVol : ICOON.ster}<span>${r.favoriet ? 'Favoriet' : 'Favoriet maken'}</span></button>
       </div>
+      ${gepland.length ? `<p class="melding">Ingepland: ${gepland.slice(0, 3).map((m) => esc(dagNaam(m.datum).toLowerCase() + (m.maaltijd ? ` (${m.maaltijd.toLowerCase()})` : ''))).join(', ')}${gepland.length > 3 ? ' …' : ''}</p>` : ''}
       ${r.soort || (r.categorieen || []).length ? `<div class="labels">${[r.soort, ...(r.categorieen || [])].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
       <ul class="ingr">${regels.map(({ i, b }) => {
         const st = b.altijd ? '' : b.st === 'ontbreekt' ? 'niet in huis' : b.st === 'weinig' ? `te weinig (${hoeveelTekst(b.totaal, b.eenheid)})` : '';
@@ -1153,6 +1205,7 @@ function receptPaneel(id, personen) {
       <div class="knoppenrij">
         <button class="knop primair" id="gekookt">Gekookt</button>
         <button class="knop" id="naar-lijst">Op boodschappenlijst…</button>
+        <button class="knop" id="r-plan">Inplannen…</button>
         ${ontbreekt.length ? '' : '<span class="stil" style="align-self:center">Alles in huis</span>'}
       </div>
       ${stappen.length ? `<h3>Bereiding</h3><ol class="stappen">${stappen.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
@@ -1175,26 +1228,30 @@ function receptPaneel(id, personen) {
       await api('DELETE', `recepten/${r.id}`);
       toast('Recept verwijderd');
     };
-    $('#naar-lijst', el).onclick = () => boodschappenKiezen(r, regels, factor, personen);
+    $('#naar-lijst', el).onclick = () => boodschappenKiezen(r.titel, regels, factor, () => receptPaneel(r.id, personen));
+    $('#r-plan', el).onclick = () => planFormulier({ recept_id: r.id, personen });
   }, { breed: true });
 }
 
 // Zelf kiezen welke ingrediënten van een recept op de boodschappenlijst komen.
 // Wat ontbreekt of te weinig is, staat al aangevinkt; de hoeveelheid kun je aanpassen.
-function boodschappenKiezen(r, regels, factor, personen) {
+// `titel`: waarvoor (recept of week), `terug`: wat de knop Terug doet.
+function boodschappenKiezen(titel, regels, factor, terug) {
   const keuzes = regels.map(({ i, b }) => {
     const weinig = b.st === 'weinig' && b.nodig !== null;
+    const opLijst = S.boodschappen.some((x) => !x.afgevinkt && zelfde(x.naam, b.naam || i.naam));
     return {
       naam: b.naam || i.naam,
       hoeveelheid: weinig ? Math.ceil((b.nodig - b.totaal) * 100) / 100 : i.hoeveelheid !== null && i.hoeveelheid !== undefined ? Math.round(i.hoeveelheid * factor * 100) / 100 : null,
       eenheid: weinig ? b.eenheid : i.eenheid || '',
-      aan: b.st !== 'ok',
-      st: b.altijd ? 'meestal in huis' : b.st === 'ontbreekt' ? 'niet in huis' : b.st === 'weinig' ? `te weinig: ${hoeveelTekst(b.totaal, b.eenheid)} in huis` : 'in huis',
+      aan: b.st !== 'ok' && !opLijst,
+      st: (b.altijd ? 'meestal in huis' : b.st === 'ontbreekt' ? 'niet in huis' : b.st === 'weinig' ? `te weinig: ${hoeveelTekst(b.totaal, b.eenheid)} in huis` : 'in huis')
+        + (opLijst ? ' · staat al op je lijst' : '') + (i.bij ? ` · ${i.bij}` : ''),
     };
   });
   paneelOpenen((el) => {
     if (alGetekend('boodschappen-kiezen')) return; // niet opnieuw tekenen terwijl je typt
-    el.innerHTML = `${paneelKop('Op boodschappenlijst', esc(r.titel))}
+    el.innerHTML = `${paneelKop('Op boodschappenlijst', esc(titel))}
       <p class="stil" style="margin:0 0 .4rem">Vink aan wat je wilt kopen. Wat ontbreekt, staat al aangevinkt.</p>
       <div>${keuzes.map((k, n) => `<div class="kook-rij kies">
           <label class="vink" style="display:flex;align-items:center;gap:.7rem;flex:1;min-width:0"><input type="checkbox" data-k="${n}" ${k.aan ? 'checked' : ''}><span class="vakje"></span>
@@ -1213,7 +1270,7 @@ function boodschappenKiezen(r, regels, factor, personen) {
     $$('input[data-hv]', el).forEach((inv) => (inv.oninput = () => { vinkjes[+inv.dataset.hv].checked = true; tellen(); }));
     $('#bk-alles', el).onclick = () => { vinkjes.forEach((v) => (v.checked = true)); tellen(); };
     $('#bk-niets', el).onclick = () => { vinkjes.forEach((v) => (v.checked = false)); tellen(); };
-    $('#bk-terug', el).onclick = () => receptPaneel(r.id, personen);
+    $('#bk-terug', el).onclick = () => (terug ? terug() : paneelSluiten());
     $('#bk-toevoegen', el).onclick = async () => {
       const items = vinkjes.filter((v) => v.checked).map((v) => {
         const k = keuzes[+v.dataset.k];
@@ -1228,8 +1285,11 @@ function boodschappenKiezen(r, regels, factor, personen) {
   }, { breed: true });
 }
 
-function kokenPaneel(r, regels) {
+function kokenPaneel(r, regels, naKoken) {
   const bruikbaar = regels.filter(({ b }) => b.partijen && b.partijen.length);
+  if (!bruikbaar.length && naKoken) {
+    return naKoken().then(() => { paneelSluiten(); toast('Als gekookt aangeduid. Geen van de ingrediënten stond in je voorraad.'); }).catch(() => {});
+  }
   if (!bruikbaar.length) return toast('Geen van de ingrediënten staat in je voorraad.');
   paneelOpenen((el) => {
     if (alGetekend('koken')) return; // niet opnieuw tekenen terwijl je typt
@@ -1257,6 +1317,7 @@ function kokenPaneel(r, regels) {
         }
       }
       await api('POST', `recepten/${r.id}/koken`, { aftrekken });
+      if (naKoken) await naKoken().catch(() => {});
       paneelSluiten();
       toast('Smakelijk! Je voorraad is bijgewerkt.');
     };
@@ -1421,6 +1482,233 @@ async function receptImporteren(invoer) {
 $('#bestand-recept').onchange = (e) => receptImporteren(e.target);
 
 // ---------------------------------------------------------------------------
+// MAALTIJDPLANNER: per week, per dag de maaltijden (uit je recepten of zelf getypt)
+// ---------------------------------------------------------------------------
+const maaltijden = () => S.instellingen.maaltijden || [];
+const maaltijdPlek = (x) => { const i = maaltijden().findIndex((y) => zelfde(x, y)); return i < 0 ? 9999 : i; };
+const dagNaam = (d) => { const t = new Date(d + 'T12:00').toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' }); return t[0].toUpperCase() + t.slice(1); };
+/** Maandag van de week, `offset` weken van nu. */
+function weekBegin(offset = 0) {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7);
+  return isoDatum(d);
+}
+/** In welke week (t.o.v. nu) ligt deze datum? */
+const weekVan = (datum) => Math.floor((dagenTot(datum) + ((new Date().getDay() + 6) % 7)) / 7);
+const planRecept = (m) => (m && m.recept_id ? S.recepten.find((r) => r.id === m.recept_id) || null : null);
+const planTitel = (m) => planRecept(m)?.titel || m.tekst || 'Maaltijd';
+/** Nieuwe maaltijd: de laatste die die dag nog vrij is (meestal het avondeten). */
+function standaardMaaltijd(datum) {
+  const lijst = maaltijden();
+  const vrij = [...lijst].reverse().find((x) => !(S.planning || []).some((m) => m.datum === datum && zelfde(m.maaltijd, x)));
+  return vrij ?? lijst[lijst.length - 1] ?? '';
+}
+
+function tekenPlanner() {
+  const begin = weekBegin(ui.week), dagen = [...Array(7)].map((_, i) => datumPlus(begin, i)), eind = dagen[6];
+  const nu = vandaag();
+  const inWeek = (S.planning || []).filter((m) => m.datum >= begin && m.datum <= eind);
+  const teKoken = inWeek.filter((m) => planRecept(m) && !m.klaar && m.datum >= nu);
+  const namen = productnamen(), geleerd = geleerdeKoppelingen();
+  const titel = { 0: 'Deze week', 1: 'Volgende week', '-1': 'Vorige week' }[ui.week] || `Week van ${datumNL(begin)}`;
+  const rij = (m) => {
+    const r = planRecept(m);
+    const onder = [m.maaltijd, r && `${m.personen || r.personen || 4} personen`].filter(Boolean).join(' · ');
+    let rechts = '';
+    if (m.klaar) rechts = '<span class="rechts">gekookt</span>';
+    else if (r) { const d = dekking(r, namen, geleerd); rechts = `<span class="rechts${d.ok < d.totaal ? ' oranje' : ''}" title="ingrediënten in huis">${d.ok}/${d.totaal}</span>`; }
+    return `<li><button class="rij${m.klaar ? ' op' : ''}" data-plan="${m.id}"><span class="naam">${esc(planTitel(m))}<small>${esc(onder)}</small></span>${rechts}</button></li>`;
+  };
+  const dag = (d) => {
+    const items = inWeek.filter((m) => m.datum === d).sort((a, b) => maaltijdPlek(a.maaltijd) - maaltijdPlek(b.maaltijd) || a.id - b.id);
+    return `<section class="plan-dag${d === nu ? ' vandaag' : ''}${d < nu ? ' voorbij' : ''}">
+      <div class="plan-dag-kop"><span>${esc(dagNaam(d))}${d === nu ? ' <small>vandaag</small>' : ''}</span>
+        <button class="tekstknop" data-plan-nieuw="${d}" aria-label="Maaltijd plannen op ${esc(dagNaam(d).toLowerCase())}">+ Plannen</button></div>
+      ${items.length ? `<ul class="lijst">${items.map(rij).join('')}</ul>` : ''}</section>`;
+  };
+  inhoudZetten(`
+    <header class="kop"><h1>Maaltijdplanner</h1><div class="kop-acties">${instellingenKnop}</div></header>
+    <div class="plan-week">
+      <button class="icoon" id="pw-vorige" aria-label="Vorige week"><span aria-hidden="true">‹</span></button>
+      <div class="plan-week-tekst"><b>${esc(titel)}</b><small class="stil">${esc(datumNL(begin))} – ${esc(datumNL(eind, true))}</small></div>
+      <button class="icoon" id="pw-volgende" aria-label="Volgende week"><span aria-hidden="true">›</span></button>
+    </div>
+    ${ui.week !== 0 ? '<div class="plan-nu"><button class="tekstknop" id="pw-nu">Terug naar deze week</button></div>' : ''}
+    ${teKoken.length ? `<button class="knop breed" id="pw-boodschappen">Boodschappen voor ${teKoken.length} ${teKoken.length === 1 ? 'maaltijd' : 'maaltijden'}…</button>` : ''}
+    ${!S.recepten.length && !inWeek.length ? '<p class="stil plan-uitleg">Plan per dag wat je eet: kies uit je recepten of typ zelf iets (bv. restjes of uit eten).</p>' : ''}
+    ${dagen.map(dag).join('')}`);
+  $m('#pw-vorige').onclick = () => { ui.week--; tekenPlanner(); };
+  $m('#pw-volgende').onclick = () => { ui.week++; tekenPlanner(); };
+  const terug = $m('#pw-nu');
+  if (terug) terug.onclick = () => { ui.week = 0; tekenPlanner(); };
+  const bk = $m('#pw-boodschappen');
+  if (bk) bk.onclick = () => weekBoodschappen(teKoken, titel.toLowerCase());
+  $$m('[data-plan-nieuw]').forEach((b) => (b.onclick = () => planFormulier({ datum: b.dataset.planNieuw })));
+  $$m('[data-plan]').forEach((b) => (b.onclick = () => planPaneel(+b.dataset.plan)));
+}
+
+/** Een geplande maaltijd: recept bekijken, gekookt, wijzigen of weghalen. */
+function planPaneel(id) {
+  paneelOpenen((el) => {
+    const m = (S.planning || []).find((x) => x.id === id);
+    if (!m) return paneelSluiten();
+    const r = planRecept(m);
+    const personen = r ? m.personen || r.personen || 4 : null;
+    el.innerHTML = `${paneelKop(esc(planTitel(m)), esc([dagNaam(m.datum), m.maaltijd, personen && `${personen} personen`].filter(Boolean).join(' · ')))}
+      ${m.klaar ? '<p class="melding">Gekookt.</p>' : ''}
+      <ul class="acties">
+        ${r ? '<li><button id="pl-recept">Recept bekijken</button></li>' : ''}
+        ${r && !m.klaar ? '<li><button id="pl-gekookt">Gekookt</button></li>' : ''}
+        ${r && !m.klaar ? '<li><button id="pl-lijst">Ingrediënten op boodschappenlijst…</button></li>' : ''}
+        ${m.klaar ? '<li><button id="pl-niet">Toch nog niet gekookt</button></li>' : ''}
+        <li><button id="pl-wijzig">Wijzigen of verplaatsen</button></li>
+        <li><button id="pl-weg" class="gevaar">Uit de planning halen</button></li>
+      </ul>`;
+    sluitKnoppen(el);
+    const regels = () => { const f = personen / (r.personen || 1); return r.ingredienten.map((i) => ({ i, b: beschikbaarheid(i, f) })); };
+    const knop = (sel, f) => { const b = $(sel, el); if (b) b.onclick = f; };
+    knop('#pl-recept', () => receptPaneel(r.id, personen));
+    knop('#pl-gekookt', () => kokenPaneel(r, regels(), () => api('PUT', `planning/${m.id}`, { klaar: true })));
+    knop('#pl-lijst', () => boodschappenKiezen(`${r.titel} · ${dagNaam(m.datum).toLowerCase()}`, regels(), personen / (r.personen || 1), () => planPaneel(id)));
+    knop('#pl-niet', () => api('PUT', `planning/${m.id}`, { klaar: false }).catch(() => {}));
+    knop('#pl-wijzig', () => planFormulier(m));
+    knop('#pl-weg', async () => {
+      const oud = { ...m };
+      try { await api('DELETE', `planning/${m.id}`); } catch { return; }
+      paneelSluiten();
+      toast(`${planTitel(oud)} uit de planning gehaald`, 'Ongedaan maken', () => api('POST', 'planning', { ...oud, id: undefined }).catch(() => {}));
+    });
+  });
+}
+
+/** Maaltijd plannen of wijzigen. m0: bestaande maaltijd, of { datum, recept_id, personen } als voorstel. */
+function planFormulier(m0 = {}) {
+  const nieuw = !m0.id;
+  const st = {
+    datum: m0.datum || vandaag(), receptId: m0.recept_id || null, personen: m0.personen || null, eigenPersonen: !!m0.personen,
+    tekst: m0.tekst || '', zoek: '', modus: m0.recept_id || (!m0.tekst && S.recepten.length) ? 'recept' : 'tekst',
+  };
+  st.maaltijd = m0.maaltijd ?? standaardMaaltijd(st.datum);
+  if (st.receptId && !st.personen) st.personen = planRecept({ recept_id: st.receptId })?.personen || 4;
+  paneelOpenen((el) => {
+    if (alGetekend('plan')) return; // niet opnieuw tekenen terwijl je typt
+    const momenten = st.maaltijd && !maaltijden().some((x) => zelfde(x, st.maaltijd)) ? [...maaltijden(), st.maaltijd] : maaltijden();
+    el.innerHTML = `${paneelKop(nieuw ? 'Maaltijd plannen' : 'Maaltijd wijzigen')}
+      <form id="plf" autocomplete="off">
+        <label class="veld"><span>Dag</span><input type="date" id="plf-datum" value="${esc(st.datum)}" required></label>
+        <div class="snel" id="plf-snel" style="margin:-.6rem 0 1rem">${[[0, 'Vandaag'], [1, 'Morgen']].map(([d, t]) => `<button type="button" class="chip${st.datum === vandaag(d) ? ' aan' : ''}" data-d="${d}">${t}</button>`).join('')}</div>
+        ${momenten.length ? `<div class="veld" style="margin-bottom:1rem"><span class="veld-titel">Maaltijd</span>
+          <div class="chips" id="plf-maaltijd">${momenten.map((x) => `<button type="button" class="chip${zelfde(x, st.maaltijd) ? ' aan' : ''}" data-w="${esc(x)}">${esc(x)}</button>`).join('')}</div></div>` : ''}
+        <div class="segment" id="plf-modus"><button type="button" data-w="recept">Uit je recepten</button><button type="button" data-w="tekst">Zelf typen</button></div>
+        <div id="plf-recept" class="plan-kies">
+          ${S.recepten.length ? `<div class="zoek">${ICOON.zoek}<input type="search" id="plf-zoek" placeholder="Zoek een recept" autocomplete="off"></div>
+          <ul class="lijst plan-recepten" id="plf-lijst"></ul>
+          <div class="instelling" id="plf-personen-rij"><span>Personen</span><span class="personen">
+            <button type="button" id="plf-min" aria-label="Minder personen">−</button><span id="plf-personen" style="min-width:1.6rem;text-align:center"></span>
+            <button type="button" id="plf-plus" aria-label="Meer personen">+</button></span></div>`
+          : '<p class="stil" style="font-size:.9rem">Je hebt nog geen recepten. Typ zelf wat je eet, of voeg eerst een recept toe.</p>'}
+        </div>
+        <div id="plf-tekst" class="plan-kies"><label class="veld"><span>Wat eet je?</span>
+          <input id="plf-tekst-in" value="${esc(st.tekst)}" placeholder="bv. Restjes, uit eten, frietjes" autocapitalize="sentences"></label></div>
+        <div class="paneel-voet"><button type="submit" class="knop primair">${nieuw ? 'Inplannen' : 'Bewaren'}</button></div>
+      </form>`;
+    sluitKnoppen(el);
+    const personenTekenen = () => {
+      const rij = $('#plf-personen-rij', el);
+      if (!rij) return;
+      rij.hidden = !st.receptId;
+      $('#plf-personen', el).textContent = st.personen || '';
+      $('#plf-min', el).disabled = !(st.personen > 1);
+    };
+    const lijstTekenen = () => {
+      const ul = $('#plf-lijst', el);
+      if (!ul) return;
+      const q = st.zoek.trim().toLowerCase();
+      const lijst = S.recepten.filter((r) => !q || r.titel.toLowerCase().includes(q) || (r.soort || '').toLowerCase().includes(q)
+          || (r.categorieen || []).some((c) => c.toLowerCase().includes(q)) || r.ingredienten.some((i) => i.naam.toLowerCase().includes(q)))
+        .sort((a, b) => (b.id === st.receptId) - (a.id === st.receptId) || b.favoriet - a.favoriet || a.titel.localeCompare(b.titel, 'nl'));
+      ul.innerHTML = lijst.length ? lijst.map((r) => `<li><button type="button" class="rij${r.id === st.receptId ? ' gekozen' : ''}" data-kies="${r.id}" aria-pressed="${r.id === st.receptId}">
+          <span class="naam">${r.favoriet ? `<span class="ster-mini" aria-label="Favoriet">${ICOON.sterVol}</span>` : ''}${esc(r.titel)}<small>${esc([r.soort, r.personen && `${r.personen} personen`].filter(Boolean).join(' · '))}</small></span>
+          <span class="rechts">${r.id === st.receptId ? '✓' : ''}</span></button></li>`).join('')
+        : '<li class="stil" style="padding:.8rem 0">Geen recept gevonden.</li>';
+      $$('[data-kies]', ul).forEach((b) => (b.onclick = () => {
+        const r = S.recepten.find((x) => x.id === +b.dataset.kies);
+        st.receptId = r.id;
+        if (!st.eigenPersonen) st.personen = r.personen || 4;
+        lijstTekenen(); personenTekenen();
+      }));
+    };
+    const modusTekenen = () => {
+      $$('#plf-modus button', el).forEach((b) => b.classList.toggle('aan', b.dataset.w === st.modus));
+      $('#plf-recept', el).hidden = st.modus !== 'recept';
+      $('#plf-tekst', el).hidden = st.modus !== 'tekst';
+    };
+    modusTekenen(); lijstTekenen(); personenTekenen();
+    $$('#plf-modus button', el).forEach((b) => (b.onclick = () => { st.modus = b.dataset.w; modusTekenen(); if (st.modus === 'tekst' && fijneMuis()) $('#plf-tekst-in', el).focus(); }));
+    $$('#plf-maaltijd .chip', el).forEach((b) => (b.onclick = () => {
+      st.maaltijd = b.dataset.w;
+      $$('#plf-maaltijd .chip', el).forEach((c) => c.classList.toggle('aan', c === b));
+    }));
+    const snelTekenen = () => $$('#plf-snel .chip', el).forEach((c) => c.classList.toggle('aan', st.datum === vandaag(+c.dataset.d)));
+    $$('#plf-snel .chip', el).forEach((b) => (b.onclick = () => { st.datum = vandaag(+b.dataset.d); $('#plf-datum', el).value = st.datum; snelTekenen(); }));
+    $('#plf-datum', el).onchange = () => { st.datum = $('#plf-datum', el).value; snelTekenen(); };
+    const zoek = $('#plf-zoek', el);
+    if (zoek) zoek.oninput = () => { st.zoek = zoek.value; lijstTekenen(); };
+    const stap = (n) => { st.personen = Math.max(1, (st.personen || 4) + n); st.eigenPersonen = true; personenTekenen(); };
+    if ($('#plf-min', el)) { $('#plf-min', el).onclick = () => stap(-1); $('#plf-plus', el).onclick = () => stap(1); }
+    $('#plf', el).onsubmit = async (e) => {
+      e.preventDefault();
+      st.datum = $('#plf-datum', el).value;
+      st.tekst = $('#plf-tekst-in', el).value.trim();
+      if (!st.datum) return toast('Kies een dag.');
+      if (st.modus === 'recept' && !st.receptId) return toast(S.recepten.length ? 'Kies een recept, of typ zelf wat je eet.' : 'Typ wat je eet.');
+      if (st.modus === 'tekst' && !st.tekst) return toast('Typ wat je eet, of kies een recept.');
+      const recept = st.modus === 'recept';
+      const data = { datum: st.datum, maaltijd: st.maaltijd || '', recept_id: recept ? st.receptId : null, tekst: recept ? '' : st.tekst, personen: recept ? st.personen : null };
+      try { await api(nieuw ? 'POST' : 'PUT', nieuw ? 'planning' : `planning/${m0.id}`, data); } catch { return; }
+      paneelSluiten();
+      const wat = recept ? planRecept({ recept_id: st.receptId })?.titel : st.tekst;
+      const wanneer = `${dagNaam(st.datum).toLowerCase()}${st.maaltijd ? ` (${st.maaltijd.toLowerCase()})` : ''}`;
+      if (ui.view === 'planner') { ui.week = weekVan(st.datum); tekenPlanner(); toast(`${wat} ingepland op ${wanneer}`); }
+      else toast(`${wat} ingepland op ${wanneer}`, 'Planner', () => { ui.week = weekVan(st.datum); naar('planner'); });
+    };
+  });
+}
+
+/** Alle ingrediënten van de geplande recepten samen: zelf kiezen wat op de boodschappenlijst komt. */
+function weekBoodschappen(items, wanneer) {
+  const namen = productnamen(), geleerd = geleerdeKoppelingen();
+  const groepen = [];
+  for (const m of items) {
+    const r = planRecept(m);
+    if (!r) continue;
+    const factor = (m.personen || r.personen || 1) / (r.personen || 1);
+    for (const i of r.ingredienten) {
+      if (altijdInHuis(i)) continue;
+      const vn = i.voorraadnaam || zoekVoorraadnaam(i.naam, namen, geleerd) || '';
+      const sleutel = (vn || i.naam).trim().toLowerCase();
+      const h = i.hoeveelheid !== null && i.hoeveelheid !== undefined ? i.hoeveelheid * factor : null;
+      const e = i.eenheid || '';
+      // zelfde ingrediënt in meerdere recepten: optellen (als de eenheden om te rekenen zijn)
+      const g = groepen.find((x) => x.sleutel === sleutel && (h === null ? x.hoeveelheid === null
+        : x.hoeveelheid !== null && omrekenen(1, e || 'stuks', x.eenheid || 'stuks') !== null));
+      if (g) {
+        if (h !== null) g.hoeveelheid += omrekenen(h, e || 'stuks', g.eenheid || 'stuks');
+        if (!g.recepten.includes(r.titel)) g.recepten.push(r.titel);
+      } else groepen.push({ sleutel, naam: i.naam, voorraadnaam: vn, hoeveelheid: h, eenheid: e, recepten: [r.titel] });
+    }
+  }
+  if (!groepen.length) return toast('De geplande recepten hebben geen ingrediënten.');
+  const regels = groepen.map((g) => {
+    const i = { naam: g.naam, voorraadnaam: g.voorraadnaam, hoeveelheid: g.hoeveelheid === null ? null : Math.round(g.hoeveelheid * 100) / 100,
+      eenheid: g.eenheid, bij: items.length > 1 ? g.recepten.join(', ') : '' };
+    return { i, b: beschikbaarheid(i, 1, namen, geleerd) };
+  }).sort((a, b) => (a.b.st === 'ok') - (b.b.st === 'ok') || (a.b.naam || a.i.naam).localeCompare(b.b.naam || b.i.naam, 'nl'));
+  boodschappenKiezen(`${items.length} ${items.length === 1 ? 'maaltijd' : 'maaltijden'} ${wanneer}`, regels, 1, null);
+}
+
+// ---------------------------------------------------------------------------
 // INSTELLINGEN
 // ---------------------------------------------------------------------------
 // App installeren: knop als de browser het aanbiedt, anders uitleg per toestel
@@ -1474,9 +1762,10 @@ async function tekenInstellingen() {
   const telling = (veld, naam) => veld === 'recept_soort' ? S.recepten.filter((r) => zelfde(r.soort, naam)).length
     : veld === 'recept_categorie' ? S.recepten.filter((r) => (r.categorieen || []).some((c) => zelfde(c, naam))).length
     : veld === 'winkel' ? (S.catalogus || []).filter((c) => (c.prijzen || []).some((p) => zelfde(p.winkel, naam))).length
+    : veld === 'maaltijd' ? (S.planning || []).filter((m) => zelfde(m.maaltijd, naam)).length
     : S.producten.filter((p) => zelfde(p[veld], naam)).length;
   const isRecept = (veld) => veld.startsWith('recept_');
-  const aantalTekst = (veld, n) => !n ? '' : isRecept(veld) ? `${n} ${n === 1 ? 'recept' : 'recepten'}` : `${n} ${n === 1 ? 'product' : 'producten'}`;
+  const aantalTekst = (veld, n) => !n ? '' : veld === 'maaltijd' ? `${n} gepland` : isRecept(veld) ? `${n} ${n === 1 ? 'recept' : 'recepten'}` : `${n} ${n === 1 ? 'product' : 'producten'}`;
   const lijstBlok = (titel, sleutel, veld, voorbeeld) => `
     <details class="sectie uitklap" data-uitklap="${sleutel}"${ui.uitgeklapt.has(sleutel) ? ' open' : ''}>
       <summary><span>${titel}</span><span class="stil">${(inst[sleutel] || []).length}</span></summary>
@@ -1509,6 +1798,7 @@ async function tekenInstellingen() {
     ${lijstBlok('Winkels', 'winkels', 'winkel', 'Nieuwe winkel, bv. Colruyt')}
     ${lijstBlok('Soorten gerechten', 'recept_soorten', 'recept_soort', 'Nieuwe soort, bv. Tapas')}
     ${lijstBlok('Receptcategorieën', 'recept_categorieen', 'recept_categorie', 'Nieuwe categorie, bv. Italiaans')}
+    ${lijstBlok('Maaltijden in de planner', 'maaltijden', 'maaltijd', 'Nieuwe maaltijd, bv. Vieruurtje')}
     <section class="sectie"><div class="sectie-titel">Overzicht</div><div id="stats" class="stil">Laden…</div></section>
     <section class="sectie"><div class="sectie-titel">Back-up</div>
       <p class="stil" style="margin-bottom:.8rem;font-size:.92rem">Je gegevens staan alleen op dit toestel, in de app. Maak af en toe een back-up; daarmee zet je alles ook over naar een ander toestel.</p>
@@ -1527,9 +1817,9 @@ async function tekenInstellingen() {
     const k = b.dataset.dagen;
     bewaar({ [k]: Math.min(60, Math.max(0, (inst[k] ?? 0) + +b.dataset.stap)) });
   }));
-  const VELD = { locaties: 'locatie', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'recept_soort', recept_categorieen: 'recept_categorie' };
-  const SOORT = { locaties: 'plaats', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'soort', recept_categorieen: 'categorie' };
-  const HOOFD = { plaats: 'Plaats', categorie: 'Categorie', soort: 'Soort', winkel: 'Winkel' };
+  const VELD = { locaties: 'locatie', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'recept_soort', recept_categorieen: 'recept_categorie', maaltijden: 'maaltijd' };
+  const SOORT = { locaties: 'plaats', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'soort', recept_categorieen: 'categorie', maaltijden: 'maaltijd' };
+  const HOOFD = { plaats: 'Plaats', categorie: 'Categorie', soort: 'Soort', winkel: 'Winkel', maaltijd: 'Maaltijd' };
   $$m('[data-nieuw]').forEach((f) => (f.onsubmit = async (e) => {
     e.preventDefault();
     const k = f.dataset.nieuw, naam = $m('input', f).value.trim();
@@ -1553,6 +1843,7 @@ async function tekenInstellingen() {
       const aantal = telling(VELD[k], naam);
       const wie = isRecept(VELD[k]) ? (aantal === 1 ? 'recept heeft' : 'recepten hebben') : (aantal === 1 ? 'product heeft' : 'producten hebben');
       const tekst = !aantal ? `${HOOFD[SOORT[k]]} "${naam}" verwijderen?`
+        : VELD[k] === 'maaltijd' ? `Maaltijd "${naam}" verwijderen? ${aantal} ${aantal === 1 ? 'geplande maaltijd blijft' : 'geplande maaltijden blijven'} in de planner staan, zonder dit moment.`
         : VELD[k] === 'winkel' ? `Winkel "${naam}" verwijderen? De prijzen bij deze winkel (${aantal} ${aantal === 1 ? 'product' : 'producten'}) worden gewist.`
         : `${HOOFD[SOORT[k]]} "${naam}" verwijderen? ${aantal} ${wie} daarna ${VELD[k] === 'recept_categorie' ? 'deze categorie niet' : `geen ${SOORT[k]}`} meer.`;
       if (!(await vraag(tekst, { ja: 'Verwijderen', gevaar: true }))) return;

@@ -371,3 +371,29 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .aantal-stap .stap.verborgen { visibility: hidden; }
 .naam-knop { display: block; max-width: 100%; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; text-decoration: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .naam-knop:hover { color: var(--accent); }
+
+/* ---------- prijs per eenheid ---------- */
+.pz-per-rij { display: flex; align-items: center; gap: .6rem; margin: .1rem 0 .4rem; }
+.pz-per-rij > span { font-size: .9rem; }
+.pz-per-rij select { width: auto; min-width: 6.5rem; padding: .45rem 2rem .45rem .7rem; font-size: .95rem; }
+.pz-hint { color: var(--oranje); }
+
+/* ---------- maaltijdplanner ---------- */
+.plan-week { display: flex; align-items: center; gap: .5rem; background: var(--veld); border-radius: 12px; padding: .35rem; margin-bottom: .6rem; }
+.plan-week .icoon { font-size: 1.6rem; line-height: 1; color: var(--tekst); }
+.plan-week .icoon:hover { background: var(--achtergrond); }
+.plan-week-tekst { flex: 1; text-align: center; display: flex; flex-direction: column; line-height: 1.3; }
+.plan-nu { text-align: center; margin-bottom: .4rem; }
+.plan-uitleg { font-size: .92rem; margin: .6rem 0; }
+#pw-boodschappen { margin: .4rem 0 .2rem; }
+.plan-dag { margin-top: 1.3rem; }
+.plan-dag-kop { display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; font-size: .9rem; font-weight: 600; padding-bottom: .2rem; border-bottom: 1px solid var(--lijn); }
+.plan-dag-kop small { color: var(--accent); font-weight: 600; margin-left: .3rem; }
+.plan-dag-kop .tekstknop { font-size: .88rem; padding: .2rem 0; }
+.plan-dag.vandaag .plan-dag-kop { border-bottom-color: var(--accent); }
+.plan-dag.voorbij .plan-dag-kop > span { color: var(--stil); }
+.plan-dag .lijst .rij { padding: .65rem 0; }
+.plan-kies { margin-top: .9rem; }
+.plan-recepten { max-height: 15rem; overflow-y: auto; margin-bottom: .4rem; border-bottom: 1px solid var(--lijn); }
+.plan-recepten .rij.gekozen .naam { color: var(--accent); font-weight: 600; }
+.plan-recepten .rij .rechts { color: var(--accent); font-weight: 700; }

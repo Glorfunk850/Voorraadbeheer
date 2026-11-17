@@ -20,11 +20,25 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 
 ## Prijzen en winkels
 
-- Vul bij een product (Bewerken → **Prijs per winkel**) de prijs per eenheid in bij één of meer winkels
-  (per kg of per l bij gewicht of volume, anders per stuk, pak, fles …). Winkels beheer je bij Instellingen → **Winkels**.
+- Vul bij een product (Bewerken → **Prijs per winkel**) de prijs in bij één of meer winkels.
+  Kies bij **Prijs per** zelf de eenheid: per kg, per l, per stuk, per pak … (bv. per kg zoals op het prijskaartje,
+  ook als je koffie per pak koopt). Vul dan ook de inhoud per pak in (bv. 500 g), zodat de prijs van je boodschappen
+  berekend kan worden. Winkels beheer je bij Instellingen → **Winkels**.
 - Op de boodschappenlijst staat elk product op de **algemene lijst** (Alles) én op de lijst van de winkel
   waar het het goedkoopst is. Het is telkens dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere.
 - Tik op de prijs (of op "Prijs invullen") onder een boodschap om de prijzen meteen aan te passen.
+
+## Maaltijdplanner
+
+- Tik onderaan op **Planner**. Je ziet de week van maandag tot zondag; met **‹** en **›** ga je naar een andere week.
+- Tik bij een dag op **+ Plannen**: kies de maaltijd (ontbijt, lunch, avondeten …) en kies een recept uit je recepten
+  (met zoeken en het aantal personen), of typ zelf iets (bv. restjes of uit eten).
+  Vanuit een recept kan het ook: **Inplannen…**.
+- Tik op een geplande maaltijd om het recept te bekijken, ze als **gekookt** aan te duiden (ingrediënten gaan dan van je voorraad af),
+  ze te verplaatsen of uit de planning te halen. Het getal rechts (bv. 3/5) toont hoeveel ingrediënten je in huis hebt.
+- **Boodschappen voor … maaltijden** telt de ingrediënten van alle recepten die deze week nog gekookt moeten worden samen
+  en toont wat ontbreekt; jij kiest wat op de boodschappenlijst komt.
+- De maaltijden (ontbijt, lunch, avondeten) pas je aan bij Instellingen → **Maaltijden in de planner**.
 
 ## Online zetten met GitHub Pages (gratis, eenmalig ±10 minuten)
 
@@ -56,7 +70,7 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 ## Een nieuwe versie zetten
 
 Upload de gewijzigde bestanden opnieuw naar dezelfde repository. Verhoog in `sw.js` het
-nummer in `VERSIE` (bv. `voorraad-v16`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
+nummer in `VERSIE` (bv. `voorraad-v29`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
 de nieuwe versie dan meteen bij het volgende openen.
 
 ## Automatische knoppentest

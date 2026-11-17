@@ -59,7 +59,7 @@ async function main() {
   await page.fill('#pf-hv', '500');
   await page.selectOption('#pf-eenheid', 'g');
   await page.click('#pf-prijzen summary');
-  controle((await page.textContent('#pf-prijzen .pz-per')) === 'kg', 'prijs bij gram wordt per kg gevraagd');
+  controle((await page.inputValue('#pf-prijzen select.pz-per')) === 'kg', 'prijs bij gram wordt per kg gevraagd');
   await page.fill('#pf-prijzen [data-winkel="Colruyt"] .pz-prijs', '12,50');
   await page.fill('#pf-prijzen [data-winkel="Aldi"] .pz-prijs', '10,80');
   await page.click('#pf-prijzen .pz-erbij');
@@ -130,6 +130,35 @@ async function main() {
   await page.waitForTimeout(250);
   const broodRegel = await page.textContent('.lijst .rij:has-text("Brood") small');
   controle(broodRegel.includes('Delhaize') && broodRegel.includes('2,40'), `brood nu bij Delhaize (${broodRegel.trim()})`);
+
+  // prijs per kg kiezen voor een product dat je per pak koopt
+  await page.goto(basis + '#voorraad');
+  await page.waitForSelector('#nieuw');
+  await page.click('#nieuw');
+  await page.fill('#pf-naam', 'Koffie');
+  await page.fill('#pf-hv', '2');
+  await page.selectOption('#pf-eenheid', 'pak');
+  await page.click('#pf-prijzen summary');
+  controle((await page.inputValue('#pf-prijzen select.pz-per')) === 'pak', 'product per pak: prijs standaard per pak');
+  await page.selectOption('#pf-prijzen select.pz-per', 'kg');
+  controle(await page.isVisible('#pf-prijzen .pz-hint'), 'prijs per kg zonder inhoud per pak: uitleg getoond');
+  await page.fill('#pf-inhoud', '500');
+  await page.selectOption('#pf-inhoud-eenheid', 'g');
+  controle(!(await page.isVisible('#pf-prijzen .pz-hint')), 'inhoud ingevuld: uitleg weg');
+  await page.selectOption('#pf-eenheid', 'pak'); // eenheid opnieuw kiezen mag de zelf gekozen prijs-eenheid niet terugzetten
+  controle((await page.inputValue('#pf-prijzen select.pz-per')) === 'kg', 'zelf gekozen prijs-eenheid blijft staan');
+  await page.fill('#pf-prijzen [data-winkel="Colruyt"] .pz-prijs', '10');
+  await page.click('#pf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const koffie = d.catalogus.find((c) => c.naam === 'Koffie');
+  controle(koffie && koffie.prijzen.length === 1 && koffie.prijzen[0].per === 'kg' && koffie.prijzen[0].prijs === 10, 'prijs bewaard per kg');
+  await api('POST', 'boodschappen', { naam: 'Koffie', hoeveelheid: 1, eenheid: 'pak' });
+  await page.goto(basis + '#boodschappen');
+  await page.reload();
+  await page.waitForSelector('.winkel-tabs');
+  const koffieRegel = await page.textContent('.lijst .rij:has-text("Koffie") small');
+  controle(koffieRegel.includes('Colruyt') && koffieRegel.includes('5,00'), `1 pak koffie à 500 g bij € 10 per kg = € 5,00 (${koffieRegel.trim()})`);
 
   // winkel hernoemen past de prijzen mee aan
   await api('PUT', 'instellingen', { winkels: ['Colruyt', 'Lidl', 'Delhaize'] });
