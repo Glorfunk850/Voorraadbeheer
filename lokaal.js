@@ -106,6 +106,7 @@
         t.oncomplete = ok; t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
       });
       opslagWerkt = true;
+      bestandPlannen();
     });
     schrijfKetting = schrijf.catch((f) => { console.error('Bewaren mislukt', f); opslagWerkt = false; });
     return schrijf;
@@ -323,7 +324,12 @@
     e.preventDefault();
     const d = vandaag();
     if (a.getAttribute('href').endsWith('.csv')) downloaden(`voorraad-${d}.csv`, csvMaken(), 'text/csv;charset=utf-8');
-    else downloaden(`voorraad-backup-${d}.json`, JSON.stringify({ app: 'Voorraadbeheer', versie: 2, gemaakt: nu(), ...S }, null, 1), 'application/json');
+    else {
+      downloaden(`voorraad-backup-${d}.json`, backupTekst(), 'application/json');
+      S.laatste_backup = nu();
+      bewaren().catch(() => {});
+      meldBestand();
+    }
   });
 
   // ------------------------------------------------------------------ api
@@ -557,7 +563,122 @@
   }
 
   // ------------------------------------------------------------------ fetch onderscheppen
-  const klaar = laden().then(() => {
+  // ------------------------------------------------------------------ ook bewaren in een bestand op het toestel
+  // Op Chrome/Edge (computer en Android) kan de app een gewoon bestand (bv. in Documenten) bijhouden.
+  // Na elke wijziging wordt dat bestand overschreven met alle gegevens, in hetzelfde formaat als een back-up.
+  // Worden de browsergegevens gewist, dan haal je alles terug met "Bestaand bestand openen" (of "Back-up terugzetten").
+  const BESTAND_SLEUTEL = 'bestand';
+  const kanBestand = typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
+  let koppeling = null; // { handle, naam, toestemming: 'granted' | 'prompt' | 'denied', laatst, fout }
+  let bestandTimer = null, bestandKetting = Promise.resolve(), gekozen = null;
+  const JSON_TYPE = [{ description: 'Voorraad-gegevens', accept: { 'application/json': ['.json'] } }];
+  const backupTekst = () => JSON.stringify({ app: 'Voorraadbeheer', versie: 2, gemaakt: nu(), ...S }, null, 1);
+  const idb = async (sleutel, waarde, wissen) => {
+    const d = await db();
+    return new Promise((ok, nee) => {
+      const t = d.transaction(DB_TABEL, waarde === undefined && !wissen ? 'readonly' : 'readwrite');
+      const st = t.objectStore(DB_TABEL);
+      const r = wissen ? st.delete(sleutel) : waarde === undefined ? st.get(sleutel) : st.put(waarde, sleutel);
+      t.oncomplete = () => ok(r.result); t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
+    });
+  };
+  const meldBestand = () => document.dispatchEvent(new Event('bestandstatus'));
+  const toestemming = async (handle, vragen) => {
+    try {
+      const o = { mode: 'readwrite' };
+      if (vragen && handle.requestPermission) return await handle.requestPermission(o);
+      return handle.queryPermission ? await handle.queryPermission(o) : 'granted';
+    } catch { return 'prompt'; }
+  };
+  async function bestandLaden() {
+    if (!kanBestand) return;
+    try {
+      const k = await idb(BESTAND_SLEUTEL);
+      if (!k || !k.handle) return;
+      koppeling = { handle: k.handle, naam: k.handle.name, laatst: k.laatst || null, fout: null, toestemming: await toestemming(k.handle) };
+    } catch (f) { console.warn('Bestandskoppeling niet geladen', f); }
+  }
+  async function naarBestand() {
+    if (!koppeling || koppeling.toestemming !== 'granted') return;
+    const k = koppeling;
+    try {
+      const w = await k.handle.createWritable();
+      await w.write(backupTekst());
+      await w.close();
+      k.laatst = nu(); k.fout = null;
+      idb(BESTAND_SLEUTEL, { handle: k.handle, laatst: k.laatst }).catch(() => {});
+    } catch (f) {
+      console.error('Bewaren in bestand mislukt', f);
+      k.toestemming = await toestemming(k.handle);
+      k.fout = k.toestemming !== 'granted' ? 'Geen toestemming meer om in het bestand te bewaren.'
+        : f && f.name === 'NotFoundError' ? 'Het bestand is verplaatst of verwijderd. Kies het opnieuw.'
+        : 'Bewaren in het bestand lukte niet.';
+    }
+    meldBestand();
+  }
+  const bestandNu = () => { clearTimeout(bestandTimer); bestandTimer = null; return (bestandKetting = bestandKetting.then(naarBestand)); };
+  function bestandPlannen() {
+    if (!koppeling || koppeling.toestemming !== 'granted') return;
+    clearTimeout(bestandTimer);
+    bestandTimer = setTimeout(bestandNu, 700); // vele snelle wijzigingen na elkaar: één keer schrijven
+  }
+  // app gaat naar de achtergrond of wordt gesloten: wat nog moet, meteen schrijven
+  const bijVerlaten = () => { if (bestandTimer) bestandNu(); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') bijVerlaten(); });
+  window.addEventListener('pagehide', bijVerlaten);
+
+  async function koppelen(handle) {
+    koppeling = { handle, naam: handle.name, laatst: null, fout: null, toestemming: 'granted' };
+    await idb(BESTAND_SLEUTEL, { handle, laatst: null });
+    await bestandNu();
+    if (koppeling && koppeling.fout) throw new Error(koppeling.fout);
+  }
+  window.voorraadBestand = {
+    ondersteund: kanBestand,
+    /** Wanneer de laatste back-up gedownload werd, en sinds wanneer de app gebruikt wordt. */
+    backupInfo: () => ({ laatste: S.laatste_backup || null, sinds: (S.gebeurtenissen[0] && S.gebeurtenissen[0].tijdstip) || null }),
+    info: () => (koppeling ? { naam: koppeling.naam, toestemming: koppeling.toestemming, laatst: koppeling.laatst, fout: koppeling.fout } : null),
+    /** Nieuw bestand kiezen (of een bestaand overschrijven) en er meteen alle gegevens in zetten. */
+    async nieuw() {
+      const handle = await window.showSaveFilePicker({ suggestedName: 'voorraad-gegevens.json', types: JSON_TYPE });
+      await koppelen(handle);
+    },
+    /** Bestaand bestand kiezen en lezen. Geeft { naam, gegevens } (gegevens null als het bestand leeg is). */
+    async kiesBestaand() {
+      const [handle] = await window.showOpenFilePicker({ types: JSON_TYPE });
+      const tekst = (await (await handle.getFile()).text()).replace(/^\uFEFF/, '').trim();
+      let gegevens = null;
+      if (tekst) {
+        let d;
+        try { d = JSON.parse(tekst); } catch { d = null; }
+        gegevens = d && typeof d === 'object' && (Array.isArray(d.producten) || Array.isArray(d.recepten)) ? d : undefined;
+      }
+      gekozen = handle;
+      return { naam: handle.name, gegevens };
+    },
+    /** Het gekozen bestaande bestand koppelen (na een klik: dan mag de app om schrijftoestemming vragen). */
+    async bestaandGebruiken() {
+      if (!gekozen) throw new Error('Geen bestand gekozen.');
+      const handle = gekozen; gekozen = null;
+      if ((await toestemming(handle, true)) !== 'granted') throw new Error('Zonder toestemming kan de app niet in dit bestand bewaren.');
+      await koppelen(handle);
+    },
+    /** Opnieuw toestemming vragen (na het herstarten van de browser). Moet vanuit een klik. */
+    async toestemmingVragen() {
+      if (!koppeling) return false;
+      koppeling.toestemming = await toestemming(koppeling.handle, true);
+      if (koppeling.toestemming === 'granted') await bestandNu(); else meldBestand();
+      return koppeling.toestemming === 'granted';
+    },
+    async stoppen() {
+      clearTimeout(bestandTimer); bestandTimer = null;
+      koppeling = null;
+      await idb(BESTAND_SLEUTEL, undefined, true).catch(() => {});
+      meldBestand();
+    },
+  };
+
+  const klaar = laden().then(bestandLaden).then(() => {
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   });
   const LEZEN = new Set(['status', 'alles', 'statistieken', 'barcode', 'ocr']);

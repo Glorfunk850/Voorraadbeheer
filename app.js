@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 28;
+const APP_VERSIE = 29;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1757,6 +1757,99 @@ function installTipTekenen() {
   $('#tip-weg', plek).onclick = () => { try { localStorage.setItem('installtip-weg', '1'); } catch { /* */ } plek.hidden = true; };
 }
 
+// ---------------------------------------------------------------------------
+// Gegevens ook bewaren in een bestand op het toestel (Chrome/Edge op computer en Android)
+// ---------------------------------------------------------------------------
+const B = () => window.voorraadBestand;
+// tijdstippen worden in UTC bewaard zonder 'Z' (zie nu() in lokaal.js)
+const alsDatum = (t) => new Date(/(Z|[+-]\d\d:?\d\d)$/.test(t) ? t : t + 'Z');
+function tijdstipTekst(t) {
+  if (!t) return '';
+  const d = alsDatum(t), uur = d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+  const dagen = Math.round((new Date(new Date().toDateString()) - new Date(d.toDateString())) / 86400000);
+  return dagen === 0 ? `vandaag om ${uur}` : dagen === 1 ? `gisteren om ${uur}` : `op ${d.toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+}
+const dagenGeleden = (t) => (t ? Math.floor((Date.now() - alsDatum(t)) / 86400000) : null);
+function bestandBlokTekenen() {
+  const blok = $('#bestand-blok');
+  const laatst = $('#backup-laatst');
+  if (laatst && B()) {
+    const l = B().backupInfo().laatste;
+    laatst.textContent = l ? `Laatste back-up: ${tijdstipTekst(l)}.` : 'Je hebt op dit toestel nog geen back-up gemaakt.';
+  }
+  if (!blok) return;
+  const titel = '<div class="sectie-titel">Bewaren in een bestand</div>';
+  const p = (tekst) => `<p class="stil" style="margin-bottom:.8rem;font-size:.92rem;line-height:1.55">${tekst}</p>`;
+  if (!B() || !B().ondersteund) {
+    blok.innerHTML = titel + p(`Je gegevens staan op dit toestel, in de opslag van de browser. Automatisch bewaren in een bestand kan niet in deze browser${isIOS() ? ' (iPhone/iPad laten dat niet toe)' : ''}${!isIOS() ? ': gebruik daarvoor Chrome of Edge' : ''}. Maak daarom af en toe een back-up.`);
+    return;
+  }
+  const k = B().info();
+  if (!k) {
+    blok.innerHTML = titel + p('Je gegevens staan nu alleen in de opslag van de browser. Laat de app ze ook automatisch bewaren in een bestand op dit toestel, bv. in Documenten of in een map die met Google Drive of OneDrive gesynchroniseerd wordt. Wis je de browsergegevens of verwijder je de app, dan haal je alles terug uit dat bestand.')
+      + `<div class="knoppenrij"><button class="knop primair" id="b-nieuw">Nieuw bestand maken</button><button class="knop" id="b-open">Bestaand bestand openen</button></div>`;
+  } else if (k.toestemming !== 'granted') {
+    blok.innerHTML = titel + p(`<b style="color:var(--rood, #b42318)">De app heeft opnieuw toestemming nodig om in <b>${esc(k.naam)}</b> te bewaren.</b> Wijzigingen staan intussen wel in de app, maar nog niet in het bestand.`)
+      + `<div class="knoppenrij"><button class="knop primair" id="b-toestemming">Toestemming geven</button><button class="knop" id="b-stop">Stoppen</button></div>`;
+  } else {
+    blok.innerHTML = titel + p(`Alles wordt ook automatisch bewaard in <b>${esc(k.naam)}</b>${k.laatst ? ` (laatst ${tijdstipTekst(k.laatst)})` : ''}.`
+      + (k.fout ? `<br><b style="color:var(--rood, #b42318)">${esc(k.fout)}</b>` : '')
+      + '<br>Na het wissen van de browsergegevens of op een nieuw toestel: kies <i>Bestaand bestand openen</i> en daarna dit bestand.')
+      + `<div class="knoppenrij"><button class="knop" id="b-nieuw">Ander bestand</button><button class="knop" id="b-stop">Stoppen</button></div>`;
+  }
+  const knop = (id, f) => { const b = $('#' + id, blok); if (b) b.onclick = f; };
+  const fout = (f) => { if (f && f.name === 'AbortError') return; toast(f && f.message ? f.message : 'Dat lukte niet.', null, null, true); };
+  knop('b-nieuw', async () => {
+    try { await B().nieuw(); toast(`Je gegevens worden nu ook bewaard in ${B().info().naam}.`); } catch (f) { fout(f); }
+    bestandBlokTekenen();
+  });
+  knop('b-open', async () => {
+    let r;
+    try { r = await B().kiesBestaand(); } catch (f) { return fout(f); }
+    if (r.gegevens === undefined) return toast(`"${r.naam}" bevat geen gegevens van Voorraad.`, null, null, true);
+    if (r.gegevens) {
+      const g = r.gegevens, n = (x) => (Array.isArray(x) ? x.length : 0);
+      const inhoud = `${n(g.producten)} producten, ${n(g.recepten)} recepten en ${n(g.boodschappen)} boodschappen`;
+      if (!(await vraag(`"${r.naam}" bevat ${inhoud}${g.gemaakt ? `, bewaard ${tijdstipTekst(g.gemaakt)}` : ''}. Je huidige gegevens in de app worden erdoor vervangen. Doorgaan?`, { ja: 'Gebruiken', gevaar: true }))) return;
+      try { await api('POST', 'import', g); } catch { return; }
+    } else if (!(await vraag(`"${r.naam}" is leeg. Je gegevens voortaan ook in dit bestand bewaren?`, { ja: 'Bewaren' }))) return;
+    try { await B().bestaandGebruiken(); toast(`Je gegevens worden nu ook bewaard in ${r.naam}.`); } catch (f) { fout(f); }
+    bestandBlokTekenen();
+  });
+  knop('b-toestemming', async () => { try { await B().toestemmingVragen(); } catch (f) { fout(f); } bestandBlokTekenen(); });
+  knop('b-stop', async () => {
+    await B().stoppen();
+    toast('De app bewaart niet meer in het bestand. Het bestand zelf blijft staan.');
+    bestandBlokTekenen();
+  });
+}
+document.addEventListener('bestandstatus', () => { if (ui.view === 'instellingen') bestandBlokTekenen(); });
+
+// Bij het openen: toestemming terugvragen, of herinneren aan een back-up (hoogstens één keer per dag)
+function bestandHerinneren() {
+  if (!B()) return;
+  const k = B().info();
+  if (k && k.toestemming !== 'granted') {
+    return toast(`Je gegevens worden niet meer in ${k.naam} bewaard tot je opnieuw toestemming geeft.`, 'Toestemming geven', async () => {
+      try { await B().toestemmingVragen(); } catch { /* */ }
+      if (B().info()?.toestemming !== 'granted') toast('Geen toestemming gekregen. Je kunt het opnieuw proberen bij Instellingen.');
+      if (ui.view === 'instellingen') bestandBlokTekenen();
+    }, true);
+  }
+  if (k) return;
+  const { laatste, sinds } = B().backupInfo();
+  const oud = laatste ? dagenGeleden(laatste) : dagenGeleden(sinds);
+  if (oud === null || oud < 14) return;
+  const vandaagS = new Date().toDateString();
+  try { if (localStorage.getItem('backup-herinnerd') === vandaagS) return; localStorage.setItem('backup-herinnerd', vandaagS); } catch { /* */ }
+  const tekst = laatste ? `Je laatste back-up is ${oud} dagen oud.` : 'Je hebt nog geen back-up gemaakt.';
+  if (B().ondersteund) toast(`${tekst} Laat de app je gegevens automatisch in een bestand bewaren.`, 'Instellen', () => naar('instellingen'));
+  else toast(tekst, 'Back-up maken', () => {
+    const a = document.createElement('a'); a.href = 'api/export.json'; a.hidden = true;
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+}
+
 async function tekenInstellingen() {
   const inst = S.instellingen;
   const telling = (veld, naam) => veld === 'recept_soort' ? S.recepten.filter((r) => zelfde(r.soort, naam)).length
@@ -1800,13 +1893,15 @@ async function tekenInstellingen() {
     ${lijstBlok('Receptcategorieën', 'recept_categorieen', 'recept_categorie', 'Nieuwe categorie, bv. Italiaans')}
     ${lijstBlok('Maaltijden in de planner', 'maaltijden', 'maaltijd', 'Nieuwe maaltijd, bv. Vieruurtje')}
     <section class="sectie"><div class="sectie-titel">Overzicht</div><div id="stats" class="stil">Laden…</div></section>
+    <section class="sectie" id="bestand-blok"></section>
     <section class="sectie"><div class="sectie-titel">Back-up</div>
-      <p class="stil" style="margin-bottom:.8rem;font-size:.92rem">Je gegevens staan alleen op dit toestel, in de app. Maak af en toe een back-up; daarmee zet je alles ook over naar een ander toestel.</p>
+      <p class="stil" style="margin-bottom:.8rem;font-size:.92rem">Met een back-up zet je alles over naar een ander toestel. <span id="backup-laatst"></span></p>
       <div class="knoppenrij"><a class="knop" href="api/export.json" download>Back-up downloaden</a><a class="knop" href="api/export.csv" download>Voorraad als CSV</a>
       <button class="knop" id="i-terug">Back-up terugzetten</button></div></section>
     <section class="sectie"><div class="sectie-titel">Over</div>
       <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
   installBlokTekenen();
+  bestandBlokTekenen();
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
   $$m('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
@@ -1897,7 +1992,9 @@ async function start() {
   try { status = await fetch('api/status').then((r) => r.json()); } catch { /* */ }
   try { await api('GET', 'alles'); } catch {
     $('#inhoud').innerHTML = '<div class="leeg"><b>De app kon niet starten</b>Herlaad de pagina. Gebruik geen privévenster.</div>';
+    return;
   }
+  bestandHerinneren();
 }
 const bezig = () => !$('#paneel').hidden || $('#vraag').open || document.activeElement?.matches('input, textarea');
 document.addEventListener('installeerbaar', () => { installBlokTekenen(); installTipTekenen(); });
