@@ -324,13 +324,26 @@
     e.preventDefault();
     const d = vandaag();
     if (a.getAttribute('href').endsWith('.csv')) downloaden(`voorraad-${d}.csv`, csvMaken(), 'text/csv;charset=utf-8');
-    else {
-      downloaden(`voorraad-backup-${d}.json`, backupTekst(), 'application/json');
-      S.laatste_backup = nu();
-      bewaren().catch(() => {});
-      meldBestand();
-    }
+    else backupDownloaden();
   });
+  function backupDownloaden() {
+    downloaden(`voorraad-backup-${vandaag()}.json`, backupTekst(), 'application/json');
+    S.laatste_backup = nu();
+    bewaren().catch(() => {});
+    meldBestand();
+  }
+  // Android: Chrome vergeet daar bij elk herstarten de toestemming voor een gekoppeld bestand. Daarom op Android
+  // geen bestandskoppeling, maar een automatische back-up in Downloads: hoogstens één per dag, bij de eerste
+  // wijziging van de dag (tijdens die tik, zodat Chrome de download toelaat). Uit te zetten bij Instellingen.
+  const ANDROID = /android/i.test(navigator.userAgent);
+  const autoBackupAan = () => ANDROID && S.instellingen.auto_backup !== false;
+  // tijdstippen staan in UTC zonder 'Z' (zie nu())
+  const lokaleDag = (t) => (t ? datum(new Date(/(Z|[+-]\d\d:?\d\d)$/.test(t) ? t : t + 'Z')) : '');
+  function autoBackup() {
+    if (!autoBackupAan() || lokaleDag(S.laatste_backup) === vandaag()) return;
+    if (!S.producten.length && !S.recepten.length && !S.boodschappen.length) return; // nog niets om te bewaren
+    backupDownloaden();
+  }
 
   // ------------------------------------------------------------------ api
   async function api(methode, pad, data, ruw) {
@@ -568,7 +581,7 @@
   // Na elke wijziging wordt dat bestand overschreven met alle gegevens, in hetzelfde formaat als een back-up.
   // Worden de browsergegevens gewist, dan haal je alles terug met "Bestaand bestand openen" (of "Back-up terugzetten").
   const BESTAND_SLEUTEL = 'bestand';
-  const kanBestand = typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
+  const kanBestand = !ANDROID && typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
   let koppeling = null; // { handle, naam, toestemming: 'granted' | 'prompt' | 'denied', laatst, fout }
   let bestandTimer = null, bestandKetting = Promise.resolve(), gekozen = null;
   const JSON_TYPE = [{ description: 'Voorraad-gegevens', accept: { 'application/json': ['.json'] } }];
@@ -592,7 +605,11 @@
     } catch { return 'prompt'; }
   };
   async function bestandLaden() {
-    if (!kanBestand) return;
+    if (!kanBestand) {
+      // koppeling uit een vorige versie (Android): opruimen, die vraagt bij elk herstarten om toestemming
+      if (ANDROID) idb(BESTAND_SLEUTEL, undefined, true).catch(() => {});
+      return;
+    }
     try {
       const k = await idb(BESTAND_SLEUTEL);
       if (!k || !k.handle) return;
@@ -654,6 +671,8 @@
   }
   window.voorraadBestand = {
     ondersteund: kanBestand,
+    android: ANDROID,
+    autoBackupAan: () => autoBackupAan(),
     /** Wanneer de laatste back-up gedownload werd, en sinds wanneer de app gebruikt wordt. */
     backupInfo: () => ({ laatste: S.laatste_backup || null, sinds: (S.gebeurtenissen[0] && S.gebeurtenissen[0].tijdstip) || null }),
     info: () => (koppeling ? { naam: koppeling.naam, toestemming: koppeling.toestemming, laatst: koppeling.laatst, fout: koppeling.fout } : null),
@@ -721,6 +740,7 @@
             fout(507, 'Je gegevens konden niet bewaard worden op dit toestel. Open de app niet in een privévenster en kijk of er nog opslagruimte vrij is.');
           }
           if (kanaal) kanaal.postMessage('gewijzigd');
+          autoBackup();
         }
         return new Response(JSON.stringify(antwoord), { status: 200, headers: { 'Content-Type': 'application/json' } });
       } catch (e) {

@@ -6,7 +6,8 @@
 // - toestemming kwijt (Chrome op Android na het sluiten): geen melding bij het openen, de app vraagt ze zelf bij de
 //   eerste wijziging; lukt dat niet of zegt de gebruiker nee, dan één melding met "Toestemming geven";
 // - "Stoppen" schrijft niet meer naar het bestand;
-// - een browser zonder bestandskiezer (iPhone): uitleg en een herinnering om een back-up te maken.
+// - een browser zonder bestandskiezer (iPhone): uitleg en een herinnering om een back-up te maken;
+// - Android: geen bestandskoppeling (Chrome vergeet daar de toestemming), maar een automatische back-up per dag.
 //
 // Uitvoeren:  node test/bestand.test.cjs   (vereist Playwright; op GitHub gebeurt dit automatisch)
 const http = require('http');
@@ -192,6 +193,52 @@ async function main() {
   controle(/Laatste back-up: vandaag/.test(laatsteTekst), `Instellingen toont wanneer de laatste back-up gemaakt is (${laatsteTekst})`);
   controle(!jsFouten2.length, 'geen JavaScript-fouten zonder bestandskiezer' + (jsFouten2.length ? ': ' + jsFouten2.join(' | ') : ''));
   await ctx2.close();
+
+  // --- Android: geen bestandskoppeling (Chrome vergeet daar de toestemming), wel automatische back-up in Downloads
+  const ctx3 = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true,
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36' });
+  await ctx3.addInitScript(nepBestand); // de bestandskiezer bestaat op Android wel, maar wordt niet gebruikt
+  const p3 = await ctx3.newPage();
+  const jsFouten3 = [];
+  p3.on('pageerror', (e) => jsFouten3.push(e.message));
+  const api3 = (m, p, b) => p3.evaluate(([m, p, b]) => fetch('api/' + p, { method: m, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((r) => r.json()), [m, p, b]);
+  const downloads = [];
+  p3.on('download', (d) => downloads.push(d.suggestedFilename()));
+  await p3.goto(basis + '#instellingen');
+  await p3.waitForSelector('#bestand-blok .sectie-titel');
+  // koppeling uit een vorige versie
+  await p3.evaluate(() => new Promise((ok) => { const r = indexedDB.open('voorraadbeheer', 1); r.onsuccess = () => { const t = r.result.transaction('staat', 'readwrite'); t.objectStore('staat').put({ handle: { nepBestand: 'oud.json' } }, 'bestand'); t.oncomplete = ok; }; }));
+  await p3.reload();
+  await p3.waitForSelector('#bestand-blok .sectie-titel');
+  await p3.waitForTimeout(300);
+  const nogGekoppeld = await p3.evaluate(() => new Promise((ok) => { const r = indexedDB.open('voorraadbeheer', 1); r.onsuccess = () => { const g = r.result.transaction('staat').objectStore('staat').getKey('bestand'); g.onsuccess = () => ok(g.result !== undefined); }; }));
+  controle(!nogGekoppeld && await p3.evaluate(() => window.voorraadBestand.info()) === null, 'Android: een bestandskoppeling uit een vorige versie wordt opgeruimd');
+  controle(/Automatische back-up/.test(await p3.textContent('#bestand-blok')) && !(await p3.isVisible('#b-nieuw')), 'Android: Instellingen toont "Automatische back-up", geen bestandskoppeling');
+  await api3('POST', 'producten', { naam: 'Melk', hoeveelheid: 1, eenheid: 'l' });
+  await p3.waitForTimeout(600);
+  controle(downloads.length === 1 && /^voorraad-backup-.*\.json$/.test(downloads[0]), 'Android: eerste wijziging van de dag zet een back-up in Downloads');
+  await api3('POST', 'producten', { naam: 'Rijst', hoeveelheid: 1, eenheid: 'kg' });
+  await p3.waitForTimeout(600);
+  controle(downloads.length === 1, 'Android: geen tweede back-up op dezelfde dag');
+  controle(/Laatste back-up: vandaag/.test(await p3.textContent('#bestand-blok')), 'Android: Instellingen toont de laatste back-up');
+  // back-up van gisteren: volgende wijziging maakt een nieuwe
+  const gisteren = new Date(Date.now() - 86400000).toISOString().slice(0, 19);
+  await api3('POST', 'import', { producten: [{ id: 1, naam: 'Melk', hoeveelheid: 1, eenheid: 'l' }], recepten: [], laatste_backup: gisteren, volgendId: 2 });
+  await p3.waitForTimeout(600);
+  controle(downloads.length === 2, 'Android: een nieuwe dag geeft een nieuwe back-up');
+  await p3.goto(basis + '#voorraad'); await p3.reload(); await p3.waitForTimeout(500);
+  controle(!(await p3.isVisible('#toast')), 'Android: geen melding bij het openen');
+  // uitzetten
+  await p3.goto(basis + '#instellingen'); await p3.reload(); await p3.waitForSelector('#b-auto');
+  await p3.click('#b-auto');
+  await p3.waitForTimeout(400);
+  controle(/staat uit/.test(await p3.textContent('#bestand-blok')), 'Android: automatische back-up uitzetten');
+  await api3('POST', 'import', { producten: [{ id: 1, naam: 'Melk', hoeveelheid: 1, eenheid: 'l' }], recepten: [], laatste_backup: gisteren, volgendId: 2, instellingen: { auto_backup: false } });
+  await api3('POST', 'producten', { naam: 'Kaas', hoeveelheid: 1, eenheid: 'stuks' });
+  await p3.waitForTimeout(600);
+  controle(downloads.length === 2, 'Android: uitgezet, dan geen automatische back-up');
+  controle(!jsFouten3.length, 'Android: geen JavaScript-fouten' + (jsFouten3.length ? ': ' + jsFouten3.join(' | ') : ''));
+  await ctx3.close();
 
   await browser.close();
   srv.close();
