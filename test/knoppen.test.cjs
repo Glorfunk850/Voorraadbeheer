@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.wasm': 'application/wasm' };
 const KNOP = 'button:not([disabled]), a.knop, label.vink';
-const VIEWS = ['voorraad', 'boodschappen', 'recepten', 'instellingen'];
+const VIEWS = ['voorraad', 'boodschappen', 'recepten', 'planner', 'instellingen'];
 // Knoppen die terecht niets zichtbaars doen in de testsituatie (bv. datum wissen terwijl er nog geen datum is)
 const MAG_NIETS_DOEN = ['Geen datum'];
 
@@ -40,8 +40,13 @@ async function voorbeelddata(page) {
     await api('POST', 'producten', { naam: 'Melk', hoeveelheid: 2, eenheid: 'l', locatie: '', vervaldatum: morgen, datumtype: 'TGT' });
     await api('POST', 'producten', { naam: 'Rijst', hoeveelheid: 500, eenheid: 'g', locatie: '', vervaldatum: morgen, datumtype: 'THT' });
     await api('POST', 'producten', { naam: 'Eieren', hoeveelheid: 0, eenheid: 'stuks', locatie: '' });
-    await api('POST', 'recepten', { titel: 'Rijstpap', personen: 2, stappen: 'Koken', notities: 'Lekker',
+    const rp = await api('POST', 'recepten', { titel: 'Rijstpap', personen: 2, stappen: 'Koken', notities: 'Lekker',
       ingredienten: [{ naam: 'melk', hoeveelheid: 1, eenheid: 'l' }, { naam: 'rijst', hoeveelheid: 100, eenheid: 'g' }, { naam: 'suiker', hoeveelheid: 50, eenheid: 'g' }] });
+    const vandaag = new Date().toISOString().slice(0, 10);
+    await api('POST', 'planning', { datum: vandaag, maaltijd: 'Avondeten', recept_id: rp.nieuw_id, personen: 3 });
+    const gk = await api('POST', 'planning', { datum: vandaag, maaltijd: 'Lunch', recept_id: rp.nieuw_id, personen: 2 });
+    await api('PUT', `planning/${gk.nieuw_id}`, { klaar: true });
+    await api('POST', 'planning', { datum: vandaag, maaltijd: 'Ontbijt', tekst: 'Boterhammen' });
     await api('PUT', 'instellingen', { winkels: ['Colruyt', 'Aldi'] });
     await api('POST', 'prijzen', { naam: 'Melk', eenheid: 'l', prijzen: [{ winkel: 'Colruyt', prijs: 1.05, per: 'l' }, { winkel: 'Aldi', prijs: 1.15, per: 'l' }] });
     await api('POST', 'prijzen', { naam: 'Kaas', eenheid: 'stuks', prijzen: [{ winkel: 'Aldi', prijs: 3.2, per: 'stuks' }] });

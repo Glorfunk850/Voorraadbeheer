@@ -27,3 +27,5 @@ jobs:
         run: node test/backup.test.cjs
       - name: Prijzen per winkel en winkellijsten
         run: node test/winkels.test.cjs
+      - name: Maaltijdplanner
+        run: node test/planner.test.cjs
