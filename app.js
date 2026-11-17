@@ -1,6 +1,7 @@
 // Voorraad — interface. Praat met api/..., afgehandeld in lokaal.js (opslag op dit toestel).
 import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, sleutelwoorden, omrekenen } from './parser.js';
 import { tekstOpmaken, pdfStukjes, paginasStapelen } from './layout.js';
+import { HANDLEIDING } from './handleiding.js';
 
 // ---------------------------------------------------------------------------
 // Basis
@@ -14,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 32;
+const APP_VERSIE = 33;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1876,6 +1877,15 @@ function bestandHerinneren() {
   });
 }
 
+/** De handleiding in een breed paneel (Instellingen → Handleiding lezen). */
+function handleidingPaneel() {
+  paneelOpenen((el) => {
+    el.innerHTML = `${paneelKop('Handleiding')}<div class="handleiding">${HANDLEIDING}</div>
+      <div class="paneel-voet"><button class="knop" data-sluit>Sluiten</button></div>`;
+    sluitKnoppen(el);
+  }, { breed: true });
+}
+
 async function tekenInstellingen() {
   const inst = S.instellingen;
   const telling = (veld, naam) => veld === 'recept_soort' ? S.recepten.filter((r) => zelfde(r.soort, naam)).length
@@ -1910,6 +1920,9 @@ async function tekenInstellingen() {
   $('#inhoud').innerHTML = `
     <header class="kop"><h1>Instellingen</h1></header>
     <section class="sectie" id="installeer-blok" hidden></section>
+    <section class="sectie"><div class="sectie-titel">Handleiding</div>
+      <p class="stil" style="margin-bottom:.8rem;font-size:.92rem">Uitleg over alle schermen en knoppen, ook zonder internet.</p>
+      <div class="knoppenrij"><button class="knop" id="i-handleiding">Handleiding lezen</button></div></section>
     <section class="sectie"><div class="sectie-titel">Waarschuwen, zoveel dagen vooraf</div>
       ${dagen('Te gebruiken tot', 'tgt_dagen')}${dagen('Ten minste houdbaar tot', 'tht_dagen')}</section>
     ${lijstBlok('Plaatsen', 'locaties', 'locatie', 'Nieuwe plaats, bv. Kelder')}
@@ -1929,6 +1942,7 @@ async function tekenInstellingen() {
       <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
   installBlokTekenen();
   bestandBlokTekenen();
+  $m('#i-handleiding').onclick = handleidingPaneel;
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
   $$m('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
