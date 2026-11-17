@@ -29,3 +29,5 @@ jobs:
         run: node test/winkels.test.cjs
       - name: Maaltijdplanner
         run: node test/planner.test.cjs
+      - name: Bewaren in een bestand op het toestel
+        run: node test/bestand.test.cjs

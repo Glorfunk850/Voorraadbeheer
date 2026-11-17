@@ -59,6 +59,19 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 
 ## Gegevens
 
+- Je gegevens staan op het toestel, in de opslag van de browser.
+- **Ook bewaren in een bestand (laptop en Android, in Chrome of Edge):** Instellingen → **Bewaren in een bestand** →
+  **Nieuw bestand maken**. Kies waar het bestand komt (bv. Documenten, of een map die met Google Drive of OneDrive
+  gesynchroniseerd wordt). Daarna schrijft de app elke wijziging vanzelf ook in dat bestand.
+  - Wis je de browsergegevens, verwijder je de app of neem je een nieuw toestel: kies **Bestaand bestand openen**
+    en dan dat bestand. Alles staat terug en de app bewaart weer in hetzelfde bestand.
+  - Soms (bv. na het herstarten van de browser) vraagt de app opnieuw toestemming: tik op **Toestemming geven**.
+    Tot dan staan wijzigingen wel in de app, maar nog niet in het bestand.
+  - Het bestand is een gewone back-up: je kunt het ook met **Back-up terugzetten** inlezen.
+  - Gebruik niet tegelijk op twee toestellen hetzelfde gesynchroniseerde bestand: het toestel dat het laatst iets
+    wijzigt, overschrijft het bestand.
+- Op een iPhone/iPad kan dit niet (Apple laat het niet toe). Is je laatste back-up meer dan 14 dagen oud, dan
+  herinnert de app je eraan bij het openen, met een knop om meteen een back-up te maken.
 - Elk toestel heeft zijn eigen voorraad. Overzetten: Instellingen → **Back-up downloaden**,
   en op het andere toestel **Back-up terugzetten**.
 - Maak af en toe een back-up. Verwijder je de app of wis je de websitegegevens, dan is de voorraad weg.
@@ -70,7 +83,7 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 ## Een nieuwe versie zetten
 
 Upload de gewijzigde bestanden opnieuw naar dezelfde repository. Verhoog in `sw.js` het
-nummer in `VERSIE` (bv. `voorraad-v29`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
+nummer in `VERSIE` (bv. `voorraad-v30`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
 de nieuwe versie dan meteen bij het volgende openen.
 
 ## Automatische knoppentest
@@ -78,6 +91,12 @@ de nieuwe versie dan meteen bij het volgende openen.
 Bij elke wijziging op GitHub klikt een test (`test/knoppen.test.cjs`) automatisch op álle knoppen van de app,
 ook op nieuwe knoppen. Werkt een knop niet (een fout, of er gebeurt niets), dan zie je bij de wijziging een
 rood kruisje in plaats van een groen vinkje (tabblad **Actions**). Zet dan geen nieuwe versie online.
+
+## Automatische test: bewaren in een bestand
+
+`test/bestand.test.cjs` controleert dat het gekozen bestand meteen gevuld wordt en bij elke wijziging bijgewerkt,
+dat de koppeling blijft na het herstarten, dat alles terugkomt na het wissen van de app-gegevens, het opnieuw
+vragen van toestemming, "Stoppen", en de back-upherinnering in browsers zonder bestandskiezer.
 
 ## Automatische recepttest
 

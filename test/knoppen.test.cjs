@@ -8,6 +8,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
+const nepBestand = require('./nep-bestand.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
@@ -77,6 +78,7 @@ async function main() {
   // Nieuwe, schone app met voorbeelddata op scherm `view`
   async function vers(view) {
     const ctx = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
+    await ctx.addInitScript(nepBestand); // bestandskiezer van het systeem kan in de test niet open
     const page = await ctx.newPage();
     page.jsFouten = [];
     page.on('pageerror', (e) => page.jsFouten.push(e.message));
