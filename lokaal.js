@@ -332,11 +332,13 @@
     bewaren().catch(() => {});
     meldBestand();
   }
-  // Android: Chrome vergeet daar bij elk herstarten de toestemming voor een gekoppeld bestand. Daarom op Android
-  // geen bestandskoppeling, maar een automatische back-up in Downloads: hoogstens één per dag, bij de eerste
-  // wijziging van de dag (tijdens die tik, zodat Chrome de download toelaat). Uit te zetten bij Instellingen.
+  // Automatische back-up in Downloads: hoogstens één per dag, bij de eerste wijziging van de dag (tijdens die tik,
+  // zodat de browser de download toelaat). Aan/uit bij Instellingen; standaard aan, behalve op iPhone/iPad
+  // (Safari vraagt daar bij elke download om bevestiging).
+  // Op Android is er geen bestandskoppeling: Chrome vergeet daar bij elk herstarten de toestemming voor het bestand.
   const ANDROID = /android/i.test(navigator.userAgent);
-  const autoBackupAan = () => ANDROID && S.instellingen.auto_backup !== false;
+  const IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const autoBackupAan = () => (typeof S.instellingen.auto_backup === 'boolean' ? S.instellingen.auto_backup : !IOS);
   // tijdstippen staan in UTC zonder 'Z' (zie nu())
   const lokaleDag = (t) => (t ? datum(new Date(/(Z|[+-]\d\d:?\d\d)$/.test(t) ? t : t + 'Z')) : '');
   function autoBackup() {

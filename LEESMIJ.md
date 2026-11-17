@@ -71,12 +71,14 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   - Het bestand is een gewone back-up: je kunt het ook met **Back-up terugzetten** inlezen.
   - Gebruik niet tegelijk op twee toestellen hetzelfde gesynchroniseerde bestand: het toestel dat het laatst iets
     wijzigt, overschrijft het bestand.
-- **Android: automatische back-up.** Chrome op Android vergeet bij elk herstarten de toestemming voor een bestand.
-  Daarom zet de app op Android elke dag dat je iets wijzigt vanzelf een back-up in **Downloads**
-  (bij de eerste wijziging van de dag). Oude back-ups mag je verwijderen; de nieuwste is genoeg.
-  Terugzetten met **Back-up terugzetten**. Uitzetten bij Instellingen → **Automatische back-up**.
-- Op een iPhone/iPad kan dit niet (Apple laat het niet toe). Is je laatste back-up meer dan 14 dagen oud, dan
-  herinnert de app je eraan bij het openen, met een knop om meteen een back-up te maken.
+- **Automatische back-up (laptop en Android).** Elke dag dat je iets wijzigt, zet de app vanzelf een back-up in
+  **Downloads** (bij de eerste wijziging van de dag). Oude back-ups mag je verwijderen; de nieuwste is genoeg.
+  Terugzetten met **Back-up terugzetten**. Uit- of aanzetten bij Instellingen → **Automatische back-up**.
+  Standaard aan, behalve op iPhone/iPad (Safari vraagt daar bij elke download om bevestiging).
+- Op Android is er geen koppeling met een bestand: Chrome vergeet daar bij elk herstarten de toestemming.
+- Een bestand koppelen kan niet op een iPhone/iPad (Apple laat het niet toe). Staat de automatische back-up uit en
+  is je laatste back-up meer dan 14 dagen oud, dan herinnert de app je eraan bij het openen, met een knop om meteen
+  een back-up te maken.
 - Elk toestel heeft zijn eigen voorraad. Overzetten: Instellingen → **Back-up downloaden**,
   en op het andere toestel **Back-up terugzetten**.
 - Maak af en toe een back-up. Verwijder je de app of wis je de websitegegevens, dan is de voorraad weg.
@@ -88,7 +90,7 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 ## Een nieuwe versie zetten
 
 Upload de gewijzigde bestanden opnieuw naar dezelfde repository. Verhoog in `sw.js` het
-nummer in `VERSIE` (bv. `voorraad-v32`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
+nummer in `VERSIE` (bv. `voorraad-v33`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
 de nieuwe versie dan meteen bij het volgende openen.
 
 ## Automatische knoppentest

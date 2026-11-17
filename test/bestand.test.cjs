@@ -7,7 +7,8 @@
 //   eerste wijziging; lukt dat niet of zegt de gebruiker nee, dan één melding met "Toestemming geven";
 // - "Stoppen" schrijft niet meer naar het bestand;
 // - een browser zonder bestandskiezer (iPhone): uitleg en een herinnering om een back-up te maken;
-// - Android: geen bestandskoppeling (Chrome vergeet daar de toestemming), maar een automatische back-up per dag.
+// - automatische back-up per dag in Downloads (laptop en Android), uit te zetten;
+// - Android: geen bestandskoppeling (Chrome vergeet daar de toestemming).
 //
 // Uitvoeren:  node test/bestand.test.cjs   (vereist Playwright; op GitHub gebeurt dit automatisch)
 const http = require('http');
@@ -58,6 +59,7 @@ async function main() {
 
   await page.goto(basis + '#instellingen');
   await page.waitForSelector('#bestand-blok .sectie-titel');
+  await api('PUT', 'instellingen', { auto_backup: false }); // hier alleen het bestand testen
   await api('POST', 'producten', { naam: 'Melk', hoeveelheid: 2, eenheid: 'l' });
   await api('POST', 'recepten', { titel: 'Pannenkoeken', personen: 4, stappen: 'Bakken', ingredienten: [{ naam: 'melk', hoeveelheid: 0.5, eenheid: 'l' }] });
   await instellingen();
@@ -172,15 +174,27 @@ async function main() {
   p2.on('pageerror', (e) => jsFouten2.push(e.message));
   await p2.goto(basis + '#instellingen');
   await p2.waitForSelector('#bestand-blok .sectie-titel');
-  controle(!(await p2.isVisible('#b-nieuw')) && /back-up/i.test(await p2.textContent('#bestand-blok')), 'zonder bestandskiezer: uitleg, geen knoppen');
+  controle(!(await p2.isVisible('#b-nieuw')) && /kan niet in deze browser/i.test(await p2.textContent('#bestand-blok')), 'zonder bestandskiezer: uitleg, geen knoppen');
+  // laptop: automatische back-up standaard aan
+  controle(/Aan\./.test(await p2.textContent('#auto-blok')), 'laptop: automatische back-up staat standaard aan');
+  const dl2 = [];
+  p2.on('download', (d) => dl2.push(d.suggestedFilename()));
+  await p2.evaluate(() => fetch('api/producten', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ naam: 'Thee', hoeveelheid: 1, eenheid: 'stuks' }) }));
+  await p2.waitForTimeout(600);
+  controle(dl2.length === 1, 'laptop: eerste wijziging van de dag zet een back-up in Downloads');
+  await p2.click('#b-auto');
+  await p2.waitForTimeout(400);
+  controle(/Uit\./.test(await p2.textContent('#auto-blok')) && await p2.textContent('#b-auto') === 'Aanzetten', 'laptop: automatische back-up uitzetten');
   // een back-up van 20 dagen geleden terugzetten
   const oud = new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 19);
   await p2.evaluate((oud) => fetch('api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ producten: [{ id: 1, naam: 'Melk', hoeveelheid: 1, eenheid: 'l' }], recepten: [], laatste_backup: oud, volgendId: 2 }) }), oud);
+    body: JSON.stringify({ producten: [{ id: 1, naam: 'Melk', hoeveelheid: 1, eenheid: 'l' }], recepten: [], laatste_backup: oud, volgendId: 2, instellingen: { auto_backup: false } }) }), oud);
+  await p2.waitForTimeout(300);
+  controle(dl2.length === 1, 'laptop: automatische back-up uit, dan geen download');
   await p2.goto(basis + '#voorraad');
   await p2.reload();
   await p2.waitForTimeout(500);
-  controle(/20 dagen oud/.test(await p2.textContent('#toast')), 'herinnering bij het openen als de laatste back-up oud is');
+  controle(/20 dagen oud/.test(await p2.textContent('#toast')), 'automatische back-up uit: herinnering bij het openen als de laatste back-up oud is');
   const [dl] = await Promise.all([p2.waitForEvent('download', { timeout: 3000 }).catch(() => null), p2.click('#toast button')]);
   controle(!!dl && /voorraad-backup-.*\.json/.test(dl.suggestedFilename()), '"Back-up maken" in de herinnering downloadt een back-up');
   await p2.waitForTimeout(300); // datum van de back-up laten bewaren
@@ -205,22 +219,22 @@ async function main() {
   const downloads = [];
   p3.on('download', (d) => downloads.push(d.suggestedFilename()));
   await p3.goto(basis + '#instellingen');
-  await p3.waitForSelector('#bestand-blok .sectie-titel');
+  await p3.waitForSelector('#auto-blok .sectie-titel');
   // koppeling uit een vorige versie
   await p3.evaluate(() => new Promise((ok) => { const r = indexedDB.open('voorraadbeheer', 1); r.onsuccess = () => { const t = r.result.transaction('staat', 'readwrite'); t.objectStore('staat').put({ handle: { nepBestand: 'oud.json' } }, 'bestand'); t.oncomplete = ok; }; }));
   await p3.reload();
-  await p3.waitForSelector('#bestand-blok .sectie-titel');
+  await p3.waitForSelector('#auto-blok .sectie-titel');
   await p3.waitForTimeout(300);
   const nogGekoppeld = await p3.evaluate(() => new Promise((ok) => { const r = indexedDB.open('voorraadbeheer', 1); r.onsuccess = () => { const g = r.result.transaction('staat').objectStore('staat').getKey('bestand'); g.onsuccess = () => ok(g.result !== undefined); }; }));
   controle(!nogGekoppeld && await p3.evaluate(() => window.voorraadBestand.info()) === null, 'Android: een bestandskoppeling uit een vorige versie wordt opgeruimd');
-  controle(/Automatische back-up/.test(await p3.textContent('#bestand-blok')) && !(await p3.isVisible('#b-nieuw')), 'Android: Instellingen toont "Automatische back-up", geen bestandskoppeling');
+  controle(/Aan\./.test(await p3.textContent('#auto-blok')) && !(await p3.isVisible('#bestand-blok')) && !(await p3.isVisible('#b-nieuw')), 'Android: Instellingen toont "Automatische back-up" (aan), geen bestandskoppeling');
   await api3('POST', 'producten', { naam: 'Melk', hoeveelheid: 1, eenheid: 'l' });
   await p3.waitForTimeout(600);
   controle(downloads.length === 1 && /^voorraad-backup-.*\.json$/.test(downloads[0]), 'Android: eerste wijziging van de dag zet een back-up in Downloads');
   await api3('POST', 'producten', { naam: 'Rijst', hoeveelheid: 1, eenheid: 'kg' });
   await p3.waitForTimeout(600);
   controle(downloads.length === 1, 'Android: geen tweede back-up op dezelfde dag');
-  controle(/Laatste back-up: vandaag/.test(await p3.textContent('#bestand-blok')), 'Android: Instellingen toont de laatste back-up');
+  controle(/Laatste back-up: vandaag/.test(await p3.textContent('#auto-blok')), 'Android: Instellingen toont de laatste back-up');
   // back-up van gisteren: volgende wijziging maakt een nieuwe
   const gisteren = new Date(Date.now() - 86400000).toISOString().slice(0, 19);
   await api3('POST', 'import', { producten: [{ id: 1, naam: 'Melk', hoeveelheid: 1, eenheid: 'l' }], recepten: [], laatste_backup: gisteren, volgendId: 2 });
@@ -232,7 +246,7 @@ async function main() {
   await p3.goto(basis + '#instellingen'); await p3.reload(); await p3.waitForSelector('#b-auto');
   await p3.click('#b-auto');
   await p3.waitForTimeout(400);
-  controle(/staat uit/.test(await p3.textContent('#bestand-blok')), 'Android: automatische back-up uitzetten');
+  controle(/Uit\./.test(await p3.textContent('#auto-blok')), 'Android: automatische back-up uitzetten');
   await api3('POST', 'import', { producten: [{ id: 1, naam: 'Melk', hoeveelheid: 1, eenheid: 'l' }], recepten: [], laatste_backup: gisteren, volgendId: 2, instellingen: { auto_backup: false } });
   await api3('POST', 'producten', { naam: 'Kaas', hoeveelheid: 1, eenheid: 'stuks' });
   await p3.waitForTimeout(600);
