@@ -582,7 +582,8 @@
       t.oncomplete = () => ok(r.result); t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
     });
   };
-  const meldBestand = () => document.dispatchEvent(new Event('bestandstatus'));
+  /** nodig: de app kon niet zelf om toestemming vragen (of kreeg nee) — de gebruiker moet op een knop tikken */
+  const meldBestand = (nodig = false) => document.dispatchEvent(new CustomEvent('bestandstatus', { detail: { nodig } }));
   const toestemming = async (handle, vragen) => {
     try {
       const o = { mode: 'readwrite' };
@@ -617,8 +618,25 @@
     meldBestand();
   }
   const bestandNu = () => { clearTimeout(bestandTimer); bestandTimer = null; return (bestandKetting = bestandKetting.then(naarBestand)); };
+  // Chrome op Android (en soms op de computer) vergeet de toestemming als de app sluit. Daarom niet bij het
+  // openen storen, maar pas bij de eerste wijziging: die komt van een tik, en tijdens een tik mag de app
+  // de browser om toestemming vragen. Lukt dat niet (of zegt de gebruiker nee), dan één melding met een knop.
+  let vraagBezig = false, nietMeerVragen = false;
+  async function toestemmingTerug() {
+    if (!koppeling || vraagBezig) return;
+    const tik = !navigator.userActivation || navigator.userActivation.isActive;
+    if (nietMeerVragen || !tik) return meldBestand(true);
+    vraagBezig = true;
+    const k = koppeling;
+    k.toestemming = await toestemming(k.handle, true);
+    vraagBezig = false;
+    if (k.toestemming === 'granted') { k.fout = null; await bestandNu(); return; }
+    nietMeerVragen = true;
+    meldBestand(true);
+  }
   function bestandPlannen() {
-    if (!koppeling || koppeling.toestemming !== 'granted') return;
+    if (!koppeling) return;
+    if (koppeling.toestemming !== 'granted') { toestemmingTerug(); return; }
     clearTimeout(bestandTimer);
     bestandTimer = setTimeout(bestandNu, 700); // vele snelle wijzigingen na elkaar: één keer schrijven
   }
@@ -628,6 +646,7 @@
   window.addEventListener('pagehide', bijVerlaten);
 
   async function koppelen(handle) {
+    nietMeerVragen = false;
     koppeling = { handle, naam: handle.name, laatst: null, fout: null, toestemming: 'granted' };
     await idb(BESTAND_SLEUTEL, { handle, laatst: null });
     await bestandNu();
@@ -667,7 +686,7 @@
     async toestemmingVragen() {
       if (!koppeling) return false;
       koppeling.toestemming = await toestemming(koppeling.handle, true);
-      if (koppeling.toestemming === 'granted') await bestandNu(); else meldBestand();
+      if (koppeling.toestemming === 'granted') { nietMeerVragen = false; koppeling.fout = null; await bestandNu(); } else meldBestand();
       return koppeling.toestemming === 'granted';
     },
     async stoppen() {

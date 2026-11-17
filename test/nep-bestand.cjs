@@ -2,13 +2,18 @@
 // door een nagemaakt bestand dat zijn inhoud in de afgeschermde testopslag van de browser (OPFS) bewaart.
 // Een echt OPFS-bestand kan niet gebruikt worden: de testbrowser crasht als hij dat uit IndexedDB terugleest.
 // Daarom wordt het nagemaakte bestand in IndexedDB als naam bewaard en bij het lezen terug omgezet.
-// localStorage 'test-toestemming' = 'prompt' bootst na dat de toestemming kwijt is (zoals na het herstarten van de browser).
+// localStorage 'test-toestemming' = 'prompt' bootst na dat de toestemming kwijt is (zoals Chrome op Android na het sluiten),
+// 'test-weigeren' = '1' dat de gebruiker nee zegt. window.toestemmingGevraagd telt hoe vaak om toestemming gevraagd werd.
 module.exports = function nepBestand() {
   const opfs = async (naam) => (await navigator.storage.getDirectory()).getFileHandle(naam, { create: true });
   class NepBestand {
     constructor(naam) { this.name = naam; this.kind = 'file'; }
     async queryPermission() { return localStorage.getItem('test-toestemming') === 'prompt' ? 'prompt' : 'granted'; }
-    async requestPermission() { localStorage.removeItem('test-toestemming'); window.toestemmingGevraagd = true; return 'granted'; }
+    async requestPermission() {
+      window.toestemmingGevraagd = (window.toestemmingGevraagd || 0) + 1;
+      if (localStorage.getItem('test-weigeren') === '1') return 'denied';
+      localStorage.removeItem('test-toestemming'); return 'granted';
+    }
     async getFile() { return (await opfs(this.name)).getFile(); }
     async createWritable() { return (await opfs(this.name)).createWritable(); }
   }
