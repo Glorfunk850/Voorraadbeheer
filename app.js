@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 30;
+const APP_VERSIE = 31;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1780,6 +1780,18 @@ function bestandBlokTekenen() {
   if (!blok) return;
   const titel = '<div class="sectie-titel">Bewaren in een bestand</div>';
   const p = (tekst) => `<p class="stil" style="margin-bottom:.8rem;font-size:.92rem;line-height:1.55">${tekst}</p>`;
+  if (B() && B().android) {
+    const aan = B().autoBackupAan(), l = B().backupInfo().laatste;
+    blok.innerHTML = '<div class="sectie-titel">Automatische back-up</div>' + p(aan
+      ? `Je gegevens staan op dit toestel, in de app. Daarnaast zet de app elke dag dat je iets wijzigt vanzelf een back-up in <b>Downloads</b> (bij de eerste wijziging van de dag). ${l ? `Laatste back-up: ${tijdstipTekst(l)}.` : ''} Oude back-ups kun je gerust verwijderen; de nieuwste is genoeg.`
+      : 'Automatische back-up staat uit. Maak dan zelf af en toe een back-up.')
+      + `<div class="knoppenrij"><button class="knop" id="b-auto">${aan ? 'Uitzetten' : 'Aanzetten'}</button></div>`;
+    $('#b-auto', blok).onclick = async () => {
+      await api('PUT', 'instellingen', { auto_backup: !aan });
+      toast(aan ? 'Automatische back-up staat uit.' : 'Automatische back-up staat aan.');
+    };
+    return;
+  }
   if (!B() || !B().ondersteund) {
     blok.innerHTML = titel + p(`Je gegevens staan op dit toestel, in de opslag van de browser. Automatisch bewaren in een bestand kan niet in deze browser${isIOS() ? ' (iPhone/iPad laten dat niet toe)' : ''}${!isIOS() ? ': gebruik daarvoor Chrome of Edge' : ''}. Maak daarom af en toe een back-up.`);
     return;
@@ -1844,6 +1856,7 @@ function bestandHerinneren() {
   if (!B()) return;
   const k = B().info();
   if (k) return;
+  if (B().autoBackupAan?.()) return; // Android: back-up gebeurt vanzelf
   const { laatste, sinds } = B().backupInfo();
   const oud = laatste ? dagenGeleden(laatste) : dagenGeleden(sinds);
   if (oud === null || oud < 14) return;
