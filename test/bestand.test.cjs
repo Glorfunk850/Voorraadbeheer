@@ -3,7 +3,8 @@
 // - een bestand koppelen zet er meteen alle gegevens in, en elke wijziging komt er daarna vanzelf bij;
 // - de koppeling blijft na het herstarten van de app;
 // - na het wissen van de app-gegevens haal je alles terug met "Bestaand bestand openen";
-// - toestemming kwijt (browser herstart): melding en "Toestemming geven" werkt;
+// - toestemming kwijt (Chrome op Android na het sluiten): geen melding bij het openen, de app vraagt ze zelf bij de
+//   eerste wijziging; lukt dat niet of zegt de gebruiker nee, dan één melding met "Toestemming geven";
 // - "Stoppen" schrijft niet meer naar het bestand;
 // - een browser zonder bestandskiezer (iPhone): uitleg en een herinnering om een back-up te maken.
 //
@@ -85,20 +86,48 @@ async function main() {
   await page.waitForTimeout(250);
   controle(namen(await bestand()) === 'Boter,Kaas,Melk,Rijst', 'app naar de achtergrond: de laatste wijziging staat meteen in het bestand');
 
-  // toestemming kwijt
+  // toestemming kwijt (Chrome op Android na het sluiten van de app)
+  const herstart = async (view = 'instellingen') => { await page.goto(basis + '#' + view); await page.reload(); await page.waitForTimeout(500); };
+  const gevraagd = () => page.evaluate(() => window.toestemmingGevraagd || 0);
+  const tgt = async () => ((await bestand()).instellingen || {}).tgt_dagen;
   await page.evaluate(() => localStorage.setItem('test-toestemming', 'prompt'));
-  await page.goto(basis + '#voorraad');
-  await page.reload();
-  await page.waitForTimeout(500);
-  const melding = await page.textContent('#toast');
-  controle(await page.isVisible('#toast') && /toestemming/i.test(melding), 'zonder toestemming: melding bij het openen van de app');
+  await herstart('voorraad');
+  controle(!(await page.isVisible('#toast')), 'zonder toestemming: geen melding bij het openen van de app');
+  // wijziging met een tik: de app vraagt zelf toestemming, zonder melding
+  await herstart();
+  let voor = await tgt();
+  await page.click('[data-dagen="tgt_dagen"][data-stap="1"]');
+  await page.waitForTimeout(600);
+  controle(await gevraagd() === 1, 'eerste wijziging (tik): de app vraagt de browser zelf om toestemming');
+  controle(await tgt() === voor + 1, 'na toestemming staat de wijziging meteen in het bestand');
+  controle(!(await page.isVisible('#toast')) || !/nog niet in/.test(await page.textContent('#toast')), 'daarbij geen extra melding van de app');
+  // wijziging zonder tik (bv. vanuit een ander venster): melding met knop
+  await page.evaluate(() => localStorage.setItem('test-toestemming', 'prompt'));
+  await herstart('voorraad');
+  // Playwright telt zijn eigen opdrachten als een tik: dat hier uitzetten
+  await page.evaluate(() => Object.defineProperty(navigator.userActivation, 'isActive', { get: () => false, configurable: true }));
   await api('POST', 'producten', { naam: 'Appels', hoeveelheid: 6, eenheid: 'stuks' });
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(800);
+  controle(await page.isVisible('#toast') && /nog niet in voorraad-gegevens\.json/.test(await page.textContent('#toast')), 'wijziging zonder tik: melding met "Toestemming geven"');
   controle(!/Appels/.test(namen(await bestand())), 'zonder toestemming wordt het bestand niet aangeraakt');
   await page.click('#toast button');
   await page.waitForTimeout(500);
-  controle(await page.evaluate(() => window.toestemmingGevraagd === true), '"Toestemming geven" vraagt de browser om toestemming');
-  controle(/Appels/.test(namen(await bestand())), 'na toestemming staan ook de tussentijdse wijzigingen in het bestand');
+  controle(/Appels/.test(namen(await bestand())), '"Toestemming geven": ook de tussentijdse wijzigingen staan in het bestand');
+  // nee zeggen: niet bij elke tik opnieuw vragen
+  await page.evaluate(() => { localStorage.setItem('test-toestemming', 'prompt'); localStorage.setItem('test-weigeren', '1'); });
+  await herstart();
+  voor = await tgt();
+  await page.click('[data-dagen="tgt_dagen"][data-stap="1"]');
+  await page.waitForTimeout(600);
+  controle(await gevraagd() === 1 && /nog niet in/.test(await page.textContent('#toast')), 'nee gezegd: één melding met "Toestemming geven"');
+  await page.click('[data-dagen="tgt_dagen"][data-stap="1"]');
+  await page.waitForTimeout(600);
+  controle(await gevraagd() === 1, 'nee gezegd: bij de volgende tik niet opnieuw gevraagd');
+  controle(await tgt() === voor, 'nee gezegd: bestand niet aangeraakt');
+  await page.evaluate(() => localStorage.removeItem('test-weigeren'));
+  await page.click('#b-toestemming');
+  await page.waitForTimeout(600);
+  controle(await tgt() === voor + 2 && await page.isVisible('#b-stop'), 'toch toestemming via Instellingen: bestand bijgewerkt');
 
   // app-gegevens wissen (zoals "websitegegevens wissen"; het bestand op het toestel blijft)
   await page.evaluate(() => new Promise((ok) => { const r = indexedDB.deleteDatabase('voorraadbeheer'); r.onsuccess = r.onerror = r.onblocked = ok; setTimeout(ok, 1500); }));
@@ -153,12 +182,14 @@ async function main() {
   controle(/20 dagen oud/.test(await p2.textContent('#toast')), 'herinnering bij het openen als de laatste back-up oud is');
   const [dl] = await Promise.all([p2.waitForEvent('download', { timeout: 3000 }).catch(() => null), p2.click('#toast button')]);
   controle(!!dl && /voorraad-backup-.*\.json/.test(dl.suggestedFilename()), '"Back-up maken" in de herinnering downloadt een back-up');
+  await p2.waitForTimeout(300); // datum van de back-up laten bewaren
   await p2.reload();
   await p2.waitForTimeout(500);
   controle(!(await p2.isVisible('#toast')) || !/oud/.test(await p2.textContent('#toast')), 'na de back-up geen herinnering meer');
   await p2.goto(basis + '#instellingen');
   await p2.waitForSelector('#backup-laatst');
-  controle(/Laatste back-up: vandaag/.test(await p2.textContent('#backup-laatst')), 'Instellingen toont wanneer de laatste back-up gemaakt is');
+  const laatsteTekst = await p2.textContent('#backup-laatst');
+  controle(/Laatste back-up: vandaag/.test(laatsteTekst), `Instellingen toont wanneer de laatste back-up gemaakt is (${laatsteTekst})`);
   controle(!jsFouten2.length, 'geen JavaScript-fouten zonder bestandskiezer' + (jsFouten2.length ? ': ' + jsFouten2.join(' | ') : ''));
   await ctx2.close();
 

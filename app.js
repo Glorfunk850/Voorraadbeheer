@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 29;
+const APP_VERSIE = 30;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1789,7 +1789,7 @@ function bestandBlokTekenen() {
     blok.innerHTML = titel + p('Je gegevens staan nu alleen in de opslag van de browser. Laat de app ze ook automatisch bewaren in een bestand op dit toestel, bv. in Documenten of in een map die met Google Drive of OneDrive gesynchroniseerd wordt. Wis je de browsergegevens of verwijder je de app, dan haal je alles terug uit dat bestand.')
       + `<div class="knoppenrij"><button class="knop primair" id="b-nieuw">Nieuw bestand maken</button><button class="knop" id="b-open">Bestaand bestand openen</button></div>`;
   } else if (k.toestemming !== 'granted') {
-    blok.innerHTML = titel + p(`<b style="color:var(--rood, #b42318)">De app heeft opnieuw toestemming nodig om in <b>${esc(k.naam)}</b> te bewaren.</b> Wijzigingen staan intussen wel in de app, maar nog niet in het bestand.`)
+    blok.innerHTML = titel + p(`Alles wordt ook bewaard in <b>${esc(k.naam)}</b>. De browser vraagt na het openen van de app opnieuw toestemming; dat gebeurt vanzelf bij je eerste wijziging. Je kunt het ook nu al doen.`)
       + `<div class="knoppenrij"><button class="knop primair" id="b-toestemming">Toestemming geven</button><button class="knop" id="b-stop">Stoppen</button></div>`;
   } else {
     blok.innerHTML = titel + p(`Alles wordt ook automatisch bewaard in <b>${esc(k.naam)}</b>${k.laatst ? ` (laatst ${tijdstipTekst(k.laatst)})` : ''}.`
@@ -1823,19 +1823,26 @@ function bestandBlokTekenen() {
     bestandBlokTekenen();
   });
 }
-document.addEventListener('bestandstatus', () => { if (ui.view === 'instellingen') bestandBlokTekenen(); });
+// De app kon niet zelf om toestemming vragen (of kreeg nee): één keer per sessie een melding met een knop
+let toestemmingGemeld = false;
+document.addEventListener('bestandstatus', (e) => {
+  if (ui.view === 'instellingen') bestandBlokTekenen();
+  const k = B() && B().info();
+  if (!e.detail?.nodig || !k || k.toestemming === 'granted' || toestemmingGemeld) return;
+  toestemmingGemeld = true;
+  toast(`Je wijzigingen staan in de app, maar nog niet in ${k.naam}.`, 'Toestemming geven', async () => {
+    try { await B().toestemmingVragen(); } catch { /* */ }
+    if (B().info()?.toestemming !== 'granted') toast('Geen toestemming gekregen. Je kunt het opnieuw proberen bij Instellingen.');
+    else toestemmingGemeld = false;
+    if (ui.view === 'instellingen') bestandBlokTekenen();
+  }, true);
+});
 
-// Bij het openen: toestemming terugvragen, of herinneren aan een back-up (hoogstens één keer per dag)
+// Bij het openen herinneren aan een back-up (hoogstens één keer per dag), als er geen bestand gekoppeld is.
+// Is er een bestand gekoppeld zonder toestemming, dan wordt die pas gevraagd bij de eerste wijziging (zie lokaal.js).
 function bestandHerinneren() {
   if (!B()) return;
   const k = B().info();
-  if (k && k.toestemming !== 'granted') {
-    return toast(`Je gegevens worden niet meer in ${k.naam} bewaard tot je opnieuw toestemming geeft.`, 'Toestemming geven', async () => {
-      try { await B().toestemmingVragen(); } catch { /* */ }
-      if (B().info()?.toestemming !== 'granted') toast('Geen toestemming gekregen. Je kunt het opnieuw proberen bij Instellingen.');
-      if (ui.view === 'instellingen') bestandBlokTekenen();
-    }, true);
-  }
   if (k) return;
   const { laatste, sinds } = B().backupInfo();
   const oud = laatste ? dagenGeleden(laatste) : dagenGeleden(sinds);
