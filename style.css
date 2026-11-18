@@ -135,6 +135,7 @@ label.veld > span, .veld-titel { display: block; font-size: .8rem; color: var(--
 button.rij:hover .naam { color: var(--accent); }
 .rij .naam { flex: 1; min-width: 0; }
 .rij .naam small { display: block; color: var(--stil); margin-top: 1px; }
+.rij .naam .merk { color: var(--stil); font-weight: 400; }
 .rij .rechts { color: var(--stil); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .95rem; }
 .rij .rechts.rood { color: var(--rood); }
 .rij .rechts.oranje { color: var(--oranje); }
