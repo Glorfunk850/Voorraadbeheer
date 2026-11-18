@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 35; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 36; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -238,6 +238,17 @@ export const HANDLEIDING = `
   <li>Een gezin dat één voorraad deelt, koppelt alle toestellen met dezelfde code. Wie apart wil, zet zelf synchronisatie aan en krijgt een eigen code.</li>
   <li><b>Stoppen</b> stopt alleen dit toestel. Kies je daarna ook <b>Ook wissen</b>, dan gaat alles van de server en stoppen ook je andere toestellen; hun gegevens blijven staan.</li>
 </ul>
+
+<h3>Moet ik opnieuw koppelen?</h3>
+<p>Nee. Je koppelt een toestel één keer. De app onthoudt de koppeling op het toestel en synchroniseert daarna vanzelf, ook na het sluiten van de app, het herstarten van het toestel of een nieuwe versie van de app.</p>
+<p>Alleen in deze gevallen koppel je opnieuw:</p>
+<ul>
+  <li><b>De opslag van de app is gewist</b>: je hebt de app verwijderd, de websitegegevens gewist, of je hebt een nieuw toestel. Dan zijn de koppeling én de gegevens op dat toestel weg. Koppel opnieuw met de code: alles komt terug van de server.</li>
+  <li><b>Iemand koos op een toestel Stoppen → Ook wissen.</b> Dan stoppen alle toestellen. Zet de synchronisatie opnieuw aan; je krijgt een nieuwe code.</li>
+  <li><b>Je hebt zelf Stoppen gekozen</b> op een toestel. Dan stopt alleen dat toestel.</li>
+</ul>
+<p><b>iPhone/iPad:</b> gebruik de app vanaf je beginscherm, niet in Safari. Safari wist de gegevens van een website die je een week niet geopend hebt; een app op het beginscherm niet.</p>
+<p><b>Tip:</b> bewaar de code op een veilige plek, bv. in je wachtwoordbeheerder. Ben je ze kwijt maar heb je nog een gekoppeld toestel, dan toont <b>Toestel koppelen</b> daar de code opnieuw.</p>
 
 <h3>Eenmalig naar een ander toestel</h3>
 <p>Zonder synchronisatie heeft elk toestel zijn eigen voorraad. Maak op het ene toestel een back-up, stuur het bestand naar het andere toestel (bv. via mail of Drive) en kies daar <b>Back-up terugzetten</b>. Op een nieuwe laptop met een gekoppeld bestand kies je <b>Bestaand bestand openen</b>.</p>
