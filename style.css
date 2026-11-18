@@ -349,6 +349,12 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .pz-erbij { margin-top: .1rem; }
 .prijzen-blok > div { flex: 1; }
 .prijzen-blok .stat { margin-top: .3rem; }
+.pz-groep { padding-bottom: .4rem; }
+.pz-groep + .pz-groep { border-top: 1px solid var(--lijn); padding-top: .8rem; margin-top: .6rem; }
+.pz-groep + .pz-groep .pz-uitleg.stil { display: none; }
+h3.pz-groep-titel { font-size: 1rem; margin: 0 0 .5rem; color: var(--tekst); }
+.prijzen-blok .pz-groep-titel { font-size: .85rem; font-weight: 600; margin-top: .7rem; }
+summary small.stil { font-weight: 400; margin-left: .3rem; }
 .goedkoopst { display: inline; color: var(--accent); font-weight: 600; font-size: .75rem; margin-left: .3rem; }
 .winkel-tabs { margin-bottom: .9rem; }
 .winkel-tabs .tab-tel { opacity: .7; font-variant-numeric: tabular-nums; margin-left: .15rem; }

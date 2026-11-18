@@ -35,13 +35,17 @@
     }
     return uit;
   };
-  // prijzen van een product: [{ winkel, prijs, per }] — prijs in euro per eenheid `per`, één regel per winkel
+  // prijzen van een product: [{ winkel, prijs, per, inhoud?, inhoud_eenheid? }] — prijs in euro per eenheid `per`.
+  // Met een inhoud geldt de prijs alleen voor die verpakking (bv. pak à 500 g); zonder inhoud voor elke inhoud zonder eigen prijs.
+  // Eén regel per winkel en per inhoud.
+  const prijsSleutel = (x) => (x && getal(x.inhoud) > 0 && x.inhoud_eenheid ? `${getal(x.inhoud)} ${x.inhoud_eenheid}` : '');
   const prijzenLijst = (v) => {
     const uit = [];
     for (const x of Array.isArray(v) ? v : []) {
-      const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs);
-      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel))) continue;
-      uit.push({ winkel, prijs: Math.round(prijs * 1000) / 1000, per: String((x && x.per) || '').trim() });
+      const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs), sleutel = prijsSleutel(x);
+      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel) && prijsSleutel(y) === sleutel)) continue;
+      uit.push({ winkel, prijs: Math.round(prijs * 1000) / 1000, per: String((x && x.per) || '').trim(),
+        ...(sleutel ? { inhoud: getal(x.inhoud), inhoud_eenheid: String(x.inhoud_eenheid) } : {}) });
     }
     return uit;
   };
@@ -229,13 +233,18 @@
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
   }
-  // prijzen van een product (per naam, in de catalogus) vervangen
-  function prijzenZetten(naam, prijzen, eenheid) {
+  // prijzen van een product (per naam, in de catalogus) vervangen.
+  // Met `voor` ({ inhoud, inhoud_eenheid }, of null voor zonder inhoud) alleen de prijzen van die inhoud.
+  function prijzenZetten(naam, prijzen, eenheid, voor) {
     naam = (naam || '').trim();
     if (!naam) return;
     let c = S.catalogus.find((x) => zelfde(x.naam, naam));
     if (!c) { catalogusBijwerken({ naam, eenheid: eenheid || '' }, false); c = S.catalogus.find((x) => zelfde(x.naam, naam)); }
-    c.prijzen = prijzenLijst(prijzen);
+    if (voor === undefined) c.prijzen = prijzenLijst(prijzen);
+    else {
+      const sleutel = prijsSleutel(voor), v = sleutel ? { inhoud: getal(voor.inhoud), inhoud_eenheid: voor.inhoud_eenheid } : { inhoud: null, inhoud_eenheid: '' };
+      c.prijzen = prijzenLijst([...(c.prijzen || []).filter((p) => prijsSleutel(p) !== sleutel), ...prijzen.map((p) => ({ ...p, ...v }))]);
+    }
     lijstAanvullen(S.instellingen, 'winkels', c.prijzen.map((p) => p.winkel));
   }
   const gebeurtenis = (soort, naam) => S.gebeurtenissen.push({ soort, naam, tijdstip: nu() });
@@ -423,7 +432,7 @@
       return alles();
     }
 
-    if (bron === 'prijzen') { prijzenZetten(data.naam, data.prijzen, data.eenheid); return alles(); }
+    if (bron === 'prijzen') { prijzenZetten(data.naam, data.prijzen, data.eenheid, data.prijzen_inhoud); return alles(); }
     if (bron === 'catalogus' && methode === 'DELETE') {
       S.catalogus = S.catalogus.filter((c) => !zelfde(c.naam, data && data.naam));
       return alles();
@@ -448,7 +457,7 @@
       if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
       if ('inhoud' in data) { const i = getal(data.inhoud); c.inhoud = i > 0 ? i : null; c.inhoud_eenheid = i > 0 ? data.inhoud_eenheid || '' : ''; }
       c.laatst = nu();
-      if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid);
+      if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid, data.prijzen_inhoud);
       return alles();
     }
 
@@ -482,7 +491,7 @@
         p.inhoud = getal(p.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = '';
         S.producten.push(p);
         catalogusBijwerken(p);
-        if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid);
+        if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(p.naam);
         return alles();
@@ -497,7 +506,7 @@
         if ('inhoud' in data) { p.inhoud = getal(data.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = ''; }
         p.gewijzigd = nu();
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
-        if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid);
+        if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(oudeNaam); minimumControleren(p.naam);
         return alles();
