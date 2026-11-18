@@ -102,6 +102,26 @@ async function main() {
   const voorraad = d.producten.filter((p) => p.naam === 'Rijst').map((p) => `${p.hoeveelheid}x${p.inhoud}${p.inhoud_eenheid}`).sort();
   controle(JSON.stringify(voorraad) === '["1x2kg","1x5kg","3x500g"]', `voorraad per inhoud (${voorraad.join(', ')})`);
 
+  // minimumvoorraad per inhoud: pak à 500 g en pak à 5 kg hebben elk hun eigen minimum
+  const id500 = d.producten.find((p) => p.naam === 'Rijst' && p.inhoud === 500).id;
+  const id5 = d.producten.find((p) => p.naam === 'Rijst' && p.inhoud === 5).id;
+  await api('PUT', `producten/${id500}`, { minimum: 2 }); // 3 in huis: genoeg
+  d = await api('GET', 'alles');
+  controle(!d.boodschappen.some((b) => b.naam === 'Rijst'), 'genoeg pakken à 500 g: niets op de lijst (de andere inhouden tellen niet mee)');
+  await api('PUT', `producten/${id5}`, { minimum: 3 }); // 1 in huis: 2 tekort, ook al is er veel rijst in andere pakken
+  d = await api('GET', 'alles');
+  let auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum');
+  controle(auto.length === 1 && auto[0].hoeveelheid === 2 && auto[0].inhoud === 5 && auto[0].inhoud_eenheid === 'kg',
+    `tekort aan pakken à 5 kg komt met die inhoud op de lijst (${JSON.stringify(auto)})`);
+  await api('POST', `producten/${id500}/verbruik`, { hoeveelheid: 2 }); // nog 1 pak à 500 g, minimum 2
+  d = await api('GET', 'alles');
+  auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum').map((b) => `${b.hoeveelheid}x${b.inhoud}${b.inhoud_eenheid}`).sort();
+  controle(JSON.stringify(auto) === '["1x500g","2x5kg"]', `elke inhoud een eigen regel (${auto.join(', ')})`);
+  await api('PUT', `producten/${id5}`, { minimum: 0 });
+  d = await api('GET', 'alles');
+  auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum').map((b) => `${b.hoeveelheid}x${b.inhoud}${b.inhoud_eenheid}`);
+  controle(JSON.stringify(auto) === '["1x500g"]', `minimum 5 kg weg: alleen die regel verdwijnt (${auto.join(', ')})`);
+
   controle(!jsFouten.length, `geen JavaScript-fouten (${jsFouten.join(' | ')})`);
   await browser.close();
   srv.close();

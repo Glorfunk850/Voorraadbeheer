@@ -187,20 +187,30 @@
     return TELBARE.has(eenheid || 'stuks') && i > 0 && inhoudEenheid ? { inhoud: i, inhoud_eenheid: inhoudEenheid } : {};
   }
   const inhoudSleutel = (x) => (x && x.inhoud > 0 && x.inhoud_eenheid ? `${x.inhoud} ${x.inhoud_eenheid}` : '');
+  // inhoud per verpakking van een voorraadregel als sleutel (bv. "500 g"); leeg zonder inhoud
+  const productSleutel = (p) => inhoudSleutel(boodschapInhoud(p.eenheid, p.inhoud, p.inhoud_eenheid));
+  // De minimumvoorraad geldt per inhoud: 2 pak à 500 g en 1 pak à 1 kg zijn aparte voorraden met elk hun eigen minimum.
   function minimumControleren(naam) {
-    const regels = S.producten.filter((p) => zelfde(p.naam, naam));
-    const auto = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum');
-    if (!regels.length) { if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto); return; }
+    const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam)).map(productSleutel),
+      ...S.boodschappen.filter((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum').map(inhoudSleutel)]);
+    for (const sleutel of sleutels) minimumPerInhoud(naam, sleutel);
+  }
+  function minimumPerInhoud(naam, sleutel) {
+    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && productSleutel(p) === sleutel);
+    const auto = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum' && inhoudSleutel(b) === sleutel);
+    const weg = () => { if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto); };
+    if (!regels.length) return weg();
     const hoofd = regels.reduce((a, b) => ((b.minimum || 0) > (a.minimum || 0) ? b : a));
-    if (!(hoofd.minimum > 0)) { if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto); return; }
+    if (!(hoofd.minimum > 0)) return weg();
     const totaal = regels.reduce((s, r) => s + (omrekenen(r.hoeveelheid || 0, r.eenheid, hoofd.eenheid) ?? 0), 0);
     if (totaal < hoofd.minimum) {
       const tekort = Math.round((hoofd.minimum - totaal) * 100) / 100;
       if (auto) auto.hoeveelheid = tekort;
-      else if (!S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt)) {
-        S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid, product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
+      else if (!S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt && inhoudSleutel(b) === sleutel)) {
+        S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid,
+          ...boodschapInhoud(hoofd.eenheid, hoofd.inhoud, hoofd.inhoud_eenheid), product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
       }
-    } else if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto);
+    } else weg();
   }
   // Catalogus: elk product dat ooit werd toegevoegd, ook als het later op is of verwijderd werd
   function catalogusBijwerken(p, teller = true, oudeNaam = null) {
@@ -864,7 +874,7 @@
     const gezien = new Set();
     S.boodschappen = S.boodschappen.filter((b) => {
       if (b.bron !== 'minimum' || b.afgevinkt) return true;
-      const k = (b.naam || '').trim().toLowerCase();
+      const k = (b.naam || '').trim().toLowerCase() + '|' + inhoudSleutel(b);
       if (gezien.has(k)) return false;
       gezien.add(k); return true;
     });
