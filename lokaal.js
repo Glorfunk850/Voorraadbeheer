@@ -231,6 +231,7 @@
     if (p.hoeveelheid > 0) c.hoeveelheid = p.hoeveelheid;
     if ('inhoud' in p) { c.inhoud = p.inhoud > 0 ? p.inhoud : null; c.inhoud_eenheid = p.inhoud > 0 ? p.inhoud_eenheid || '' : ''; }
     if ('uitlekgewicht' in p) c.uitlekgewicht = !!p.uitlekgewicht;
+    if ('merk' in p) c.merk = String(p.merk || '').trim();
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
   }
@@ -259,7 +260,7 @@
     instellingen: S.instellingen,
   }));
   const fout = (status, bericht) => { const e = new Error(bericht); e.status = status; throw e; };
-  const VELDEN = ['naam', 'categorie', 'hoeveelheid', 'eenheid', 'locatie', 'aankoopdatum', 'vervaldatum', 'datumtype', 'minimum', 'notitie', 'barcode', 'inhoud', 'inhoud_eenheid', 'uitlekgewicht'];
+  const VELDEN = ['naam', 'categorie', 'hoeveelheid', 'eenheid', 'locatie', 'aankoopdatum', 'vervaldatum', 'datumtype', 'minimum', 'notitie', 'barcode', 'inhoud', 'inhoud_eenheid', 'uitlekgewicht', 'merk'];
 
   // ------------------------------------------------------------------ barcode (Open Food Facts)
   const CAT_WOORDEN = [
@@ -287,7 +288,7 @@
   async function barcodeOpzoeken(code) {
     if (S.barcodes[code]) return { code, gevonden: true, ...S.barcodes[code], bron: 'eigen' };
     const eigen = S.producten.find((p) => p.barcode === code);
-    if (eigen) return { code, gevonden: true, naam: eigen.naam, merk: '', categorie: eigen.categorie, hoeveelheid: eigen.hoeveelheid,
+    if (eigen) return { code, gevonden: true, naam: eigen.naam, merk: eigen.merk || '', categorie: eigen.categorie, hoeveelheid: eigen.hoeveelheid,
       eenheid: eigen.eenheid, datumtype: eigen.datumtype, locatie: eigen.locatie, bron: 'eigen' };
     if (!navigator.onLine) fout(503, 'Geen internet: deze barcode kan nu niet opgezocht worden. Vul het product zelf in.');
     let j;
@@ -339,7 +340,7 @@
 
   // ------------------------------------------------------------------ export
   function csvMaken() {
-    const kol = ['naam', 'hoeveelheid', 'eenheid', 'inhoud', 'inhoud_eenheid', 'locatie', 'categorie', 'vervaldatum', 'datumtype', 'minimum', 'aankoopdatum', 'notitie', 'barcode', 'uitlekgewicht'];
+    const kol = ['naam', 'merk', 'hoeveelheid', 'eenheid', 'inhoud', 'inhoud_eenheid', 'locatie', 'categorie', 'vervaldatum', 'datumtype', 'minimum', 'aankoopdatum', 'notitie', 'barcode', 'uitlekgewicht'];
     const cel = (v) => { const t = v == null ? '' : String(v); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
     const regels = [kol.join(';'), ...alles().producten.map((p) => kol.map((k) => cel(k === 'hoeveelheid' || k === 'minimum' || k === 'inhoud' ? String(p[k] ?? '').replace('.', ',') : k === 'uitlekgewicht' ? (p[k] ? 'ja' : '') : p[k])).join(';'))];
     return '﻿' + regels.join('\r\n');
@@ -458,6 +459,7 @@
       if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
       if ('inhoud' in data) { const i = getal(data.inhoud); c.inhoud = i > 0 ? i : null; c.inhoud_eenheid = i > 0 ? data.inhoud_eenheid || '' : ''; }
       if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
+      if ('merk' in data) c.merk = String(data.merk || '').trim();
       c.laatst = nu();
       if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid, data.prijzen_inhoud);
       return alles();
@@ -491,11 +493,11 @@
         p.naam = p.naam.trim();
         p.hoeveelheid = getal(p.hoeveelheid) || 0; p.minimum = getal(p.minimum) || 0;
         p.inhoud = getal(p.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = '';
-        p.uitlekgewicht = !!p.uitlekgewicht;
+        p.uitlekgewicht = !!p.uitlekgewicht; p.merk = String(p.merk || '').trim();
         S.producten.push(p);
         catalogusBijwerken(p);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
-        if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
+        if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(p.naam);
         return alles();
       }
@@ -508,10 +510,11 @@
         if ('minimum' in data) p.minimum = getal(data.minimum) || 0;
         if ('inhoud' in data) { p.inhoud = getal(data.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = ''; }
         if ('uitlekgewicht' in data) p.uitlekgewicht = !!data.uitlekgewicht;
+        if ('merk' in data) p.merk = String(data.merk || '').trim();
         p.gewijzigd = nu();
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
-        if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
+        if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         minimumControleren(oudeNaam); minimumControleren(p.naam);
         return alles();
       }
@@ -546,8 +549,8 @@
             catalogusBijwerken(bestaand);
           } else {
             const voorbeeld = S.producten.find((p) => zelfde(p.naam, b.naam));
-            const uitlek = !!(voorbeeld || S.catalogus.find((x) => zelfde(x.naam, b.naam)) || {}).uitlekgewicht;
-            S.producten.push({ uitlekgewicht: uitlek, id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
+            const bekend = voorbeeld || S.catalogus.find((x) => zelfde(x.naam, b.naam)) || {};
+            S.producten.push({ uitlekgewicht: !!bekend.uitlekgewicht, merk: bekend.merk || '', id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
               datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu(),
               ...(inh.inhoud ? inh : voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });

@@ -158,6 +158,30 @@ async function main() {
   d = await api('GET', 'alles');
   controle(d.producten.find((p) => p.naam === 'Kikkererwten').uitlekgewicht === false && d.catalogus.find((c) => c.naam === 'Kikkererwten').uitlekgewicht === false, 'uitlekgewicht uitvinken bewaard');
 
+  // merk: invullen in de catalogus, overnemen naar de voorraad, tonen en zoeken
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  await page.click('[data-cat="Kikkererwten"]');
+  await page.click('#c-bewerk');
+  await page.fill('#cf-merk', 'Bonduelle');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.catalogus.find((c) => c.naam === 'Kikkererwten').merk === 'Bonduelle', 'merk bewaard in catalogus');
+  await page.click('#c-voorraad');
+  controle((await page.inputValue('#pf-merk')) === 'Bonduelle', 'merk ingevuld bij aan voorraad toevoegen');
+  await page.click('#pf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.producten.filter((p) => p.naam === 'Kikkererwten').some((p) => p.merk === 'Bonduelle'), 'merk bewaard in voorraad');
+  await page.goto(basis + '#voorraad');
+  await page.reload();
+  await page.fill('#zoek-voorraad', 'bonduelle');
+  controle(await page.isVisible('[data-groep]'), 'zoeken op merk vindt het product');
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  controle((await page.textContent('[data-cat="Kikkererwten"]')).includes('Bonduelle'), 'merk staat achter de naam in de catalogus');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();
