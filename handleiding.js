@@ -32,7 +32,7 @@ export const HANDLEIDING = `
 <ol>
   <li>Tik op <b>Toevoegen</b>.</li>
   <li>Typ de <b>naam</b>. Na twee letters verschijnen bekende namen als knopjes; kies je er een, dan worden eenheid, plaats, categorie, datumtype en prijzen overgenomen.</li>
-  <li>Vul <b>hoeveelheid</b> en <b>eenheid</b> in (stuks, g, kg, l, pak, blik …). Bij telbare eenheden kun je ook de <b>inhoud per stuk</b> invullen, bv. 2 pak à 500 g.</li>
+  <li>Vul <b>hoeveelheid</b> en <b>eenheid</b> in (stuks, g, kg, l, pak, blik …). Bij telbare eenheden kun je ook de <b>inhoud per stuk</b> invullen, bv. 2 pak à 500 g. Is het gewicht een <b>uitlekgewicht</b> (bv. groenten of fruit in blik of bokaal), zet dan het vinkje <b>Uitlekgewicht</b> aan; dat staat dan overal bij het gewicht.</li>
   <li>Kies de <b>plaats</b> (Koelkast, Diepvries, Voorraadkast …).</li>
   <li>Vul <b>Houdbaar tot</b> in, of tik op een snelknop: +3 dagen, +1 week, +1 maand, +1 jaar of Geen datum.</li>
   <li>Kies het soort datum (zie hieronder).</li>

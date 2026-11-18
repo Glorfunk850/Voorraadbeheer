@@ -230,6 +230,7 @@
     for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype', 'barcode']) if (p[k]) c[k] = p[k];
     if (p.hoeveelheid > 0) c.hoeveelheid = p.hoeveelheid;
     if ('inhoud' in p) { c.inhoud = p.inhoud > 0 ? p.inhoud : null; c.inhoud_eenheid = p.inhoud > 0 ? p.inhoud_eenheid || '' : ''; }
+    if ('uitlekgewicht' in p) c.uitlekgewicht = !!p.uitlekgewicht;
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
   }
@@ -258,7 +259,7 @@
     instellingen: S.instellingen,
   }));
   const fout = (status, bericht) => { const e = new Error(bericht); e.status = status; throw e; };
-  const VELDEN = ['naam', 'categorie', 'hoeveelheid', 'eenheid', 'locatie', 'aankoopdatum', 'vervaldatum', 'datumtype', 'minimum', 'notitie', 'barcode', 'inhoud', 'inhoud_eenheid'];
+  const VELDEN = ['naam', 'categorie', 'hoeveelheid', 'eenheid', 'locatie', 'aankoopdatum', 'vervaldatum', 'datumtype', 'minimum', 'notitie', 'barcode', 'inhoud', 'inhoud_eenheid', 'uitlekgewicht'];
 
   // ------------------------------------------------------------------ barcode (Open Food Facts)
   const CAT_WOORDEN = [
@@ -338,9 +339,9 @@
 
   // ------------------------------------------------------------------ export
   function csvMaken() {
-    const kol = ['naam', 'hoeveelheid', 'eenheid', 'inhoud', 'inhoud_eenheid', 'locatie', 'categorie', 'vervaldatum', 'datumtype', 'minimum', 'aankoopdatum', 'notitie', 'barcode'];
+    const kol = ['naam', 'hoeveelheid', 'eenheid', 'inhoud', 'inhoud_eenheid', 'locatie', 'categorie', 'vervaldatum', 'datumtype', 'minimum', 'aankoopdatum', 'notitie', 'barcode', 'uitlekgewicht'];
     const cel = (v) => { const t = v == null ? '' : String(v); return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-    const regels = [kol.join(';'), ...alles().producten.map((p) => kol.map((k) => cel(k === 'hoeveelheid' || k === 'minimum' || k === 'inhoud' ? String(p[k] ?? '').replace('.', ',') : p[k])).join(';'))];
+    const regels = [kol.join(';'), ...alles().producten.map((p) => kol.map((k) => cel(k === 'hoeveelheid' || k === 'minimum' || k === 'inhoud' ? String(p[k] ?? '').replace('.', ',') : k === 'uitlekgewicht' ? (p[k] ? 'ja' : '') : p[k])).join(';'))];
     return '﻿' + regels.join('\r\n');
   }
   function downloaden(naam, inhoud, type) {
@@ -456,6 +457,7 @@
       for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype']) if (k in data) c[k] = (data[k] || '').trim();
       if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
       if ('inhoud' in data) { const i = getal(data.inhoud); c.inhoud = i > 0 ? i : null; c.inhoud_eenheid = i > 0 ? data.inhoud_eenheid || '' : ''; }
+      if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
       c.laatst = nu();
       if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid, data.prijzen_inhoud);
       return alles();
@@ -489,6 +491,7 @@
         p.naam = p.naam.trim();
         p.hoeveelheid = getal(p.hoeveelheid) || 0; p.minimum = getal(p.minimum) || 0;
         p.inhoud = getal(p.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = '';
+        p.uitlekgewicht = !!p.uitlekgewicht;
         S.producten.push(p);
         catalogusBijwerken(p);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
@@ -504,6 +507,7 @@
         if ('hoeveelheid' in data) p.hoeveelheid = getal(data.hoeveelheid) || 0;
         if ('minimum' in data) p.minimum = getal(data.minimum) || 0;
         if ('inhoud' in data) { p.inhoud = getal(data.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = ''; }
+        if ('uitlekgewicht' in data) p.uitlekgewicht = !!data.uitlekgewicht;
         p.gewijzigd = nu();
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
@@ -542,7 +546,8 @@
             catalogusBijwerken(bestaand);
           } else {
             const voorbeeld = S.producten.find((p) => zelfde(p.naam, b.naam));
-            S.producten.push({ id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
+            const uitlek = !!(voorbeeld || S.catalogus.find((x) => zelfde(x.naam, b.naam)) || {}).uitlekgewicht;
+            S.producten.push({ uitlekgewicht: uitlek, id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
               datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu(),
               ...(inh.inhoud ? inh : voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });
