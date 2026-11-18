@@ -1,18 +1,19 @@
 // Service worker: laat de app installeren en offline werken.
 // Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v32';
+const VERSIE = 'voorraad-v33';
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
-  './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'parser.js', 'layout.js', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'manifest.webmanifest',
   'icoon.svg', 'icoon.png', 'icoon-192.png', 'icoon-512.png', 'icoon-maskable-512.png',
 ];
-// pdf-lezer: los bewaard, zodat één ontbrekend bestand de installatie niet tegenhoudt
+// pdf-lezer, QR-codes en het serveradres: los bewaard, zodat één ontbrekend bestand de installatie niet tegenhoudt
 const PDF_BESTANDEN = [
   'vendor/pdf.min.mjs', 'vendor/pdf.worker.min.mjs',
   'vendor/standard_fonts/LiberationSans-Regular.ttf', 'vendor/standard_fonts/LiberationSans-Bold.ttf',
   'vendor/standard_fonts/LiberationSans-Italic.ttf', 'vendor/standard_fonts/LiberationSans-BoldItalic.ttf',
   'vendor/wasm/jbig2.wasm', 'vendor/wasm/openjpeg.wasm', 'vendor/wasm/qcms_bg.wasm',
   'vendor/wasm/jbig2_nowasm_fallback.js', 'vendor/wasm/openjpeg_nowasm_fallback.js',
+  'sync-adres.js', 'vendor/qrcode.js', // ook los: ontbreekt sync-adres.js, dan werkt de app gewoon
 ];
 
 self.addEventListener('install', (e) => {

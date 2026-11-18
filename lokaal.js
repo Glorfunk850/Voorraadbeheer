@@ -74,7 +74,13 @@
     },
   });
   let S = STANDAARD();
-  const id = () => S.volgendId++;
+  // Met synchronisatie maken meerdere toestellen items aan: een id op basis van de tijd (in microseconden, plus
+  // toeval) botst dan niet. Zonder synchronisatie gewoon doortellen.
+  const id = () => {
+    const n = syncAan() ? Math.max(S.volgendId, Date.now() * 1000 + Math.floor(Math.random() * 1000)) : S.volgendId;
+    S.volgendId = n + 1;
+    return n;
+  };
 
   // ------------------------------------------------------------------ opslag
   let dbBelofte = null;
@@ -718,12 +724,289 @@
     },
   };
 
-  const klaar = laden().then(bestandLaden).then(() => {
+  // ------------------------------------------------------------------ synchroniseren tussen toestellen
+  // Zoals bij DuckDuckGo: een willekeurige koppelcode (160 bits) is het enige geheim. Daaruit worden op het toestel
+  // afgeleid: het nummer van de "ruimte" op de server, een schrijftoken en de sleutel om te versleutelen (AES-GCM).
+  // De server (sync-server/worker.mjs, op Cloudflare) krijgt alleen versleutelde bytes en kent de code niet.
+  // Andere toestellen koppelen met dezelfde code (typen, of de QR-code/link scannen).
+  // Bij elke wijziging (en bij het openen, en elke halve minuut zolang de app open staat) wordt opgehaald wat
+  // nieuw is op de server, samengevoegd met dit toestel (samenvoegen.js) en het resultaat terug bewaard.
+  const SYNC_SLEUTEL = 'sync';
+  const ALFABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford base32: geen I, L, O, U (niet te verwarren)
+  const M = window.voorraadSamenvoegen;
+  let Z = null; // { adres, code, versie, basis, laatst, fout } — staat alleen op dit toestel (IndexedDB)
+  let K = null; // sleutels afgeleid van Z.code
+  let syncTimer = null, syncKetting = Promise.resolve(), syncBezig = false, voorstel = null;
+  function syncAan() { return !!(Z && K); }
+  const enc = (t) => new TextEncoder().encode(t);
+  const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  const b64url = (b) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  function naarCode(bytes) {
+    let bits = 0, w = 0, uit = '';
+    for (const x of bytes) { w = ((w << 8) | x) & 0xffff; bits += 8; while (bits >= 5) { uit += ALFABET[(w >>> (bits - 5)) & 31]; bits -= 5; } }
+    if (bits) uit += ALFABET[(w << (5 - bits)) & 31];
+    return uit;
+  }
+  /** Code zoals getypt (met of zonder streepjes, kleine letters, O voor 0 …) → 20 bytes, of null als ze niet klopt. */
+  function codeBytes(tekst) {
+    const t = String(tekst || '').toUpperCase().replace(/[\s\-–.]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+    if (t.length !== 32 || [...t].some((c) => !ALFABET.includes(c))) return null;
+    const uit = new Uint8Array(20);
+    let bits = 0, w = 0, i = 0;
+    for (const c of t) { w = ((w << 5) | ALFABET.indexOf(c)) & 0xffff; bits += 5; if (bits >= 8) { uit[i++] = (w >>> (bits - 8)) & 255; bits -= 8; } }
+    return uit;
+  }
+  const codeNetjes = (bytes) => naarCode(bytes).match(/.{4}/g).join('-');
+  async function sleutelsMaken(bytes) {
+    const basis = await crypto.subtle.importKey('raw', bytes, 'HKDF', false, ['deriveBits', 'deriveKey']);
+    const hkdf = (info) => ({ name: 'HKDF', hash: 'SHA-256', salt: enc('voorraadbeheer-sync-v1'), info: enc(info) });
+    return {
+      ruimte: hex(await crypto.subtle.deriveBits(hkdf('ruimte'), basis, 128)),
+      token: b64url(await crypto.subtle.deriveBits(hkdf('schrijven'), basis, 256)),
+      aes: await crypto.subtle.deriveKey(hkdf('versleutelen'), basis, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']),
+    };
+  }
+  const zip = async (bytes, in_) => new Uint8Array(await new Response(new Blob([bytes]).stream()
+    .pipeThrough(in_ ? new CompressionStream('gzip') : new DecompressionStream('gzip'))).arrayBuffer());
+  // pakket: 'V', formaat 1, gecomprimeerd (0/1), 12 bytes iv, versleutelde gegevens
+  async function versleutelen(gegevens, k) {
+    let ruw = enc(JSON.stringify(gegevens)), gz = 0;
+    if (typeof CompressionStream === 'function') { ruw = await zip(ruw, true); gz = 1; }
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const geheim = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: enc(k.ruimte) }, k.aes, ruw));
+    const uit = new Uint8Array(15 + geheim.length);
+    uit.set([86, 1, gz]); uit.set(iv, 3); uit.set(geheim, 15);
+    return uit;
+  }
+  async function ontsleutelen(buffer, k) {
+    const b = new Uint8Array(buffer);
+    if (b[0] !== 86 || b[1] !== 1) throw Object.assign(new Error('Dit pakket op de server is niet van Voorraad, of van een nieuwere versie van de app. Werk de app bij.'), { syncFout: true });
+    let ruw;
+    try { ruw = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.slice(3, 15), additionalData: enc(k.ruimte) }, k.aes, b.slice(15))); } catch {
+      throw Object.assign(new Error('De gegevens op de server konden niet ontsleuteld worden. Klopt de code?'), { syncFout: true });
+    }
+    if (b[2] === 1) ruw = await zip(ruw, false);
+    return JSON.parse(new TextDecoder().decode(ruw));
+  }
+  const adresNetjes = (a) => {
+    let t = String(a || '').trim().replace(/\/+$/, '');
+    if (t && !/^https?:\/\//i.test(t)) t = 'https://' + t;
+    return t;
+  };
+  async function server(adres, k, methode, { versie = 0, nieuw = false, body } = {}) {
+    const h = {};
+    if (methode !== 'GET') h.Authorization = 'Bearer ' + k.token;
+    if (methode === 'GET' && versie) h['If-None-Match'] = `"${versie}"`;
+    if (methode === 'PUT') { h['Content-Type'] = 'application/octet-stream'; if (nieuw) h['If-None-Match'] = '*'; else h['If-Match'] = `"${versie}"`; }
+    let r;
+    try { r = await echteFetch(`${adres}/r/${k.ruimte}`, { method: methode, headers: h, body, cache: 'no-store' }); } catch {
+      throw Object.assign(new Error(navigator.onLine ? 'De synchronisatieserver is niet bereikbaar.' : 'Geen internet.'), { netwerk: true });
+    }
+    const et = r.headers.get('ETag');
+    return { status: r.status, versie: et ? +et.replace(/\D/g, '') : 0, r };
+  }
+  // wat gesynchroniseerd wordt: alles behalve wat per toestel is
+  function syncDeel(d) {
+    const uit = JSON.parse(JSON.stringify(d));
+    delete uit.laatste_backup;
+    if (uit.instellingen) delete uit.instellingen.auto_backup;
+    return uit;
+  }
+  /** Samengevoegde gegevens in gebruik nemen (met wat per toestel is) en opschonen. */
+  function inGebruik(m) {
+    const d = JSON.parse(JSON.stringify(m));
+    if (S.laatste_backup) d.laatste_backup = S.laatste_backup;
+    d.instellingen = d.instellingen || {};
+    if (typeof S.instellingen.auto_backup === 'boolean') d.instellingen.auto_backup = S.instellingen.auto_backup;
+    S = normaliseren(d);
+    // beide toestellen zagen dat iets bijna op was en zetten het op de lijst: één keer houden
+    const gezien = new Set();
+    S.boodschappen = S.boodschappen.filter((b) => {
+      if (b.bron !== 'minimum' || b.afgevinkt) return true;
+      const k = (b.naam || '').trim().toLowerCase();
+      if (gezien.has(k)) return false;
+      gezien.add(k); return true;
+    });
+    for (const n of new Set(S.producten.filter((p) => p.minimum > 0).map((p) => p.naam))) minimumControleren(n);
+  }
+  const syncMeld = (melding) => document.dispatchEvent(new CustomEvent('syncstatus', { detail: { melding } }));
+  const zBewaren = () => idb(SYNC_SLEUTEL, Z ? JSON.parse(JSON.stringify(Z)) : undefined, !Z).catch((f) => console.warn('Synchronisatie niet bewaard', f));
+
+  /** Eén ronde: ophalen, samenvoegen, versturen. Bij een botsing (ander toestel was sneller) opnieuw. */
+  async function syncRonde() {
+    if (!syncAan()) return;
+    // een ander venster van de app kan intussen gesynchroniseerd (of gestopt) hebben: diens stand overnemen
+    const opgeslagen = await idb(SYNC_SLEUTEL).catch(() => false);
+    if (opgeslagen === undefined && Z.versie) { Z = null; K = null; syncMeld(); return; }
+    if (opgeslagen && opgeslagen.code === Z.code && (opgeslagen.versie || 0) > (Z.versie || 0)) Object.assign(Z, opgeslagen);
+    const z = Z, k = K;
+    for (let poging = 0; poging < 5; poging++) {
+      const a = await server(z.adres, k, 'GET', { versie: z.versie });
+      if (Z !== z) return; // intussen gestopt
+      let extern, versie;
+      if (a.status === 304) { extern = z.basis; versie = z.versie; }
+      else if (a.status === 200) { extern = await ontsleutelen(await a.r.arrayBuffer(), k); versie = a.versie; }
+      else if (a.status === 404 && z.versie) {
+        // een ander toestel heeft alles van de server gewist
+        await syncStoppen();
+        syncMeld('De synchronisatie is gestopt: de gegevens werden op een ander toestel van de server gewist. Je gegevens op dit toestel blijven staan.');
+        return;
+      } else if (a.status === 404) { extern = null; versie = 0; }
+      else throw new Error(`De synchronisatieserver gaf een fout (${a.status}).`);
+
+      // samenvoegen in de wachtrij van de app: niet tegelijk met een wijziging op dit toestel
+      const samen = await inWachtrij(async () => {
+        const lokaal = syncDeel(S);
+        if (extern) {
+          const m = M.samenvoegen(z.basis || {}, lokaal, extern);
+          inGebruik(m);
+          if (!M.gelijk(syncDeel(S), lokaal)) {
+            await bewaren();
+            if (kanaal) kanaal.postMessage('gewijzigd');
+            document.dispatchEvent(new Event('syncgewijzigd'));
+          }
+        }
+        z.basis = extern; z.versie = versie; // dit is nu verwerkt
+        await zBewaren();
+        return syncDeel(S);
+      });
+      if (extern && M.gelijk(samen, extern)) { z.laatst = nu(); z.fout = null; await zBewaren(); return; } // niets nieuws te versturen
+      const b = await server(z.adres, k, 'PUT', { versie, nieuw: !extern, body: await versleutelen(samen, k) });
+      if (b.status === 200) { z.basis = samen; z.versie = b.versie; z.laatst = nu(); z.fout = null; await zBewaren(); return; }
+      if (b.status === 412) continue; // een ander toestel bewaarde intussen iets: opnieuw ophalen en samenvoegen
+      if (b.status === 401) throw Object.assign(new Error('De server weigert de wijzigingen. Koppel dit toestel opnieuw.'), { syncFout: true });
+      if (b.status === 413) throw Object.assign(new Error('Je gegevens zijn te groot voor de synchronisatieserver.'), { syncFout: true });
+      throw new Error(`De synchronisatieserver gaf een fout (${b.status}).`);
+    }
+    throw new Error('Synchroniseren lukte niet: de gegevens veranderden steeds opnieuw. Probeer het zo nog eens.');
+  }
+  function syncNu() {
+    clearTimeout(syncTimer); syncTimer = null;
+    if (!syncAan()) return Promise.resolve();
+    const r = syncKetting.then(async () => {
+      if (!syncAan()) return;
+      syncBezig = true; syncMeld();
+      try { await syncRonde(); } catch (f) {
+        if (Z) { Z.fout = f.message || 'Synchroniseren lukte niet.'; Z.foutNetwerk = !!f.netwerk; zBewaren(); }
+        if (!f.netwerk) console.error('Synchroniseren', f);
+        throw f;
+      } finally { syncBezig = false; syncMeld(); }
+    });
+    syncKetting = r.catch(() => {});
+    return r;
+  }
+  function syncPlannen(wacht = 1500) {
+    if (!syncAan()) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => syncNu().catch(() => {}), wacht);
+  }
+  async function syncStarten(z) {
+    const bytes = codeBytes(z.code);
+    if (!bytes) throw new Error('Deze code klopt niet: ze heeft 32 tekens (cijfers en letters).');
+    K = await sleutelsMaken(bytes);
+    Z = z;
+  }
+  async function syncStoppen() {
+    clearTimeout(syncTimer); syncTimer = null;
+    Z = null; K = null;
+    await zBewaren();
+    syncMeld();
+  }
+  async function syncLaden() {
+    try {
+      const z = await idb(SYNC_SLEUTEL);
+      if (z && z.code && z.adres) await syncStarten(z);
+    } catch (f) { console.warn('Synchronisatie niet geladen', f); }
+  }
+  async function serverControleren(adres) {
+    if (!/^https:\/\/[^/\s]+\.[^/\s]+|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(adres)) throw new Error('Dit is geen geldig adres. Het ziet er uit als https://voorraad-sync.jouwnaam.workers.dev');
+    let t = '';
+    try { t = await (await echteFetch(adres + '/', { cache: 'no-store' })).text(); } catch {
+      throw new Error(navigator.onLine ? `${adres} is niet bereikbaar. Klopt het adres?` : 'Geen internet.');
+    }
+    if (!t.includes('voorraad-sync')) throw new Error(`Op ${adres} staat geen synchronisatieserver van Voorraad.`);
+  }
+  // opnieuw synchroniseren bij het openen van de app, als het internet terug is, en elke halve minuut
+  document.addEventListener('visibilitychange', (e) => { if (!e.isTrusted || !syncAan()) return; if (document.visibilityState === 'visible') syncPlannen(100); else if (syncTimer) syncNu().catch(() => {}); });
+  window.addEventListener('online', () => syncPlannen(100));
+  setInterval(() => { if (syncAan() && document.visibilityState === 'visible' && !syncTimer && !syncBezig) syncNu().catch(() => {}); }, 30000);
+
+  const telling = (d) => ({ producten: (d.producten || []).length, recepten: (d.recepten || []).length,
+    boodschappen: (d.boodschappen || []).length, planning: (d.planning || []).length });
+  window.voorraadSync = {
+    /** Adres van de eigen server, ingevuld in sync-adres.js (leeg = zelf in te vullen). */
+    standaardAdres: () => adresNetjes(window.VOORRAAD_SYNC_ADRES || ''),
+    info() {
+      if (!Z) return null;
+      const bytes = codeBytes(Z.code);
+      const code = bytes ? codeNetjes(bytes) : '';
+      const link = `${location.origin}${location.pathname}#koppelen=${naarCode(bytes || [])}&server=${encodeURIComponent(Z.adres)}`;
+      return { adres: Z.adres, laatst: Z.laatst || null, fout: Z.fout || null, offline: !!Z.foutNetwerk, bezig: syncBezig, code, link };
+    },
+    /** Synchronisatie aanzetten met een nieuwe code; alles op dit toestel gaat versleuteld naar de server. */
+    async aanzetten(adres) {
+      adres = adresNetjes(adres);
+      await serverControleren(adres);
+      const bytes = crypto.getRandomValues(new Uint8Array(20));
+      await syncStarten({ adres, code: naarCode(bytes), versie: 0, basis: null, laatst: null, fout: null });
+      try { await syncNu(); } catch (f) { await syncStoppen(); throw f; }
+    },
+    /** Stap 1 van koppelen: met de code ophalen wat er op de server staat. Geeft het aantal items terug. */
+    async bekijken(code, adres) {
+      adres = adresNetjes(adres);
+      const bytes = codeBytes(code);
+      if (!bytes) throw new Error('Deze code klopt niet: ze heeft 32 tekens (cijfers en letters). Kijk ze nog eens na.');
+      await serverControleren(adres);
+      const k = await sleutelsMaken(bytes);
+      const a = await server(adres, k, 'GET');
+      if (a.status === 404) throw new Error('Met deze code staat er niets op de server. Kijk de code nog eens na.');
+      if (a.status !== 200) throw new Error(`De synchronisatieserver gaf een fout (${a.status}).`);
+      const extern = await ontsleutelen(await a.r.arrayBuffer(), k);
+      voorstel = { adres, code: naarCode(bytes), versie: a.versie, extern };
+      return { extern: telling(extern), lokaal: telling(S) };
+    },
+    /** Stap 2: koppelen. 'vervangen' = dit toestel krijgt de gegevens van de andere; 'samenvoegen' = beide houden. */
+    async koppelen(wijze) {
+      if (!voorstel) throw new Error('Typ eerst de code.');
+      const v = voorstel; voorstel = null;
+      await syncStarten({ adres: v.adres, code: v.code, versie: v.versie, basis: v.extern, laatst: null, fout: null });
+      await inWachtrij(async () => {
+        if (wijze === 'samenvoegen') {
+          // eigen items nieuwe id's geven, zodat ze niet botsen met die van de andere toestellen
+          const eigen = M.nieuweIds(syncDeel(S), id);
+          inGebruik(M.samenvoegen(null, eigen, v.extern));
+        } else inGebruik(v.extern);
+        await bewaren();
+        await zBewaren();
+        if (kanaal) kanaal.postMessage('gewijzigd');
+      });
+      try { await syncNu(); } catch { /* staat in de status; volgende keer opnieuw */ }
+    },
+    nu: () => syncNu(),
+    /** Stoppen op dit toestel; de gegevens blijven op het toestel (en op de server voor de andere toestellen). */
+    stoppen: () => syncStoppen(),
+    /** Alles van de server wissen; alle gekoppelde toestellen stoppen dan met synchroniseren. */
+    async wissen() {
+      if (!syncAan()) return;
+      const a = await server(Z.adres, K, 'DELETE');
+      if (a.status !== 204 && a.status !== 404) throw new Error(`Wissen lukte niet (fout ${a.status}).`);
+      await syncStoppen();
+    },
+  };
+
+  const klaar = laden().then(bestandLaden).then(syncLaden).then(() => {
+    if (syncAan()) syncPlannen(300);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   });
   const LEZEN = new Set(['status', 'alles', 'statistieken', 'barcode', 'ocr']);
   const echteFetch = window.fetch.bind(window);
   let wachtrij = Promise.resolve();
+  /** Iets doen met de gegevens, na de opdrachten van de app die al wachten (en niet tegelijk ermee). */
+  function inWachtrij(f) {
+    const r = wachtrij.then(f);
+    wachtrij = r.catch(() => {});
+    return r;
+  }
   window.fetch = (url, opties = {}) => {
     const u = typeof url === 'string' ? url : url.url;
     if (!u.startsWith('api/')) return echteFetch(url, opties);
@@ -743,6 +1026,7 @@
           }
           if (kanaal) kanaal.postMessage('gewijzigd');
           autoBackup();
+          syncPlannen();
         }
         return new Response(JSON.stringify(antwoord), { status: 200, headers: { 'Content-Type': 'application/json' } });
       } catch (e) {

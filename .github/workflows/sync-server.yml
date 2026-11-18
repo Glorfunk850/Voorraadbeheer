@@ -1,0 +1,60 @@
+name: Synchronisatieserver plaatsen
+
+# Zet de synchronisatieserver (map sync-server) op je eigen gratis Cloudflare-account en vult daarna zelf het adres
+# in sync-adres.js in, zodat de app het kent. Eenmalig instellen: zie LEESMIJ.md → "Synchroniseren tussen toestellen".
+# Starten: tabblad Actions → "Synchronisatieserver plaatsen" → Run workflow. Opnieuw starten mag altijd (bv. na een update).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  plaatsen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Controleren of de Cloudflare-gegevens ingevuld zijn
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::error::Vul eerst de geheimen CLOUDFLARE_API_TOKEN en CLOUDFLARE_ACCOUNT_ID in (Settings → Secrets and variables → Actions). Zie LEESMIJ.md."
+            exit 1
+          fi
+
+      - name: Server plaatsen op Cloudflare
+        id: plaatsen
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: sync-server
+          wranglerVersion: "4"
+          command: deploy
+
+      - name: Adres invullen in sync-adres.js
+        env:
+          URL: ${{ steps.plaatsen.outputs.deployment-url }}
+          UITVOER: ${{ steps.plaatsen.outputs.command-output }}
+        run: |
+          adres="$URL"
+          if [ -z "$adres" ]; then adres=$(printf '%s' "$UITVOER" | grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -1); fi
+          if [ -z "$adres" ]; then
+            echo "::error::Het adres van de server werd niet gevonden. Open in Cloudflare 'Workers & Pages' en kies een workers.dev-subdomein, en start deze actie opnieuw."
+            exit 1
+          fi
+          adres="${adres%/}"
+          echo "Adres: $adres"
+          sleep 5
+          curl -fsS "$adres/" | grep -q voorraad-sync && echo "De server antwoordt." || echo "::warning::De server antwoordt nog niet. Dat kan de eerste minuten normaal zijn."
+          sed -i "s|^window.VOORRAAD_SYNC_ADRES = .*|window.VOORRAAD_SYNC_ADRES = '$adres';|" sync-adres.js
+          echo "### De synchronisatieserver staat online: $adres" >> "$GITHUB_STEP_SUMMARY"
+          if git diff --quiet; then echo "Het adres stond al in sync-adres.js."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Adres van de synchronisatieserver invullen"
+          git push

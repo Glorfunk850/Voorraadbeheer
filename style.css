@@ -397,3 +397,10 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .plan-recepten { max-height: 15rem; overflow-y: auto; margin-bottom: .4rem; border-bottom: 1px solid var(--lijn); }
 .plan-recepten .rij.gekozen .naam { color: var(--accent); font-weight: 600; }
 .plan-recepten .rij .rechts { color: var(--accent); font-weight: 700; }
+
+/* ---------- synchroniseren: code om een toestel te koppelen ---------- */
+.sync-code { border: 1px solid var(--lijn); border-radius: 14px; padding: .9rem; margin-bottom: .9rem; }
+.sync-qr { width: min(220px, 100%); margin: 0 auto .6rem; background: #fff; border-radius: 10px; padding: 6px; }
+.sync-qr svg { display: block; width: 100%; height: auto; }
+.sync-tekst { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1.05rem; letter-spacing: .04em;
+  text-align: center; word-break: break-all; user-select: all; -webkit-user-select: all; }

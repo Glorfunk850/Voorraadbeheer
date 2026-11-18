@@ -14,7 +14,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 32;
+const APP_VERSIE = 33;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1841,6 +1841,114 @@ function autoBlokTekenen() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Synchroniseren tussen toestellen (versleuteld; zie lokaal.js en sync-server/)
+// ---------------------------------------------------------------------------
+const V = () => window.voorraadSync;
+let qrBelofte = null;
+const qrLaden = () => qrBelofte || (qrBelofte = new Promise((ok, nee) => {
+  if (window.qrcode) return ok(window.qrcode);
+  const s = document.createElement('script');
+  s.src = 'vendor/qrcode.js';
+  s.onload = () => ok(window.qrcode);
+  s.onerror = () => { qrBelofte = null; nee(new Error('QR-code kon niet geladen worden')); };
+  document.head.appendChild(s);
+}));
+const inhoudTekst = (t) => `${t.producten} ${t.producten === 1 ? 'product' : 'producten'}, ${t.recepten} ${t.recepten === 1 ? 'recept' : 'recepten'} en ${t.boodschappen} ${t.boodschappen === 1 ? 'boodschap' : 'boodschappen'}`;
+function syncBlokTekenen() {
+  const blok = $('#sync-blok');
+  if (!blok || !V()) return;
+  const titel = '<div class="sectie-titel">Synchroniseren tussen toestellen</div>';
+  const p = (tekst) => `<p class="stil" style="margin-bottom:.8rem;font-size:.92rem;line-height:1.55">${tekst}</p>`;
+  const z = V().info();
+  if (!z) {
+    const standaard = V().standaardAdres();
+    blok.innerHTML = titel + p('Houd je voorraad, boodschappen, recepten en planning gelijk op al je toestellen. Alles wordt op het toestel zelf versleuteld met een geheime code die alleen jouw toestellen kennen: de server kan je gegevens niet lezen.')
+      + (standaard ? '' : `<label class="veld"><span>Adres van je synchronisatieserver (zie LEESMIJ)</span>
+        <input id="s-adres" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://voorraad-sync.jouwnaam.workers.dev"></label>`)
+      + `<div class="knoppenrij"><button class="knop primair" id="s-aan">Synchronisatie aanzetten</button><button class="knop" id="s-koppel">Koppelen met een code</button></div>`;
+  } else {
+    const st = z.bezig ? 'Bezig met synchroniseren…' : z.fout ? '' : z.laatst ? `Aan. Laatst gesynchroniseerd ${tijdstipTekst(z.laatst)}.` : 'Aan.';
+    blok.innerHTML = titel + p((st ? esc(st) : '') + (z.fout && !z.bezig ? `<b style="color:var(--rood)">${esc(z.fout)}</b>${z.offline ? ' Je wijzigingen worden verstuurd zodra het weer lukt.' : ''}` : '')
+      + '<br>Je gegevens worden versleuteld; de server kan ze niet lezen.')
+      + (ui.syncCode ? `<div class="sync-code">
+          <p style="font-size:.92rem;line-height:1.55;margin-bottom:.6rem">Op je andere toestel: open Voorraad → Instellingen → <b>Koppelen met een code</b> en typ deze code. Of scan de QR-code met de camera${isIOS() ? '' : ' (op een iPhone: typ de code in de app)'}.</p>
+          <div class="sync-qr" id="s-qr"></div>
+          <div class="sync-tekst">${esc(z.code)}</div>
+          <p class="stil" style="font-size:.85rem;line-height:1.5;margin:.6rem 0">Houd deze code geheim: wie ze heeft, kan je gegevens lezen. Bewaar ze ook op een veilige plek: verlies je al je toestellen, dan haal je er alles mee terug.</p>
+          <div class="knoppenrij"><button class="knop" id="s-kopieer">Code kopiëren</button><button class="knop" id="s-verberg">Verbergen</button></div></div>`
+        : '')
+      + `<div class="knoppenrij">${ui.syncCode ? '' : '<button class="knop primair" id="s-toon">Toestel koppelen</button>'}<button class="knop" id="s-nu">Nu synchroniseren</button><button class="knop" id="s-stop">Stoppen</button></div>`;
+    if (ui.syncCode) qrLaden().then((qr) => {
+      const plek = $('#s-qr', blok);
+      if (!plek) return;
+      const q = qr(0, 'M'); q.addData(z.link); q.make();
+      plek.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    }).catch(() => { const plek = $('#s-qr', blok); if (plek) plek.hidden = true; });
+  }
+  const knop = (id, f) => { const b = $('#' + id, blok); if (b) b.onclick = f; };
+  const fout = (f) => toast(f && f.message ? f.message : 'Dat lukte niet.', null, null, true);
+  const adres = () => V().standaardAdres() || ($('#s-adres', blok)?.value || '').trim();
+  knop('s-aan', async () => {
+    if (!adres()) { toast('Vul eerst het adres van je synchronisatieserver in. Hoe je die maakt, staat in de LEESMIJ.'); $('#s-adres', blok)?.focus(); return; }
+    toast('Synchronisatie aanzetten…', null, null, true);
+    try { await V().aanzetten(adres()); } catch (f) { return fout(f); }
+    ui.syncCode = true;
+    toast('Synchronisatie staat aan. Koppel nu je andere toestellen met de code.');
+    syncBlokTekenen();
+  });
+  knop('s-koppel', () => syncKoppelen('', adres()));
+  knop('s-toon', () => { ui.syncCode = true; syncBlokTekenen(); });
+  knop('s-verberg', () => { ui.syncCode = false; syncBlokTekenen(); });
+  knop('s-kopieer', async () => {
+    try { await navigator.clipboard.writeText(z.code); toast('Code gekopieerd.'); } catch { toast(`De code is ${z.code}`, null, null, true); }
+  });
+  knop('s-nu', async () => {
+    try { await V().nu(); toast('Gesynchroniseerd.'); } catch (f) { fout(f); }
+    syncBlokTekenen();
+  });
+  knop('s-stop', async () => {
+    if (!(await vraag('Synchronisatie op dit toestel stoppen? Je gegevens blijven op dit toestel staan; je andere toestellen blijven gewoon synchroniseren.', { ja: 'Stoppen' }))) return;
+    const wissen = await vraag('Ook alles van de server wissen? Doe dit alleen als je op geen enkel toestel meer wilt synchroniseren: je andere toestellen stoppen dan ook (hun gegevens blijven wel staan).', { ja: 'Ook wissen', gevaar: true });
+    try { if (wissen) await V().wissen(); else await V().stoppen(); } catch (f) { return fout(f); }
+    ui.syncCode = false;
+    toast(wissen ? 'Gestopt en van de server gewist.' : 'Synchronisatie gestopt op dit toestel.');
+    syncBlokTekenen();
+  });
+}
+/** Dit toestel koppelen aan een bestaande synchronisatie (code getypt, of uit een gescande link). */
+async function syncKoppelen(code, adres) {
+  const viaSafari = isIOS() && !alsApp();
+  code = await vraag((viaSafari ? 'Let op: dit opent in Safari. Wil je de app op je beginscherm koppelen, open dan die app en typ daar deze code. ' : '')
+    + 'Typ de code die je andere toestel toont (Instellingen → Synchroniseren → Toestel koppelen):', { invoer: true, standaard: code, ja: 'Verder' });
+  if (!code || !code.trim()) return;
+  adres = adres || V().standaardAdres();
+  if (!adres) {
+    adres = ((await vraag('Adres van je synchronisatieserver (hetzelfde als op je andere toestel):', { invoer: true, ja: 'Verder' })) || '').trim();
+    if (!adres) return;
+  }
+  toast('Gegevens ophalen…', null, null, true);
+  let r;
+  try { r = await V().bekijken(code, adres); } catch (f) { return toast(f.message || 'Dat lukte niet.', null, null, true); }
+  toastWeg();
+  const lokaal = r.lokaal.producten + r.lokaal.recepten + r.lokaal.boodschappen + r.lokaal.planning;
+  let wijze = 'vervangen';
+  if (lokaal) {
+    if (await vraag(`Op je andere toestellen staan ${inhoudTekst(r.extern)}. Op dit toestel staan ook al ${inhoudTekst(r.lokaal)}. Alles samenvoegen? (Wat op beide staat, kan dan dubbel staan.)`, { ja: 'Samenvoegen' })) wijze = 'samenvoegen';
+    else if (!(await vraag('Dan de gegevens op dit toestel vervangen door die van je andere toestellen?', { ja: 'Vervangen', gevaar: true }))) return;
+  } else if (!(await vraag(`Op je andere toestellen staan ${inhoudTekst(r.extern)}. Dit toestel koppelen?`, { ja: 'Koppelen' }))) return;
+  try { await V().koppelen(wijze); } catch (f) { return toast(f.message || 'Dat lukte niet.', null, null, true); }
+  await api('GET', 'alles', undefined, true).catch(() => {});
+  toast('Gekoppeld. Wijzigingen op je toestellen worden voortaan vanzelf gesynchroniseerd.');
+  if (ui.view === 'instellingen') tekenen();
+}
+document.addEventListener('syncstatus', (e) => {
+  if (ui.view === 'instellingen') syncBlokTekenen();
+  if (e.detail?.melding) toast(e.detail.melding, null, null, true);
+});
+// gegevens kwamen binnen van een ander toestel: scherm bijwerken (niet midden in het invullen van iets)
+document.addEventListener('syncgewijzigd', () => { if (!bezig()) api('GET', 'alles', undefined, true).catch(() => {}); });
+
 // De app kon niet zelf om toestemming vragen (of kreeg nee): één keer per sessie een melding met een knop
 let toestemmingGemeld = false;
 document.addEventListener('bestandstatus', (e) => {
@@ -1919,6 +2027,7 @@ async function tekenInstellingen() {
     ${lijstBlok('Receptcategorieën', 'recept_categorieen', 'recept_categorie', 'Nieuwe categorie, bv. Italiaans')}
     ${lijstBlok('Maaltijden in de planner', 'maaltijden', 'maaltijd', 'Nieuwe maaltijd, bv. Vieruurtje')}
     <section class="sectie"><div class="sectie-titel">Overzicht</div><div id="stats" class="stil">Laden…</div></section>
+    <section class="sectie" id="sync-blok"></section>
     <section class="sectie" id="auto-blok"></section>
     <section class="sectie" id="bestand-blok"></section>
     <section class="sectie"><div class="sectie-titel">Back-up</div>
@@ -1926,9 +2035,10 @@ async function tekenInstellingen() {
       <div class="knoppenrij"><a class="knop" href="api/export.json" download>Back-up downloaden</a><a class="knop" href="api/export.csv" download>Voorraad als CSV</a>
       <button class="knop" id="i-terug">Back-up terugzetten</button></div></section>
     <section class="sectie"><div class="sectie-titel">Over</div>
-      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
+      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd (behalve als je synchronisatie aanzet: dan gaan je gegevens versleuteld naar je eigen server) en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
   installBlokTekenen();
   bestandBlokTekenen();
+  syncBlokTekenen();
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
   $$m('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
@@ -2015,10 +2125,18 @@ $('#bestand-backup').onchange = async (e) => {
 // Start
 // ---------------------------------------------------------------------------
 async function start() {
+  // gescande QR-code van een ander toestel: #koppelen=<code>&server=<adres>
+  const koppel = location.hash.startsWith('#koppelen=') ? new URLSearchParams(location.hash.slice(1)) : null;
+  if (koppel) history.replaceState(null, '', '#instellingen'); // de code niet in de adresbalk laten staan
   ui.view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'voorraad';
   try { status = await fetch('api/status').then((r) => r.json()); } catch { /* */ }
   try { await api('GET', 'alles'); } catch {
     $('#inhoud').innerHTML = '<div class="leeg"><b>De app kon niet starten</b>Herlaad de pagina. Gebruik geen privévenster.</div>';
+    return;
+  }
+  if (koppel && V()) {
+    if (V().info()) toast('Dit toestel synchroniseert al. Stop eerst bij Instellingen als je een andere code wilt gebruiken.', null, null, true);
+    else await syncKoppelen(koppel.get('koppelen') || '', koppel.get('server') || '');
     return;
   }
   bestandHerinneren();
