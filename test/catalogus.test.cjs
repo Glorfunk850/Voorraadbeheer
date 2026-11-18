@@ -189,7 +189,18 @@ async function main() {
   await page.fill('#bt-naam', 'bonduel');
   await page.dispatchEvent('#bt-naam', 'input');
   controle((await page.textContent('#bt-lijst')).includes('Kikkererwten'), 'boodschap: zoeken op merk toont het catalogusproduct');
+  await page.fill('#bt-naam', '');
+  await page.dispatchEvent('#bt-naam', 'input');
+  await page.fill('#bt-zoek', 'kikker');
+  await page.dispatchEvent('#bt-zoek', 'input');
+  controle((await page.$$('#bt-lijst [data-kies]')).length === 1 && (await page.textContent('#bt-lijst')).includes('Kikkererwten'), 'boodschap: zoekveld filtert de catalogus');
+  await page.fill('#bt-zoek', 'bestaatniet');
+  await page.dispatchEvent('#bt-zoek', 'input');
+  controle((await page.textContent('#bt-lijst')).includes('Niets gevonden'), 'boodschap: zoekveld zonder resultaat');
+  await page.fill('#bt-zoek', 'bonduelle');
+  await page.dispatchEvent('#bt-zoek', 'input');
   await page.click('#bt-lijst [data-kies]');
+  controle((await page.inputValue('#bt-zoek')) === '', 'boodschap: zoekveld leeg na kiezen');
   controle((await page.inputValue('#bt-naam')) === 'Kikkererwten' && (await page.inputValue('#bt-merk')) === 'Bonduelle', 'boodschap: kiezen uit catalogus vult naam en merk in');
   await page.click('#bt-ok');
   await page.waitForTimeout(250);
