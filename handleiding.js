@@ -62,7 +62,7 @@ export const HANDLEIDING = `
 <p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.</p>
 
 <h3>Catalogus</h3>
-<p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, alfabetisch en met een zoekveld. Bij wat je nu in huis hebt, staat <i>in huis</i>. Met <b>Toevoegen</b> zet je er zelf een product bij, zonder dat het in je voorraad komt. Tik op een product: van daaruit zet je het terug in je voorraad of op je lijst, <b>bewerk</b> je het (naam, eenheid, categorie, plaats, inhoud, prijzen), of haal je het uit de catalogus. Geef je een product een nieuwe naam, dan verandert die ook in je voorraad en op je boodschappenlijst.</p>
+<p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, alfabetisch en met een zoekveld. Bij wat je nu in huis hebt, staat <i>in huis</i>. Met <b>Toevoegen</b> zet je er zelf een product bij, zonder dat het in je voorraad komt. Tik op een product: van daaruit zet je het terug in je voorraad of op je lijst, <b>bewerk</b> je het (naam, aantal, categorie, plaats, inhoud, prijzen), of haal je het uit de catalogus. Geef je een product een nieuwe naam, dan verandert die ook in je voorraad en op je boodschappenlijst.</p>
 
 <h2>Boodschappen</h2>
 <p>Op je boodschappenlijst komt wat je zelf toevoegt, wat onder je minimumvoorraad zakt en wat je vanuit een recept of de planner kiest.</p>
