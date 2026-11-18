@@ -349,6 +349,18 @@ async function main() {
   await page.reload();
   const lijstTekst = (await page.textContent('#inhoud')).replace(/\s+/g, ' ');
   controle(lijstTekst.includes('Colruyt · € 9,00') && lijstTekst.includes('Aldi · € 6,00'), 'boodschappen: prijs per merk berekend');
+  // prijzen per merk op de lijst: 2 stuks koffie van elk merk met een prijs (zonder inhoud: alleen Huismerk heeft er een)
+  d = await api('GET', 'alles');
+  const huis = d.boodschappen.find((b) => b.naam === 'Koffie' && b.merk === 'Huismerk');
+  await api('PUT', `boodschappen/${huis.id}`, { inhoud: 500, inhoud_eenheid: 'g' });
+  await page.reload();
+  const knoppen = await page.$$eval(`[data-merkkies="${huis.id}"]`, (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(knoppen.length === 2 && knoppen[0].startsWith('Huismerk € 6,00') && knoppen[1].startsWith('Douwe € 10,00'), 'boodschappen: prijzen per merk onder de boodschap: ' + knoppen.join(' | '));
+  await page.click(`[data-merkkies="${huis.id}"][data-merk="Douwe"]`);
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.boodschappen.find((b) => b.id === huis.id).merk === 'Douwe', 'boodschappen: merk kiezen via de prijs');
+  controle(!!(await page.$(`[data-merkkies="${huis.id}"][data-merk="Douwe"].aan`)), 'boodschappen: gekozen merk aangeduid');
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();

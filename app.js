@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 51;
+const APP_VERSIE = 52;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -308,6 +308,20 @@ function kostprijs(b, p) {
   if (n === null && !bi && TELBAAR.has(e) && p.inhoud > 0) n = omrekenen(b.hoeveelheid * p.inhoud, p.inhoud_eenheid, p.per); // via de inhoud van de prijs
   if (n === null && !bi && c && zelfde(c.eenheid, e)) n = vanProduct(b.hoeveelheid, c, p.per); // via inhoud per verpakking
   return n === null ? null : n * p.prijs;
+}
+/**
+ * Prijzen per merk voor een boodschap (zelfde inhoud en hoeveelheid): per merk de goedkoopste winkel.
+ * Alleen merken met een eigen prijs; [{ merk, p, kost }], van goedkoop naar duur.
+ */
+function merkPrijzen(b) {
+  const merken = uniek((catalogusVan(b.naam)?.prijzen || []).map((p) => String(p.merk || '').trim()).filter(Boolean));
+  const uit = [];
+  for (const merk of merken) {
+    const p = prijzenSorteren(prijzenVan(b.naam, { ...b, merk }))[0];
+    if (!p || prijsMerk(p) !== merk.toLowerCase()) continue; // geen eigen prijs voor dit merk (en deze inhoud)
+    uit.push({ merk, p, kost: kostprijs(b, p) });
+  }
+  return uit.sort((x, y) => (x.kost ?? Infinity) - (y.kost ?? Infinity) || x.merk.localeCompare(y.merk, 'nl'));
 }
 const lijstMelding = (naam, inh) => { const g = goedkoopste(naam, inh); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
 const prijsRegelTekst = (p) => `${euro(p.prijs)} per ${perTekst(p.per)}`;
@@ -1080,9 +1094,14 @@ function tekenBoodschappen() {
   const rij = ({ b, p }) => {
     const k = p ? kostprijs(b, p) : null;
     const prijs = !p ? 'Prijs invullen' : `${ui.winkel ? '' : p.winkel + ' · '}${k !== null ? euro(k) : prijsRegelTekst(p)}`;
+    // prijzen van de merken (als er meer dan één merk een prijs heeft, of de boodschap zelf geen merk heeft): tik om dat merk te kiezen
+    const mp = b.afgevinkt ? [] : merkPrijzen(b);
+    const toonMerken = mp.length > 1 || (mp.length === 1 && prijsMerk(b) !== mp[0].merk.toLowerCase());
+    const merkRegel = toonMerken ? `<span class="merk-prijzen">${mp.map(({ merk, p: mpr, kost }) =>
+      `<button type="button" class="merk-prijs${prijsMerk(b) === merk.toLowerCase() ? ' aan' : ''}" data-merkkies="${b.id}" data-merk="${esc(merk)}" aria-label="${esc(`${merk} kiezen voor ${b.naam}`)}">${esc(merk)} ${esc(kost !== null ? euro(kost) : prijsRegelTekst(mpr))}${ui.winkel && zelfde(mpr.winkel, ui.winkel) ? '' : ` <span class="stil">${esc(mpr.winkel)}</span>`}</button>`).join('')}</span>` : '';
     return `<li><label class="rij vink">
       <input type="checkbox" data-vink="${b.id}" ${b.afgevinkt ? 'checked' : ''}><span class="vakje"></span>
-      <span class="naam"><button type="button" class="naam-knop" data-bewerk="${b.id}" aria-label="${esc(b.naam)} bewerken">${esc(b.naam)}${merkTekst(b)}</button><small>${b.bron === 'minimum' && !b.afgevinkt ? 'Onder je minimumvoorraad · ' : ''}<button type="button" class="prijs-link${p ? '' : ' leeg'}" data-prijs="${b.id}">${esc(prijs)}</button></small></span>
+      <span class="naam"><button type="button" class="naam-knop" data-bewerk="${b.id}" aria-label="${esc(b.naam)} bewerken">${esc(b.naam)}${merkTekst(b)}</button><small>${b.bron === 'minimum' && !b.afgevinkt ? 'Onder je minimumvoorraad · ' : ''}<button type="button" class="prijs-link${p ? '' : ' leeg'}" data-prijs="${b.id}">${esc(prijs)}</button></small>${merkRegel}</span>
       <span class="aantal-stap">
         <button type="button" class="stap${b.hoeveelheid === null ? ' verborgen' : ''}" data-min="${b.id}" aria-label="Minder ${esc(b.naam)}" ${b.hoeveelheid > stapVan(b.eenheid) ? '' : 'disabled'}>−</button>
         <button type="button" class="stap-getal" data-hv="${b.id}" aria-label="Hoeveelheid en eenheid van ${esc(b.naam)} aanpassen">${b.hoeveelheid === null || b.hoeveelheid === undefined ? '' : esc(`${fmt(b.hoeveelheid)} ${b.eenheid || 'stuks'}`)}${boodschapInhoudVan(b) ? `<small class="inhoud-per">à ${esc(hoeveelTekst(boodschapInhoudVan(b).per, boodschapInhoudVan(b).eenheid))}</small>` : ''}</button>
@@ -1136,6 +1155,14 @@ function tekenBoodschappen() {
     if (b) prijzenPaneel(b.naam, catalogusVan(b.naam)?.eenheid || S.producten.find((p) => zelfde(p.naam, b.naam))?.eenheid || b.eenheid || 'stuks');
   }));
   $$m('[data-hv]').forEach((s) => (s.onclick = (e) => { e.preventDefault(); hoeveelheidKiezen(+s.dataset.hv); }));
+  // een ander merk kiezen voor een boodschap (de prijs wordt opnieuw berekend)
+  $$m('[data-merkkies]').forEach((k) => (k.onclick = async (e) => {
+    e.preventDefault();
+    const b = S.boodschappen.find((x) => x.id === +k.dataset.merkkies);
+    if (!b || zelfde(b.merk || '', k.dataset.merk)) return;
+    await api('PUT', `boodschappen/${b.id}`, { merk: k.dataset.merk });
+    toast(`${b.naam}: ${k.dataset.merk}`);
+  }));
   const klaar = $m('#klaar');
   if (klaar) klaar.onclick = () => winkelenAfronden(af.map((x) => x.b.id));
 }
