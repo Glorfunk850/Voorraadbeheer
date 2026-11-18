@@ -411,6 +411,28 @@
       S.catalogus = S.catalogus.filter((c) => !zelfde(c.naam, data && data.naam));
       return alles();
     }
+    // Catalogus: zelf een product toevoegen (POST) of bewerken (PUT, met oudeNaam), los van je voorraad
+    if (bron === 'catalogus' && (methode === 'POST' || methode === 'PUT')) {
+      const naam = ((data && data.naam) || '').trim();
+      if (!naam) fout(400, 'Vul een naam in.');
+      const oudeNaam = methode === 'PUT' ? ((data && data.oudeNaam) || '').trim() : '';
+      let c = methode === 'PUT' ? S.catalogus.find((x) => zelfde(x.naam, oudeNaam)) : null;
+      if (methode === 'PUT' && !c) fout(404, 'Dit product staat niet (meer) in de catalogus.');
+      if (S.catalogus.some((x) => x !== c && zelfde(x.naam, naam))) fout(409, `${naam} staat al in de catalogus.`);
+      if (!c) { c = { naam, aantal: 0, eerst: nu() }; S.catalogus.push(c); }
+      if (oudeNaam && !zelfde(oudeNaam, naam)) {
+        // nieuwe naam: ook in je voorraad, op je boodschappenlijst en bij de barcodes
+        for (const p of S.producten) if (zelfde(p.naam, oudeNaam)) p.naam = naam;
+        for (const b of S.boodschappen) if (zelfde(b.naam, oudeNaam)) b.naam = naam;
+        for (const b of Object.values(S.barcodes)) if (b && zelfde(b.naam, oudeNaam)) b.naam = naam;
+      }
+      c.naam = naam;
+      for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype']) if (k in data) c[k] = (data[k] || '').trim();
+      if ('inhoud' in data) { const i = getal(data.inhoud); c.inhoud = i > 0 ? i : null; c.inhoud_eenheid = i > 0 ? data.inhoud_eenheid || '' : ''; }
+      c.laatst = nu();
+      if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid);
+      return alles();
+    }
 
     if (bron === 'planning') {
       const controleren = (m) => {
