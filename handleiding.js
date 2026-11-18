@@ -76,7 +76,7 @@ export const HANDLEIDING = `
 <h3>Op de lijst</h3>
 <ul>
   <li><b>− en +</b> naast een boodschap veranderen het aantal: per stuk, per 100 g of 100 ml, per 0,5 kg of 0,5 l.</li>
-  <li>Tik op het <b>getal</b> om zelf een aantal te typen.</li>
+  <li>Tik op het <b>getal met de eenheid</b> (bv. 2 stuks, 500 g) om het aantal te typen en de eenheid te kiezen: stuks, g, kg, ml, l, pak, fles ...</li>
   <li>Tik op de <b>naam</b> om de boodschap te bewerken: naam, aantal, eenheid, prijzen per winkel, het product in je voorraad bewerken (of er een product van maken), of ze van de lijst halen.</li>
   <li><b>×</b> haalt een boodschap meteen weg.</li>
 </ul>

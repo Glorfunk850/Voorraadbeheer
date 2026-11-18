@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 37;
+const APP_VERSIE = 38;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -823,7 +823,7 @@ function tekenBoodschappen() {
       <span class="naam"><button type="button" class="naam-knop" data-bewerk="${b.id}" aria-label="${esc(b.naam)} bewerken">${esc(b.naam)}</button><small>${b.bron === 'minimum' && !b.afgevinkt ? 'Onder je minimumvoorraad · ' : ''}<button type="button" class="prijs-link${p ? '' : ' leeg'}" data-prijs="${b.id}">${esc(prijs)}</button></small></span>
       <span class="aantal-stap">
         <button type="button" class="stap${b.hoeveelheid === null ? ' verborgen' : ''}" data-min="${b.id}" aria-label="Minder ${esc(b.naam)}" ${b.hoeveelheid > stapVan(b.eenheid) ? '' : 'disabled'}>−</button>
-        <button type="button" class="stap-getal" data-hv="${b.id}" aria-label="Hoeveelheid ${esc(b.naam)} aanpassen">${esc(hoeveelTekst(b.hoeveelheid, b.eenheid))}</button>
+        <button type="button" class="stap-getal" data-hv="${b.id}" aria-label="Hoeveelheid en eenheid van ${esc(b.naam)} aanpassen">${b.hoeveelheid === null || b.hoeveelheid === undefined ? '' : esc(`${fmt(b.hoeveelheid)} ${b.eenheid || 'stuks'}`)}</button>
         <button type="button" class="stap" data-plus="${b.id}" aria-label="Meer ${esc(b.naam)}">+</button></span>
       <button class="weg" data-weg="${b.id}" aria-label="Verwijderen">×</button></label></li>`;
   };
@@ -873,14 +873,43 @@ function tekenBoodschappen() {
     const b = S.boodschappen.find((x) => x.id === +k.dataset.prijs);
     if (b) prijzenPaneel(b.naam, catalogusVan(b.naam)?.eenheid || S.producten.find((p) => zelfde(p.naam, b.naam))?.eenheid || b.eenheid || 'stuks');
   }));
-  $$m('[data-hv]').forEach((s) => (s.onclick = async (e) => {
-    e.preventDefault();
-    const b = S.boodschappen.find((x) => x.id === +s.dataset.hv);
-    const w = await vraag(`Hoeveel ${b.naam}${b.eenheid && b.eenheid !== 'stuks' ? ' (' + b.eenheid + ')' : ''}?`, { invoer: true, numeriek: true, standaard: fmt(b.hoeveelheid), ja: 'Bewaren' });
-    if (w !== null) api('PUT', `boodschappen/${b.id}`, { hoeveelheid: num(w) });
-  }));
+  $$m('[data-hv]').forEach((s) => (s.onclick = (e) => { e.preventDefault(); hoeveelheidKiezen(+s.dataset.hv); }));
   const klaar = $m('#klaar');
   if (klaar) klaar.onclick = () => winkelenAfronden(af.map((x) => x.b.id));
+}
+
+/** Aantal én eenheid van een boodschap op de lijst aanpassen (tik op het getal). */
+function hoeveelheidKiezen(id) {
+  paneelOpenen((el) => {
+    const b = S.boodschappen.find((x) => x.id === id);
+    if (!b) return paneelSluiten();
+    if (alGetekend('hoeveelheid-kiezen')) return; // niet opnieuw tekenen terwijl je typt
+    const e0 = b.eenheid || S.producten.find((p) => zelfde(p.naam, b.naam))?.eenheid || catalogusVan(b.naam)?.eenheid || 'stuks';
+    const keuzes = EENHEDEN.includes(e0) ? EENHEDEN : [...EENHEDEN, e0];
+    el.innerHTML = `${paneelKop(`Hoeveel ${esc(b.naam)}?`, 'Kies het aantal en de eenheid.')}
+      <div style="margin-bottom:1rem"><span class="veld-titel">Hoeveel</span><div class="aantal-kies">
+        <button type="button" class="rond" id="hk-min" aria-label="Minder">−</button>
+        <input id="hk-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid ?? stapVan(e0)))}" aria-label="Hoeveelheid">
+        <button type="button" class="rond" id="hk-plus" aria-label="Meer">+</button>
+        <select id="hk-eenheid" aria-label="Eenheid">${opties(keuzes, e0)}</select></div></div>
+      <div class="paneel-voet"><button class="knop" data-sluit>Annuleren</button><button class="knop primair" id="hk-ok">Bewaren</button></div>`;
+    sluitKnoppen(el);
+    const hv = $('#hk-hv', el), eenheid = $('#hk-eenheid', el);
+    const minKnopZetten = () => { $('#hk-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
+    $('#hk-plus', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, 1)); minKnopZetten(); };
+    $('#hk-min', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, -1)); minKnopZetten(); };
+    hv.oninput = minKnopZetten;
+    // stond het aantal nog op de standaardstap van de vorige eenheid (1 stuk), neem dan die van de nieuwe (100 g ...)
+    let vorige = eenheid.value;
+    eenheid.onchange = () => { if (num(hv.value) === stapVan(vorige)) hv.value = fmt(stapVan(eenheid.value)); vorige = eenheid.value; minKnopZetten(); };
+    minKnopZetten();
+    $('#hk-ok', el).onclick = async () => {
+      const h = num(hv.value);
+      await api('PUT', `boodschappen/${b.id}`, { hoeveelheid: h, eenheid: h === null ? '' : eenheid.value });
+      paneelSluiten();
+    };
+    if (fijneMuis()) setTimeout(() => { hv.focus(); hv.select(); }, 30);
+  });
 }
 
 /** Met hoeveel de knoppen − en + een hoeveelheid veranderen. */
