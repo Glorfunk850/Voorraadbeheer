@@ -19,7 +19,7 @@ const APP_VERSIE = 38;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
-const ui = { view: 'voorraad', week: 0, winkel: '', plaats: '', zoek: '', receptZoek: '', receptFilter: { fav: false, inHuis: false, soort: '', cat: '' }, uitgeklapt: new Set() };
+const ui = { view: 'voorraad', week: 0, winkel: '', plaats: '', zoek: '', receptZoek: '', catZoek: '', receptFilter: { fav: false, inHuis: false, soort: '', cat: '' }, uitgeklapt: new Set() };
 
 const ICOON = {
   kast: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 12h16M9 7.5h1M9 16.5h1"/></svg>',
@@ -31,6 +31,7 @@ const ICOON = {
   zoek: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   sluit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   ster: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
+  label: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12.6V4.5a1 1 0 0 1 1-1h8.1a1 1 0 0 1 .7.3l7.4 7.4a1.5 1.5 0 0 1 0 2.1l-7.2 7.2a1.5 1.5 0 0 1-2.1 0l-7.6-7.6a1 1 0 0 1-.3-.7z"/><circle cx="8.2" cy="8.2" r="1.3"/></svg>',
   kalender: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/></svg>',
   sterVol: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
 };
@@ -409,7 +410,7 @@ const fijneMuis = () => window.matchMedia('(pointer: fine)').matches;
 // Navigatie
 // ---------------------------------------------------------------------------
 $$('[data-icoon]').forEach((el) => (el.innerHTML = ICOON[el.dataset.icoon]));
-const VIEWS = ['voorraad', 'boodschappen', 'recepten', 'planner', 'instellingen'];
+const VIEWS = ['voorraad', 'boodschappen', 'catalogus', 'recepten', 'planner', 'instellingen'];
 function naar(view) {
   ui.view = VIEWS.includes(view) ? view : 'voorraad';
   if (location.hash !== '#' + ui.view) history.replaceState(null, '', '#' + ui.view);
@@ -428,7 +429,7 @@ function tekenen() {
   $('#teller').textContent = open;
   const actief = document.activeElement;
   const herstel = actief && actief.id && actief.matches('input') ? { id: actief.id, pos: actief.selectionStart } : null;
-  ({ voorraad: tekenVoorraad, boodschappen: tekenBoodschappen, recepten: tekenRecepten, planner: tekenPlanner, instellingen: tekenInstellingen })[ui.view]();
+  ({ voorraad: tekenVoorraad, boodschappen: tekenBoodschappen, catalogus: tekenCatalogus, recepten: tekenRecepten, planner: tekenPlanner, instellingen: tekenInstellingen })[ui.view]();
   if (herstel) { const el = document.getElementById(herstel.id); if (el) { el.focus(); try { el.setSelectionRange(herstel.pos, herstel.pos); } catch { /* */ } } }
 }
 /** Inhoud vervangen, maar een zoekveld waarin je typt laten staan (anders sluit het toetsenbord op de smartphone). */
@@ -499,11 +500,8 @@ function tekenVoorraad() {
     <div class="installeer-tip" id="installeer-tip" hidden></div>
     ${S.producten.length ? `
     <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
-    ${lijst}
-    ${(S.catalogus || []).length ? `<section class="sectie"><ul class="lijst"><li><button class="rij" id="catalogus-open">
-      <span class="naam">Catalogus<small>Alle producten die je ooit toevoegde</small></span><span class="rechts">›</span></button></li></ul></section>` : ''}`);
+    ${lijst}`);
   installTipTekenen();
-  if ($m('#catalogus-open')) $m('#catalogus-open').onclick = () => catalogusPaneel();
   $m('#nieuw').onclick = () => productFormulier(null);
   const z = $m('#zoek-voorraad');
   if (z) z.oninput = () => { ui.zoek = z.value; tekenVoorraad(); };
@@ -590,29 +588,38 @@ function productPaneel(id) {
   });
 }
 
-// Catalogus: alle producten die ooit werden toegevoegd
-function catalogusPaneel() {
-  let zoek = '';
-  paneelOpenen((el) => {
-    const lijstTekenen = () => {
-      const q = zoek.trim().toLowerCase();
-      const items = (S.catalogus || []).filter((c) => !q || `${c.naam} ${c.categorie || ''} ${c.barcode || ''}`.toLowerCase().includes(q));
-      $('#cat-lijst', el).innerHTML = items.length ? `<ul class="lijst">${items.map((c, i) =>
-        `<li><button class="rij" data-cat="${i}"><span class="naam">${esc(c.naam)}<small>${esc([c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small></span></button></li>`
-      ).join('')}</ul>` : '<div class="leeg">Niets gevonden.</div>';
-      $$('[data-cat]', el).forEach((b) => (b.onclick = () => catalogusItem(items[+b.dataset.cat])));
-    };
-    if (!alGetekend('catalogus')) {
-      el.innerHTML = `${paneelKop('Catalogus', 'Alle producten die je ooit toevoegde')}
-        <div class="zoek">${ICOON.zoek}<input type="search" id="cat-zoek" placeholder="Zoeken in catalogus" autocomplete="off"></div>
-        <div id="cat-lijst"></div>`;
-      sluitKnoppen(el);
-      const z = $('#cat-zoek', el);
-      z.value = zoek;
-      z.oninput = () => { zoek = z.value; lijstTekenen(); };
-    }
-    lijstTekenen();
-  });
+// ---------------------------------------------------------------------------
+// CATALOGUS: alle producten die ooit werden toegevoegd (eigen tabblad)
+// ---------------------------------------------------------------------------
+function tekenCatalogus() {
+  const q = ui.catZoek.trim().toLowerCase();
+  const alles = [...(S.catalogus || [])].sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
+  const items = alles.filter((c) => !q || `${c.naam} ${c.categorie || ''} ${c.locatie || ''} ${c.barcode || ''}`.toLowerCase().includes(q));
+  const inHuis = (naam) => S.producten.some((p) => zelfde(p.naam, naam) && p.hoeveelheid > 0);
+  // per beginletter gegroepeerd, zodat je in een lange lijst snel vindt wat je zoekt
+  const groepen = new Map();
+  for (const c of items) {
+    const l = (c.naam.trim().charAt(0) || '#').toLocaleUpperCase('nl').normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const k = /[A-Z]/.test(l) ? l : '#';
+    if (!groepen.has(k)) groepen.set(k, []);
+    groepen.get(k).push(c);
+  }
+  const rij = (c) => `<li><button class="rij" data-cat="${esc(c.naam)}">
+      <span class="naam">${esc(c.naam)}<small>${esc([c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small></span>
+      <span class="rechts">${inHuis(c.naam) ? 'in huis' : ''}</span></button></li>`;
+  const lijst = !alles.length
+    ? `<div class="leeg"><b>De catalogus is nog leeg</b>Elk product dat je aan je voorraad toevoegt, komt hier vanzelf bij. Zo vind je het later terug, ook als het op is.</div>`
+    : !items.length ? '<div class="leeg">Niets gevonden.</div>'
+    : [...groepen].map(([k, g]) => `<section class="sectie"><div class="sectie-titel">${esc(k)}</div><ul class="lijst">${g.map(rij).join('')}</ul></section>`).join('');
+  inhoudZetten(`
+    <header class="kop"><h1>Catalogus</h1>
+      <div class="kop-acties">${instellingenKnop}</div></header>
+    ${alles.length ? `<p class="stil">${alles.length} ${alles.length === 1 ? 'product' : 'producten'} die je ooit toevoegde, ook als ze op zijn.</p>
+    <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-catalogus" placeholder="Zoeken in catalogus" value="${esc(ui.catZoek)}" autocomplete="off"></div>` : ''}
+    ${lijst}`);
+  const z = $m('#zoek-catalogus');
+  if (z) z.oninput = () => { ui.catZoek = z.value; tekenCatalogus(); };
+  $$m('[data-cat]').forEach((b) => (b.onclick = () => { const c = catalogusVan(b.dataset.cat); if (c) catalogusItem(c); }));
 }
 function catalogusItem(c0) {
   paneelOpenen((el) => {
@@ -639,7 +646,6 @@ function catalogusItem(c0) {
         <li><button id="c-voorraad">Aan voorraad toevoegen</button></li>
         <li><button id="c-lijst">Op boodschappenlijst</button></li>
         <li><button id="c-prijzen">${(c.prijzen || []).length ? 'Prijzen aanpassen' : 'Prijzen invullen'}</button></li>
-        <li><button id="c-terug">Terug naar catalogus</button></li>
         <li><button id="c-weg" class="gevaar">Uit catalogus verwijderen</button></li>
       </ul>`;
     sluitKnoppen(el);
@@ -648,12 +654,11 @@ function catalogusItem(c0) {
       hoeveelheid: TELBAAR.has(c.eenheid || 'stuks') ? 1 : c.hoeveelheid || 1, inhoud: c.inhoud || null, inhoud_eenheid: c.inhoud_eenheid || '' });
     $('#c-lijst', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks' }); toast(lijstMelding(c.naam)); };
     $('#c-prijzen', el).onclick = () => prijzenPaneel(c.naam, c.eenheid, () => { const nu = catalogusVan(c.naam); if (nu) catalogusItem(nu); else paneelSluiten(); });
-    $('#c-terug', el).onclick = () => catalogusPaneel();
     $('#c-weg', el).onclick = async () => {
       if (!(await vraag(`${c.naam} uit de catalogus verwijderen? Je voorraad blijft zoals ze is.`, { ja: 'Verwijderen', gevaar: true }))) return;
       await api('DELETE', 'catalogus', { naam: c.naam });
       toast(`${c.naam} uit catalogus verwijderd`);
-      catalogusPaneel();
+      paneelSluiten();
     };
   });
 }

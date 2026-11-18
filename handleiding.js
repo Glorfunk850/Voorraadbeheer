@@ -62,7 +62,7 @@ export const HANDLEIDING = `
 <p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.</p>
 
 <h3>Catalogus</h3>
-<p>Onderaan het voorraadscherm staat de <b>Catalogus</b>: alle producten die je ooit toevoegde, ook als ze op zijn. Van daaruit zet je een product terug in je voorraad of op je lijst, pas je prijzen aan of haal je het uit de catalogus.</p>
+<p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, alfabetisch en met een zoekveld. Bij wat je nu in huis hebt, staat <i>in huis</i>. Tik op een product: van daaruit zet je een product terug in je voorraad of op je lijst, pas je prijzen aan of haal je het uit de catalogus.</p>
 
 <h2>Boodschappen</h2>
 <p>Op je boodschappenlijst komt wat je zelf toevoegt, wat onder je minimumvoorraad zakt en wat je vanuit een recept of de planner kiest.</p>
@@ -266,7 +266,7 @@ export const HANDLEIDING = `
 <h2>Vragen en problemen</h2>
 <table>
   <tr><th>Probleem</th><th>Oplossing</th></tr>
-  <tr><td>Ik zie mijn producten niet op het voorraadscherm</td><td>Normaal: daar staat alleen wat op moet of op is. Zoek bovenaan op de naam, of open de Catalogus.</td></tr>
+  <tr><td>Ik zie mijn producten niet op het voorraadscherm</td><td>Normaal: daar staat alleen wat op moet of op is. Zoek bovenaan op de naam, of open het tabblad Catalogus.</td></tr>
   <tr><td>Mijn pdf wordt niet ingelezen</td><td>Bevat de pdf alleen een scan of foto, dan is er geen leesbare tekst. Typ het recept zelf.</td></tr>
   <tr><td>Het recept is verkeerd verdeeld</td><td>Verbeter het in het scherm <b>Klopt dit?</b>, of pas de <b>Herkende tekst</b> aan en tik op <b>Opnieuw verdelen</b>.</td></tr>
   <tr><td>Een ingrediënt staat op "niet in huis" terwijl ik het heb</td><td>Bewerk het recept en kies bij <b>In voorraad als</b> het juiste product.</td></tr>

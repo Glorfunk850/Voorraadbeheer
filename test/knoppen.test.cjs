@@ -14,7 +14,7 @@ const ROOT = path.resolve(__dirname, '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.wasm': 'application/wasm' };
 const KNOP = 'button:not([disabled]), a.knop, label.vink';
-const VIEWS = ['voorraad', 'boodschappen', 'recepten', 'planner', 'instellingen'];
+const VIEWS = ['voorraad', 'boodschappen', 'catalogus', 'recepten', 'planner', 'instellingen'];
 // Knoppen die terecht niets zichtbaars doen in de testsituatie (bv. datum wissen terwijl er nog geen datum is)
 const MAG_NIETS_DOEN = ['Geen datum'];
 
