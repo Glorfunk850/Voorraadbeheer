@@ -428,6 +428,7 @@
       }
       c.naam = naam;
       for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype']) if (k in data) c[k] = (data[k] || '').trim();
+      if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
       if ('inhoud' in data) { const i = getal(data.inhoud); c.inhoud = i > 0 ? i : null; c.inhoud_eenheid = i > 0 ? data.inhoud_eenheid || '' : ''; }
       c.laatst = nu();
       if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid);
