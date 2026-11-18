@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 50;
+const APP_VERSIE = 51;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -268,19 +268,24 @@ const catalogusVan = (naam) => (S.catalogus || []).find((c) => zelfde(c.naam, na
 /** Sleutel van de inhoud van een prijs, boodschap of product (bv. "500 g"); leeg zonder inhoud. */
 const prijsSleutel = (x) => (x && x.inhoud > 0 && x.inhoud_eenheid ? `${x.inhoud} ${x.inhoud_eenheid}` : '');
 const inhoudLabel = (x) => (prijsSleutel(x) ? `à ${hoeveelTekst(x.inhoud, x.inhoud_eenheid)}` : '');
+const prijsMerk = (x) => String((x && x.merk) || '').trim().toLowerCase();
+/** Sleutel van merk en inhoud samen (bv. "lavazza|500 g"): elk merk en elke inhoud kan een eigen prijs hebben. */
+const groepSleutel = (x) => `${prijsMerk(x)}|${prijsSleutel(x)}`;
 /**
- * Prijzen van een product. Zonder `inh`: alle prijzen. Met `inh` (iets met inhoud/inhoud_eenheid, of null):
- * de prijzen van die inhoud; zijn er geen, dan de prijzen zonder inhoud (en zonder inhoud: die van de gewone inhoud van het product).
+ * Prijzen van een product. Zonder `inh`: alle prijzen. Met `inh` (iets met merk/inhoud/inhoud_eenheid, of null):
+ * de prijzen van dat merk en die inhoud; zijn er geen, dan die van de inhoud zonder merk, dan die zonder inhoud
+ * (en zonder inhoud: die van de gewone inhoud van het product).
  */
 function prijzenVan(naam, inh) {
   const alle = catalogusVan(naam)?.prijzen || [];
   if (inh === undefined) return alle;
-  const met = (k) => alle.filter((p) => prijsSleutel(p) === k);
-  const k = prijsSleutel(inh);
-  let lijst = met(k);
-  if (!lijst.length && k) lijst = met('');
-  if (!lijst.length && !k) lijst = met(prijsSleutel(catalogusVan(naam)));
-  return lijst;
+  const m = prijsMerk(inh), k = prijsSleutel(inh);
+  const pogingen = [[m, k], ['', k], ...(k ? [[m, ''], ['', '']] : [[m, prijsSleutel(catalogusVan(naam))], ['', prijsSleutel(catalogusVan(naam))]])];
+  for (const [mm, kk] of pogingen) {
+    const lijst = alle.filter((p) => prijsMerk(p) === mm && prijsSleutel(p) === kk);
+    if (lijst.length) return lijst;
+  }
+  return [];
 }
 const winkelPlek = (w) => { const i = winkels().findIndex((x) => zelfde(x, w)); return i < 0 ? 9999 : i; };
 /** Prijzen van goedkoop naar duur (gelijke prijs: de winkel die bovenaan staat bij Instellingen eerst). */
@@ -382,15 +387,22 @@ function prijzenLezen(el, eenheid) {
   }
   return uit;
 }
-/** Inhouden waarvoor je een prijs kunt invullen: die van de prijzen, het product, je voorraad en je boodschappen. */
-function bekendeInhouden(naam) {
+/**
+ * Merken en inhouden waarvoor je een prijs kunt invullen: die van de prijzen, de catalogus, je voorraad en je boodschappen.
+ * Elk als { merk, inhoud, inhoud_eenheid }; zonder merk en zonder inhoud zit er niet bij.
+ */
+function bekendeGroepen(naam, metInhoud = true) {
   const c = catalogusVan(naam);
-  const telbaar = (x) => x.prijs !== undefined || TELBAAR.has(x.eenheid || 'stuks');
-  const bronnen = [...(c?.prijzen || []), ...(c ? [c] : []), ...S.producten.filter((p) => zelfde(p.naam, naam)), ...S.boodschappen.filter((b) => zelfde(b.naam, naam))];
+  const telbaar = (x) => metInhoud && (x.prijs !== undefined || x.varianten !== undefined || TELBAAR.has(x.eenheid || 'stuks'));
+  const bronnen = [...(c?.prijzen || []), ...(c ? variantenVan(c).map((v) => ({ ...v, varianten: true })) : []),
+    ...S.producten.filter((p) => zelfde(p.naam, naam)), ...S.boodschappen.filter((b) => zelfde(b.naam, naam))];
   const uit = new Map();
-  for (const x of bronnen) if (prijsSleutel(x) && telbaar(x) && !uit.has(prijsSleutel(x))) uit.set(prijsSleutel(x), { inhoud: x.inhoud, inhoud_eenheid: x.inhoud_eenheid });
-  const grootte = (x) => omrekenen(x.inhoud, x.inhoud_eenheid, ['ml', 'cl', 'dl', 'l'].includes(x.inhoud_eenheid) ? 'ml' : 'g') ?? x.inhoud;
-  return [...uit.values()].sort((a, b) => grootte(a) - grootte(b));
+  for (const x of bronnen) {
+    const g = { merk: String(x.merk || '').trim(), ...(prijsSleutel(x) && telbaar(x) ? { inhoud: x.inhoud, inhoud_eenheid: x.inhoud_eenheid } : { inhoud: null, inhoud_eenheid: '' }) };
+    if ((g.merk || prijsSleutel(g)) && !uit.has(groepSleutel(g))) uit.set(groepSleutel(g), g);
+  }
+  const grootte = (x) => (prijsSleutel(x) ? omrekenen(x.inhoud, x.inhoud_eenheid, ['ml', 'cl', 'dl', 'l'].includes(x.inhoud_eenheid) ? 'ml' : 'g') ?? x.inhoud : 0);
+  return [...uit.values()].sort((a, b) => a.merk.localeCompare(b.merk, 'nl') || grootte(a) - grootte(b));
 }
 /** Overzicht van de prijzen van een product (voor het productpaneel en de catalogus), per inhoud. */
 function prijzenBlok(naam) {
@@ -404,24 +416,37 @@ function prijzenBlok(naam) {
     const n = p.inhoud > 0 ? omrekenen(p.inhoud, p.inhoud_eenheid, p.per) : c && TELBAAR.has(c.eenheid) ? vanProduct(1, c, p.per) : null;
     return n === null ? '' : ` · ${euro(n * p.prijs)} per ${perTekst(verpakking)}`;
   };
-  const groepen = [...bekendeInhouden(naam).map(prijsSleutel), ''].map((k) => alle.filter((p) => prijsSleutel(p) === k)).filter((l) => l.length);
-  const kopjes = groepen.length > 1 || !!prijsSleutel(groepen[0][0]);
+  const sleutels = [...bekendeGroepen(naam).map(groepSleutel), '|'];
+  for (const p of alle) if (!sleutels.includes(groepSleutel(p))) sleutels.splice(-1, 0, groepSleutel(p));
+  const groepen = sleutels.map((k) => alle.filter((p) => groepSleutel(p) === k)).filter((l) => l.length);
+  const kopjes = groepen.length > 1 || groepSleutel(groepen[0][0]) !== '|';
+  const metMerk = alle.some((p) => prijsMerk(p));
   return `<div class="datumblok prijzen-blok"><div><b>Prijzen</b>${groepen.map((groep) => {
     const lijst = prijzenSorteren(groep);
-    return (kopjes ? `<div class="pz-groep-titel">${esc(prijsSleutel(lijst[0]) ? `${perTekst(verpakking)} ${inhoudLabel(lijst[0])}` : 'Andere inhoud')}</div>` : '')
+    return (kopjes ? `<div class="pz-groep-titel">${esc(groepTitel(lijst[0], verpakking, metMerk, true))}</div>` : '')
       + lijst.map((p, i) => `<div class="stat"><span>${esc(p.winkel)}${i === 0 && lijst.length > 1 ? ' <small class="goedkoopst">goedkoopst</small>' : ''}</span>
     <span class="stil">${esc(prijsRegelTekst(p) + perStuk(p))}</span></div>`).join('');
   }).join('')}</div></div>`;
 }
-const groepTitel = (inh, eenheid) => (prijsSleutel(inh) ? `Per ${perTekst(TELBAAR.has(eenheid) ? eenheid : 'stuks')} ${inhoudLabel(inh)}` : 'Andere inhoud (zonder eigen prijs)');
-/** Eén blok prijsvelden voor één inhoud (of zonder inhoud) in het prijzenpaneel. */
-function prijsGroepHtml(inh, prijzen, eenheid, metKop, standaardPer) {
-  const k = prijsSleutel(inh);
-  return `<section class="pz-groep" data-inhoud="${k ? esc(inh.inhoud) : ''}" data-inhoud-eenheid="${k ? esc(inh.inhoud_eenheid) : ''}">
-    ${metKop ? `<h3 class="pz-groep-titel">${esc(groepTitel(inh, eenheid))}</h3>` : ''}
+/** Titel van een groep prijzen: bv. "Lavazza · per pak à 500 g", "Per pak à 1 kg", "Lavazza". */
+function groepTitel(inh, eenheid, metMerk = false, kort = false) {
+  const merk = (inh && String(inh.merk || '').trim()) || '';
+  const inhoud = prijsSleutel(inh) ? `per ${perTekst(TELBAAR.has(eenheid) ? eenheid : 'stuks')} ${inhoudLabel(inh)}` : '';
+  const t = [merk, inhoud].filter(Boolean).join(' · ');
+  if (t) return t.charAt(0).toUpperCase() + t.slice(1);
+  const rest = metMerk ? 'Andere merken en inhouden' : 'Andere inhoud';
+  return kort ? rest : `${rest} (zonder eigen prijs)`;
+}
+/** Eén blok prijsvelden voor één merk en/of inhoud (of zonder) in het prijzenpaneel. */
+function prijsGroepHtml(inh, prijzen, eenheid, metKop, standaardPer, metMerk) {
+  const k = prijsSleutel(inh), merk = (inh && String(inh.merk || '').trim()) || '';
+  return `<section class="pz-groep" data-merk="${esc(merk)}" data-inhoud="${k ? esc(inh.inhoud) : ''}" data-inhoud-eenheid="${k ? esc(inh.inhoud_eenheid) : ''}">
+    ${metKop ? `<h3 class="pz-groep-titel">${esc(groepTitel(inh, eenheid, metMerk))}</h3>` : ''}
     ${prijzenVeldenHtml(prijzen, eenheid, standaardPer)}</section>`;
 }
-const groepInhoud = (g) => (g.dataset.inhoud ? { inhoud: num(g.dataset.inhoud), inhoud_eenheid: g.dataset.inhoudEenheid } : null);
+/** Merk en inhoud van een groep prijsvelden (null: zonder merk en zonder inhoud). */
+const groepInhoud = (g) => (g.dataset.inhoud || g.dataset.merk
+  ? { merk: g.dataset.merk || '', ...(g.dataset.inhoud ? { inhoud: num(g.dataset.inhoud), inhoud_eenheid: g.dataset.inhoudEenheid } : { inhoud: null, inhoud_eenheid: '' }) } : null);
 /** Paneel om alleen de prijzen van een product aan te passen: per inhoud een eigen prijs. */
 function prijzenPaneel(naam, eenheid, terug) {
   paneelOpenen((el) => {
@@ -429,38 +454,44 @@ function prijzenPaneel(naam, eenheid, terug) {
     const c = catalogusVan(naam);
     const e = c?.eenheid || eenheid || 'stuks';
     const alle = c?.prijzen || [];
-    const inhouden = TELBAAR.has(e) ? bekendeInhouden(naam) : [];
-    // zonder inhoud: alleen tonen als er al zulke prijzen zijn, of als er geen enkele inhoud gekend is
-    const groepen = [...inhouden, ...(!inhouden.length || alle.some((p) => !prijsSleutel(p)) ? [null] : [])];
+    const telbaar = TELBAAR.has(e);
+    const bekend = bekendeGroepen(naam, telbaar);
+    // prijzen van een merk of inhoud die nergens anders meer voorkomt, toch tonen
+    for (const p of alle) if (groepSleutel(p) !== '|' && !bekend.some((g) => groepSleutel(g) === groepSleutel(p))) bekend.push({ merk: p.merk || '', inhoud: p.inhoud || null, inhoud_eenheid: p.inhoud_eenheid || '' });
+    // zonder merk en inhoud: alleen tonen als er al zulke prijzen zijn, of als er geen enkel merk of inhoud gekend is
+    const groepen = [...bekend, ...(!bekend.length || alle.some((p) => groepSleutel(p) === '|') ? [null] : [])];
     let metKop = groepen.length > 1 || !!groepen[0];
+    const metMerk = () => $$('.pz-groep', el).some((g) => g.dataset.merk);
     el.innerHTML = `${paneelKop('Prijzen', esc(naam))}
       <form id="pz-form" autocomplete="off">
-        ${TELBAAR.has(e) ? '<p class="stil pz-uitleg">Elke inhoud heeft zijn eigen prijs: een groot pak is vaak goedkoper per kg.</p>' : ''}
-        <div id="pz-groepen">${groepen.map((g) => prijsGroepHtml(g, alle.filter((p) => prijsSleutel(p) === prijsSleutel(g)), e, metKop, prijsPerVan(alle, e))).join('')}</div>
-        ${TELBAAR.has(e) ? `<details class="meer" id="pz-nieuw" style="margin-top:.8rem"><summary>+ Prijs voor een andere inhoud</summary>
-          <div class="rij2"><label class="veld"><span>Inhoud per ${esc(perTekst(e))}</span><input id="pz-nieuw-inhoud" inputmode="decimal" placeholder="bv. 1"></label>
-            <label class="veld"><span>Eenheid inhoud</span><select id="pz-nieuw-eenheid">${opties(INHOUD_EENHEDEN, 'kg')}</select></label></div>
-          <button type="button" class="knop" id="pz-nieuw-ok">Inhoud toevoegen</button></details>` : ''}
-        <p class="stil pz-uitleg" style="margin-top:.8rem">Op je boodschappenlijst komt ${esc(naam)} bij de goedkoopste winkel voor de inhoud die je koopt.</p>
+        <p class="stil pz-uitleg">${telbaar ? 'Elk merk en elke inhoud heeft zijn eigen prijs: een groot pak is vaak goedkoper per kg.' : 'Elk merk heeft zijn eigen prijs.'}</p>
+        <div id="pz-groepen">${groepen.map((g) => prijsGroepHtml(g, alle.filter((p) => groepSleutel(p) === groepSleutel(g || {})), e, metKop, prijsPerVan(alle, e), groepen.some((x) => x && x.merk))).join('')}</div>
+        <details class="meer" id="pz-nieuw" style="margin-top:.8rem"><summary>+ Prijs voor een ander merk${telbaar ? ' of een andere inhoud' : ''}</summary>
+          <label class="veld"><span>Merk${telbaar ? ' (mag leeg)' : ''}</span><input id="pz-nieuw-merk" placeholder="bv. Lavazza" autocomplete="off" autocapitalize="words"></label>
+          ${telbaar ? `<div class="rij2"><label class="veld"><span>Inhoud per ${esc(perTekst(e))} (mag leeg)</span><input id="pz-nieuw-inhoud" inputmode="decimal" placeholder="bv. 1"></label>
+            <label class="veld"><span>Eenheid inhoud</span><select id="pz-nieuw-eenheid">${opties(INHOUD_EENHEDEN, 'kg')}</select></label></div>` : ''}
+          <button type="button" class="knop" id="pz-nieuw-ok">Toevoegen</button></details>
+        <p class="stil pz-uitleg" style="margin-top:.8rem">Op je boodschappenlijst komt ${esc(naam)} bij de goedkoopste winkel voor het merk en de inhoud die je koopt.</p>
         <div class="paneel-voet"><button type="submit" class="knop primair">Bewaren</button></div></form>`;
     sluitKnoppen(el);
     const koppelen = (g) => prijzenKoppelen(g, () => ({ eenheid: e, inhoud_eenheid: g.dataset.inhoudEenheid || (c?.inhoud > 0 ? c.inhoud_eenheid : '') }));
     $$('.pz-groep', el).forEach(koppelen);
-    const nieuwOk = $('#pz-nieuw-ok', el);
-    if (nieuwOk) nieuwOk.onclick = () => {
-      const i = num($('#pz-nieuw-inhoud', el).value), ie = $('#pz-nieuw-eenheid', el).value;
-      if (!(i > 0)) { toast('Vul een geldige inhoud in.'); $('#pz-nieuw-inhoud', el).focus(); return; }
-      const inh = { inhoud: i, inhoud_eenheid: ie };
-      let g = $$('.pz-groep', el).find((x) => prijsSleutel(groepInhoud(x)) === prijsSleutel(inh));
+    $('#pz-nieuw-ok', el).onclick = () => {
+      const merk = $('#pz-nieuw-merk', el).value.trim();
+      const tekst = telbaar ? $('#pz-nieuw-inhoud', el).value.trim() : '', i = num(tekst);
+      if (tekst && !(i > 0)) { toast('Vul een geldige inhoud in, of laat het veld leeg.'); $('#pz-nieuw-inhoud', el).focus(); return; }
+      if (!merk && !(i > 0)) { toast(telbaar ? 'Vul een merk en/of een inhoud in.' : 'Vul een merk in.'); $('#pz-nieuw-merk', el).focus(); return; }
+      const inh = { merk, ...(i > 0 ? { inhoud: i, inhoud_eenheid: $('#pz-nieuw-eenheid', el).value } : { inhoud: null, inhoud_eenheid: '' }) };
+      let g = $$('.pz-groep', el).find((x) => groepSleutel(groepInhoud(x) || {}) === groepSleutel(inh));
       if (!g) {
-        // de bestaande groep krijgt nu ook een kopje
-        if (!metKop) $$('.pz-groep', el).forEach((x) => x.insertAdjacentHTML('afterbegin', `<h3 class="pz-groep-titel">${esc(groepTitel(groepInhoud(x), e))}</h3>`));
-        metKop = true;
         $('#pz-groepen', el).insertAdjacentHTML('beforeend', prijsGroepHtml(inh, [], e, true, $('select.pz-per', el)?.value || prijsPerVan(alle, e)));
         g = $$('.pz-groep', el).pop();
         koppelen(g);
+        // alle groepen krijgen (opnieuw) een kopje, nu er misschien merken bij zijn
+        metKop = true;
+        $$('.pz-groep', el).forEach((x) => { $('.pz-groep-titel', x)?.remove(); x.insertAdjacentHTML('afterbegin', `<h3 class="pz-groep-titel">${esc(groepTitel(groepInhoud(x), e, metMerk()))}</h3>`); });
       }
-      $('#pz-nieuw-inhoud', el).value = ''; $('#pz-nieuw', el).open = false;
+      $('#pz-nieuw-merk', el).value = ''; if (telbaar) $('#pz-nieuw-inhoud', el).value = ''; $('#pz-nieuw', el).open = false;
       g.scrollIntoView({ block: 'nearest' });
       $('.pz-prijs', g)?.focus();
     };
@@ -479,24 +510,27 @@ function prijzenPaneel(naam, eenheid, terug) {
   });
 }
 /**
- * Prijsvelden in een formulier (product, catalogus, boodschap): ze horen bij de inhoud die in dat formulier staat.
- * `pz` is het <details>-blok; `inh` de inhoud ({ inhoud, inhoud_eenheid } of null).
+ * Prijsvelden in een formulier (product, catalogus, boodschap): ze horen bij het merk en de inhoud die in dat formulier staan.
+ * `pz` is het <details>-blok; `inh` het merk en de inhoud ({ merk, inhoud, inhoud_eenheid } of null).
  */
 function formPrijzenZetten(pz, naam, eenheid, inh, product) {
-  const k = prijsSleutel(inh);
-  const label = `Prijs per winkel${k ? ` <small class="stil">voor ${esc(perTekst(TELBAAR.has(eenheid) ? eenheid : 'stuks'))} ${esc(inhoudLabel(inh))}</small>` : ''}`;
+  const k = prijsSleutel(inh), merk = (inh && String(inh.merk || '').trim()) || '';
+  const voor = [merk, k ? `${perTekst(TELBAAR.has(eenheid) ? eenheid : 'stuks')} ${inhoudLabel(inh)}` : ''].filter(Boolean).join(', ');
+  const label = `Prijs per winkel${voor ? ` <small class="stil">voor ${esc(voor)}</small>` : ''}`;
+  pz.dataset.merk = merk;
   pz.dataset.inhoud = k ? inh.inhoud : ''; pz.dataset.inhoudEenheid = k ? inh.inhoud_eenheid : '';
   // zelf prijzen ingevuld: die laten staan, ze gelden nu voor de nieuwe inhoud
   if (pz.dataset.aangeraakt && $('summary', pz)) { $('summary', pz).innerHTML = label; pz.prijsHint?.(); return; }
   pz.innerHTML = `<summary>${label}</summary>${prijzenVeldenHtml(naam ? prijzenVan(naam, inh || null) : [], eenheid, naam ? prijsPerVan(prijzenVan(naam), eenheid) : undefined)}`;
   prijzenKoppelen(pz, product);
 }
-/** De inhoud waarvoor de prijsvelden van een formulier gelden, voor de API (`prijzen_inhoud`). */
-const formPrijzenInhoud = (pz) => (pz.dataset.inhoud ? { inhoud: num(pz.dataset.inhoud), inhoud_eenheid: pz.dataset.inhoudEenheid } : null);
-/** Inhoud uit de velden van een formulier lezen zonder meldingen (null als ze leeg of ongeldig is). */
+/** Het merk en de inhoud waarvoor de prijsvelden van een formulier gelden, voor de API (`prijzen_inhoud`). */
+const formPrijzenInhoud = (pz) => groepInhoud(pz);
+/** Merk en inhoud uit de velden van een formulier lezen zonder meldingen (null als beide leeg zijn; een ongeldige inhoud telt als leeg). */
 function formInhoud(el, id, eenheid) {
-  const i = num($(`#${id}-inhoud`, el)?.value || '');
-  return TELBAAR.has(eenheid || 'stuks') && i > 0 ? { inhoud: i, inhoud_eenheid: $(`#${id}-inhoud-eenheid`, el).value } : null;
+  const i = num($(`#${id}-inhoud`, el)?.value || ''), merk = ($(`#${id}-merk`, el)?.value || '').trim();
+  const inh = TELBAAR.has(eenheid || 'stuks') && i > 0 ? { inhoud: i, inhoud_eenheid: $(`#${id}-inhoud-eenheid`, el).value } : null;
+  return inh || merk ? { merk, ...(inh || { inhoud: null, inhoud_eenheid: '' }) } : null;
 }
 
 /** Suggesties onder een invoerveld: pas na 2 letters, als kleine knoppen (geen uitklapmenu). */
@@ -866,6 +900,7 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
     const cfPrijzen = () => formPrijzenZetten($('#cf-prijzen', el), nieuw ? '' : c.naam, eenheid, formInhoud(el, 'cf', eenheid), info);
     cfPrijzen();
     $('#cf-inhoud', el).oninput = cfPrijzen;
+    $('#cf-merk', el).oninput = cfPrijzen;
     $('#cf-inhoud-eenheid', el).onchange = cfPrijzen;
     $('#cf', el).onsubmit = async (e) => {
       e.preventDefault();
@@ -960,6 +995,7 @@ function productFormulier(bestaand, sjabloon = {}) {
     pfPrijzen();
     $('#pf-eenheid', el).onchange = () => { inhoudTonen(); prijsPerZetten(el, $('#pf-eenheid', el).value); pfPrijzen(); };
     $('#pf-inhoud', el).oninput = pfPrijzen;
+    $('#pf-merk', el).oninput = pfPrijzen;
     $('#pf-inhoud-eenheid', el).onchange = pfPrijzen;
     $$('#pf-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; typeTekenen(); }));
     $$('#pf-plaats .chip', el).forEach((b) => (b.onclick = () => {
@@ -1255,6 +1291,7 @@ function boodschapToevoegen() {
           () => ({ eenheid: productEenheid(), inhoud_eenheid: $('#bt-inhoud', el).value.trim() ? $('#bt-inhoud-eenheid', el).value : '' }));
         btPrijzen();
         $('#bt-inhoud', el).oninput = btPrijzen;
+        $('#bt-merk', el).oninput = btPrijzen;
         $('#bt-inhoud-eenheid', el).onchange = btPrijzen;
         const aangeraakt = () => { meerAangeraakt = true; };
         $('#bt-meer-inhoud', el).addEventListener('input', aangeraakt);

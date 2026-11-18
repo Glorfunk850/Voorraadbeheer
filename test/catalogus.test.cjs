@@ -303,6 +303,53 @@ async function main() {
   await page.click('#bt-lijst [data-kies]:has-text("500 g")');
   controle((await page.inputValue('#bt-merk')) === 'Douwe' && (await page.inputValue('#bt-inhoud')) === '500', 'boodschap: merk en inhoud van de gekozen variant ingevuld');
 
+  // prijzen per merk (en per inhoud) in het venster Prijzen
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  await page.click('[data-cat="Koffie"]:has-text("Lavazza")');
+  await page.click('#c-prijzen');
+  controle(!!(await page.$('.pz-groep[data-merk="Lavazza"][data-inhoud="1"]')) && !!(await page.$('.pz-groep[data-merk="Douwe"][data-inhoud="500"]')), 'prijzen: een blok per merk en inhoud');
+  controle((await page.textContent('.pz-groep[data-merk="Lavazza"] .pz-groep-titel')).includes('Lavazza'), 'prijzen: merk in de titel');
+  // prijs invullen bij een winkel: een vaste winkel uit Instellingen, of een nieuwe regel
+  const prijsZetten = async (groep, winkel, prijs) => {
+    const vast = await page.$(`${groep} .prijs-rij[data-winkel="${winkel}"] .pz-prijs`);
+    if (vast) return vast.fill(prijs);
+    await page.click(`${groep} .pz-erbij`);
+    await page.fill(`${groep} .pz-winkel >> nth=-1`, winkel);
+    await page.fill(`${groep} .prijs-rij:last-child .pz-prijs`, prijs);
+  };
+  await prijsZetten('.pz-groep[data-merk="Lavazza"]', 'Colruyt', '9');
+  await prijsZetten('.pz-groep[data-merk="Douwe"][data-inhoud="500"]', 'Colruyt', '5');
+  // een merk zonder inhoud toevoegen
+  await page.click('#pz-nieuw summary');
+  await page.fill('#pz-nieuw-merk', 'Huismerk');
+  await page.click('#pz-nieuw-ok');
+  controle(!!(await page.$('.pz-groep[data-merk="Huismerk"]')), 'prijzen: blok voor een nieuw merk toegevoegd');
+  await prijsZetten('.pz-groep[data-merk="Huismerk"]', 'Aldi', '3');
+  await page.click('#pz-form button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const kp = d.catalogus.find((c) => c.naam === 'Koffie').prijzen;
+  controle(kp.some((p) => p.merk === 'Lavazza' && p.inhoud === 1 && p.inhoud_eenheid === 'kg' && p.prijs === 9)
+    && kp.some((p) => p.merk === 'Douwe' && p.inhoud === 500 && p.prijs === 5)
+    && kp.some((p) => p.merk === 'Huismerk' && !p.inhoud && p.prijs === 3 && p.winkel === 'Aldi'), 'prijzen: per merk bewaard');
+  controle((await page.textContent('#paneel .prijzen-blok')).includes('Lavazza'), 'prijzen: overzicht per merk');
+  // het formulier toont de prijs van het merk en de inhoud die erin staan
+  await page.click('#c-voorraad');
+  controle((await page.textContent('#pf-prijzen summary')).includes('Lavazza') && (await page.inputValue('#pf-prijzen .prijs-rij[data-winkel="Colruyt"] .pz-prijs')) === '9,00', 'formulier: prijs van dit merk ingevuld');
+  await page.fill('#pf-merk', 'Huismerk');
+  await page.fill('#pf-inhoud', '');
+  await page.dispatchEvent('#pf-inhoud', 'input');
+  controle((await page.$$eval('#pf-prijzen .pz-prijs', (l) => l.map((x) => x.value))).includes('3,00'), 'formulier: ander merk, andere prijs');
+  await page.click('#paneel [data-sluit]');
+  // boodschappen: de prijs van het merk dat je koopt
+  await api('POST', 'boodschappen', { naam: 'Koffie', hoeveelheid: 1, eenheid: 'stuks', merk: 'Lavazza', inhoud: 1, inhoud_eenheid: 'kg' });
+  await api('POST', 'boodschappen', { naam: 'Koffie', hoeveelheid: 2, eenheid: 'stuks', merk: 'Huismerk' });
+  await page.goto(basis + '#boodschappen');
+  await page.reload();
+  const lijstTekst = (await page.textContent('#inhoud')).replace(/\s+/g, ' ');
+  controle(lijstTekst.includes('Colruyt · € 9,00') && lijstTekst.includes('Aldi · € 6,00'), 'boodschappen: prijs per merk berekend');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();

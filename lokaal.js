@@ -35,16 +35,19 @@
     }
     return uit;
   };
-  // prijzen van een product: [{ winkel, prijs, per, inhoud?, inhoud_eenheid? }] — prijs in euro per eenheid `per`.
-  // Met een inhoud geldt de prijs alleen voor die verpakking (bv. pak à 500 g); zonder inhoud voor elke inhoud zonder eigen prijs.
-  // Eén regel per winkel en per inhoud.
+  // prijzen van een product: [{ winkel, prijs, per, merk?, inhoud?, inhoud_eenheid? }] — prijs in euro per eenheid `per`.
+  // Met een merk en/of inhoud geldt de prijs alleen voor dat merk en die verpakking (bv. Lavazza, pak à 500 g);
+  // zonder merk en inhoud voor alles zonder eigen prijs. Eén regel per winkel, per merk en per inhoud.
   const prijsSleutel = (x) => (x && getal(x.inhoud) > 0 && x.inhoud_eenheid ? `${getal(x.inhoud)} ${x.inhoud_eenheid}` : '');
+  const prijsMerk = (x) => String((x && x.merk) || '').trim();
+  const prijsGroep = (x) => `${prijsMerk(x).toLowerCase()}|${prijsSleutel(x)}`;
   const prijzenLijst = (v) => {
     const uit = [];
     for (const x of Array.isArray(v) ? v : []) {
-      const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs), sleutel = prijsSleutel(x);
-      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel) && prijsSleutel(y) === sleutel)) continue;
+      const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs), sleutel = prijsSleutel(x), groep = prijsGroep(x);
+      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel) && prijsGroep(y) === groep)) continue;
       uit.push({ winkel, prijs: Math.round(prijs * 1000) / 1000, per: String((x && x.per) || '').trim(),
+        ...(prijsMerk(x) ? { merk: prijsMerk(x) } : {}),
         ...(sleutel ? { inhoud: getal(x.inhoud), inhoud_eenheid: String(x.inhoud_eenheid) } : {}) });
     }
     return uit;
@@ -260,7 +263,7 @@
     c.laatst = nu();
   }
   // prijzen van een product (per naam, in de catalogus) vervangen.
-  // Met `voor` ({ inhoud, inhoud_eenheid }, of null voor zonder inhoud) alleen de prijzen van die inhoud.
+  // Met `voor` ({ merk, inhoud, inhoud_eenheid }, of null voor zonder merk en inhoud) alleen de prijzen van dat merk en die inhoud.
   function prijzenZetten(naam, prijzen, eenheid, voor) {
     naam = (naam || '').trim();
     if (!naam) return;
@@ -268,8 +271,9 @@
     if (!c) { catalogusBijwerken({ naam, eenheid: eenheid || '' }, false); c = S.catalogus.find((x) => zelfde(x.naam, naam)); }
     if (voor === undefined) c.prijzen = prijzenLijst(prijzen);
     else {
-      const sleutel = prijsSleutel(voor), v = sleutel ? { inhoud: getal(voor.inhoud), inhoud_eenheid: voor.inhoud_eenheid } : { inhoud: null, inhoud_eenheid: '' };
-      c.prijzen = prijzenLijst([...(c.prijzen || []).filter((p) => prijsSleutel(p) !== sleutel), ...prijzen.map((p) => ({ ...p, ...v }))]);
+      const sleutel = prijsSleutel(voor), groep = prijsGroep(voor);
+      const v = { merk: prijsMerk(voor), ...(sleutel ? { inhoud: getal(voor.inhoud), inhoud_eenheid: voor.inhoud_eenheid } : { inhoud: null, inhoud_eenheid: '' }) };
+      c.prijzen = prijzenLijst([...(c.prijzen || []).filter((p) => prijsGroep(p) !== groep), ...prijzen.map((p) => ({ ...p, ...v }))]);
     }
     lijstAanvullen(S.instellingen, 'winkels', c.prijzen.map((p) => p.winkel));
   }
