@@ -71,7 +71,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <h3>Toevoegen</h3>
 <ul>
   <li><b>Snel:</b> typ bovenaan iets, bv. <code>2 l melk</code> of <code>6 eieren</code>, en tik op <b>+</b>. Hoeveelheid en eenheid worden herkend.</li>
-  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit je producten (je ziet meteen wat je in huis hebt) of typ zelf iets, stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
+  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit de producten in je catalogus (je ziet meteen het merk en wat je in huis hebt; zoek met het <b>zoekveld</b> boven de lijst of door te typen bij <b>Wat</b>, ook op merk) of typ zelf iets, vul eventueel het <b>merk</b> in, stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
 </ul>
 
 <h3>Op de lijst</h3>
