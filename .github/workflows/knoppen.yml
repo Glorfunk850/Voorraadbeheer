@@ -27,6 +27,8 @@ jobs:
         run: node test/backup.test.cjs
       - name: Prijzen per winkel en winkellijsten
         run: node test/winkels.test.cjs
+      - name: Catalogus toevoegen, bewerken en verwijderen
+        run: node test/catalogus.test.cjs
       - name: Maaltijdplanner
         run: node test/planner.test.cjs
       - name: Bewaren in een bestand op het toestel

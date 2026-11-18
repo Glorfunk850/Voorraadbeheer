@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 38;
+const APP_VERSIE = 39;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -608,17 +608,21 @@ function tekenCatalogus() {
       <span class="naam">${esc(c.naam)}<small>${esc([c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small></span>
       <span class="rechts">${inHuis(c.naam) ? 'in huis' : ''}</span></button></li>`;
   const lijst = !alles.length
-    ? `<div class="leeg"><b>De catalogus is nog leeg</b>Elk product dat je aan je voorraad toevoegt, komt hier vanzelf bij. Zo vind je het later terug, ook als het op is.</div>`
+    ? `<div class="leeg"><b>De catalogus is nog leeg</b>Elk product dat je aan je voorraad toevoegt, komt hier vanzelf bij. Zo vind je het later terug, ook als het op is. Met Toevoegen zet je er zelf een product bij.</div>`
     : !items.length ? '<div class="leeg">Niets gevonden.</div>'
     : [...groepen].map(([k, g]) => `<section class="sectie"><div class="sectie-titel">${esc(k)}</div><ul class="lijst">${g.map(rij).join('')}</ul></section>`).join('');
   inhoudZetten(`
     <header class="kop"><h1>Catalogus</h1>
-      <div class="kop-acties">${instellingenKnop}</div></header>
+      <div class="kop-acties">
+        ${instellingenKnop}
+        <button class="knop primair" id="cat-nieuw">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}<span>Toevoegen</span></button>
+      </div></header>
     ${alles.length ? `<p class="stil">${alles.length} ${alles.length === 1 ? 'product' : 'producten'} die je ooit toevoegde, ook als ze op zijn.</p>
     <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-catalogus" placeholder="Zoeken in catalogus" value="${esc(ui.catZoek)}" autocomplete="off"></div>` : ''}
     ${lijst}`);
   const z = $m('#zoek-catalogus');
   if (z) z.oninput = () => { ui.catZoek = z.value; tekenCatalogus(); };
+  $m('#cat-nieuw').onclick = () => catalogusFormulier(null);
   $$m('[data-cat]').forEach((b) => (b.onclick = () => { const c = catalogusVan(b.dataset.cat); if (c) catalogusItem(c); }));
 }
 function catalogusItem(c0) {
@@ -645,6 +649,7 @@ function catalogusItem(c0) {
       <ul class="acties">
         <li><button id="c-voorraad">Aan voorraad toevoegen</button></li>
         <li><button id="c-lijst">Op boodschappenlijst</button></li>
+        <li><button id="c-bewerk">Bewerken</button></li>
         <li><button id="c-prijzen">${(c.prijzen || []).length ? 'Prijzen aanpassen' : 'Prijzen invullen'}</button></li>
         <li><button id="c-weg" class="gevaar">Uit catalogus verwijderen</button></li>
       </ul>`;
@@ -654,6 +659,7 @@ function catalogusItem(c0) {
       hoeveelheid: TELBAAR.has(c.eenheid || 'stuks') ? 1 : c.hoeveelheid || 1, inhoud: c.inhoud || null, inhoud_eenheid: c.inhoud_eenheid || '' });
     $('#c-lijst', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks' }); toast(lijstMelding(c.naam)); };
     $('#c-prijzen', el).onclick = () => prijzenPaneel(c.naam, c.eenheid, () => { const nu = catalogusVan(c.naam); if (nu) catalogusItem(nu); else paneelSluiten(); });
+    $('#c-bewerk', el).onclick = () => catalogusFormulier(c);
     $('#c-weg', el).onclick = async () => {
       if (!(await vraag(`${c.naam} uit de catalogus verwijderen? Je voorraad blijft zoals ze is.`, { ja: 'Verwijderen', gevaar: true }))) return;
       await api('DELETE', 'catalogus', { naam: c.naam });
@@ -673,6 +679,76 @@ async function verbruiken(p, hoeveelheid, soort, sluiten) {
   toast(tekst, 'Ongedaan maken', async () => {
     if (S.producten.some((x) => x.id === oud.id)) await api('PUT', `producten/${oud.id}`, { hoeveelheid: oud.hoeveelheid });
     else await api('POST', 'producten', oud);
+  });
+}
+
+// Catalogusproduct zelf toevoegen of bewerken (los van je voorraad)
+function catalogusFormulier(bestaand) {
+  const nieuw = !bestaand;
+  const c = bestaand ? { ...bestaand } : { naam: ui.catZoek.trim(), eenheid: 'stuks', categorie: '', locatie: '', datumtype: 'THT', inhoud: null, inhoud_eenheid: '' };
+  if (nieuw && c.naam) c.naam = c.naam.charAt(0).toUpperCase() + c.naam.slice(1);
+  paneelOpenen((el) => {
+    if (alGetekend('catformulier')) return; // niet opnieuw tekenen terwijl je typt
+    const inVoorraad = !nieuw && (S.producten.some((p) => zelfde(p.naam, c.naam)) || S.boodschappen.some((b) => zelfde(b.naam, c.naam)));
+    el.innerHTML = `
+      ${paneelKop(nieuw ? 'Aan catalogus toevoegen' : 'Bewerken', nieuw ? 'Komt niet in je voorraad; dat kan later vanuit de catalogus' : '')}
+      <form id="cf" autocomplete="off">
+        <label class="veld"><span>Naam</span><input id="cf-naam" value="${esc(c.naam || '')}" required autocomplete="off" autocapitalize="sentences"></label>
+        ${inVoorraad ? '<p class="stil" style="margin-top:-.4rem">Een nieuwe naam wordt ook aangepast in je voorraad en op je boodschappenlijst.</p>' : ''}
+        <div class="rij2">
+          <label class="veld"><span>Eenheid</span><select id="cf-eenheid">${opties(EENHEDEN, c.eenheid || 'stuks')}</select></label>
+          <label class="veld"><span>Categorie</span><select id="cf-cat">${opties(categorieen(), c.categorie || '', 'Geen')}</select></label>
+        </div>
+        <div class="rij2" id="cf-inhoud-rij">
+          <label class="veld"><span id="cf-inhoud-titel">Inhoud per stuk</span><input id="cf-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
+          <label class="veld"><span>Eenheid inhoud</span><select id="cf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, c.inhoud_eenheid || 'g')}</select></label>
+        </div>
+        <label class="veld"><span>Plaats</span><select id="cf-plaats">${opties(locaties(), c.locatie || '', 'Geen')}</select></label>
+        <div class="segment" id="cf-type">
+          <button type="button" data-w="THT">Ten minste houdbaar tot</button>
+          <button type="button" data-w="TGT">Te gebruiken tot</button>
+        </div>
+        <details class="meer"${!nieuw && prijzenVan(c.naam).length ? ' open' : ''} style="margin-top:.8rem" id="cf-prijzen"><summary>Prijs per winkel</summary>
+          ${prijzenVeldenHtml(nieuw ? [] : prijzenVan(c.naam), c.eenheid || 'stuks')}
+        </details>
+        <div class="paneel-voet"><button type="submit" class="knop primair">${nieuw ? 'Toevoegen' : 'Bewaren'}</button></div>
+      </form>`;
+    sluitKnoppen(el);
+    let type = c.datumtype === 'TGT' ? 'TGT' : 'THT';
+    const typeTekenen = () => $$('#cf-type button', el).forEach((b) => b.classList.toggle('aan', b.dataset.w === type));
+    typeTekenen();
+    $$('#cf-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; typeTekenen(); }));
+    const inhoudTonen = () => {
+      const e = $('#cf-eenheid', el).value;
+      $('#cf-inhoud-rij', el).hidden = !TELBAAR.has(e);
+      $('#cf-inhoud-titel', el).textContent = `Inhoud per ${perTekst(e)} (mag leeg)`;
+    };
+    inhoudTonen();
+    const info = () => ({ eenheid: $('#cf-eenheid', el).value, inhoud_eenheid: $('#cf-inhoud', el).value.trim() ? $('#cf-inhoud-eenheid', el).value : '' });
+    prijzenKoppelen($('#cf-prijzen', el), info);
+    $('#cf-eenheid', el).onchange = () => { inhoudTonen(); prijsPerZetten(el, $('#cf-eenheid', el).value); };
+    $('#cf-inhoud', el).oninput = () => $('#cf-prijzen', el).prijsHint?.();
+    $('#cf-inhoud-eenheid', el).onchange = () => $('#cf-prijzen', el).prijsHint?.();
+    $('#cf', el).onsubmit = async (e) => {
+      e.preventDefault();
+      const naam = $('#cf-naam', el).value.trim();
+      if (!naam) return toast('Vul een naam in.');
+      const eenheid = $('#cf-eenheid', el).value, telbaar = TELBAAR.has(eenheid);
+      const inhoud = telbaar ? num($('#cf-inhoud', el).value) : null;
+      if (telbaar && $('#cf-inhoud', el).value.trim() && !(inhoud > 0)) return toast('Vul een geldige inhoud in, of laat het veld leeg.');
+      const prijzen = prijzenLezen($('#cf-prijzen', el), eenheid);
+      if (!prijzen) { $('#cf-prijzen', el).open = true; return; }
+      const data = { naam, eenheid, categorie: $('#cf-cat', el).value, locatie: $('#cf-plaats', el).value, datumtype: type,
+        inhoud: inhoud > 0 ? inhoud : null, inhoud_eenheid: inhoud > 0 ? $('#cf-inhoud-eenheid', el).value : '', prijzen };
+      if (!nieuw) data.oudeNaam = c.naam;
+      try {
+        await api(nieuw ? 'POST' : 'PUT', 'catalogus', data);
+        toast(nieuw ? `${naam} toegevoegd aan de catalogus` : `${naam} bewaard`);
+        const nu = catalogusVan(naam);
+        if (nu) catalogusItem(nu); else paneelSluiten();
+      } catch { /* melding al getoond */ }
+    };
+    if (nieuw && !c.naam && fijneMuis()) setTimeout(() => $('#cf-naam', el)?.focus(), 60);
   });
 }
 
