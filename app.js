@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 36;
+const APP_VERSIE = 37;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -2080,9 +2080,51 @@ function bestandHerinneren() {
 function handleidingPaneel() {
   paneelOpenen((el) => {
     el.innerHTML = `${paneelKop('Handleiding')}<div class="handleiding">${HANDLEIDING}</div>
-      <div class="paneel-voet"><button class="knop" data-sluit>Sluiten</button></div>`;
+      <div class="paneel-voet"><button class="knop" data-handleiding-pdf>Pdf downloaden</button>
+      <button class="knop" data-handleiding-afdrukken>Afdrukken</button><button class="knop" data-sluit>Sluiten</button></div>`;
     sluitKnoppen(el);
+    handleidingKnoppen(el);
   }, { breed: true });
+}
+
+/** Knoppen "Pdf downloaden" en "Afdrukken" van de handleiding koppelen (in het paneel en bij Instellingen). */
+function handleidingKnoppen(el) {
+  $$('[data-handleiding-pdf]', el).forEach((b) => (b.onclick = handleidingDownloaden));
+  $$('[data-handleiding-afdrukken]', el).forEach((b) => (b.onclick = handleidingAfdrukken));
+}
+
+/** De handleiding als pdf-bestand downloaden (gemaakt op het toestel zelf, ook zonder internet). */
+async function handleidingDownloaden() {
+  try {
+    const { handleidingPdf } = await import('./handleiding-pdf.js');
+    const datum = new Date().toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' });
+    const pdf = handleidingPdf(HANDLEIDING, { titel: 'Handleiding Voorraad', onderschrift: `Versie ${APP_VERSIE} · ${datum}` });
+    const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `Handleiding Voorraad (versie ${APP_VERSIE}).pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast('Handleiding gedownload als pdf');
+  } catch (e) {
+    console.error(e);
+    toast('De pdf kon niet gemaakt worden. Probeer Afdrukken en kies daar Opslaan als pdf.');
+  }
+}
+
+/** De handleiding afdrukken: alleen de handleiding komt op papier, niet de rest van de app. */
+function handleidingAfdrukken() {
+  document.getElementById('afdruk')?.remove();
+  const blok = document.createElement('div');
+  blok.id = 'afdruk';
+  blok.className = 'handleiding';
+  blok.innerHTML = `<h1>Handleiding Voorraad</h1><p class="afdruk-versie">Versie ${APP_VERSIE}</p>${HANDLEIDING}`;
+  document.body.appendChild(blok);
+  document.body.classList.add('afdrukken');
+  const opruimen = () => { document.body.classList.remove('afdrukken'); blok.remove(); window.removeEventListener('afterprint', opruimen); };
+  window.addEventListener('afterprint', opruimen);
+  if (typeof window.print !== 'function') { opruimen(); toast('Afdrukken kan niet in deze browser. Download de pdf en druk die af.'); return; }
+  // even wachten zodat de afdrukversie getekend is (nodig op iPhone)
+  setTimeout(() => { try { window.print(); } catch { opruimen(); toast('Afdrukken lukte niet. Download de pdf en druk die af.'); } }, 50);
 }
 
 async function tekenInstellingen() {
@@ -2121,7 +2163,8 @@ async function tekenInstellingen() {
     <section class="sectie" id="installeer-blok" hidden></section>
     <section class="sectie"><div class="sectie-titel">Handleiding</div>
       <p class="stil" style="margin-bottom:.8rem;font-size:.92rem">Uitleg over alle schermen en knoppen, ook zonder internet.</p>
-      <div class="knoppenrij"><button class="knop" id="i-handleiding">Handleiding lezen</button></div></section>
+      <div class="knoppenrij"><button class="knop" id="i-handleiding">Handleiding lezen</button>
+      <button class="knop" data-handleiding-pdf>Pdf downloaden</button><button class="knop" data-handleiding-afdrukken>Afdrukken</button></div></section>
     <section class="sectie"><div class="sectie-titel">Waarschuwen, zoveel dagen vooraf</div>
       ${dagen('Te gebruiken tot', 'tgt_dagen')}${dagen('Ten minste houdbaar tot', 'tht_dagen')}</section>
     ${lijstBlok('Plaatsen', 'locaties', 'locatie', 'Nieuwe plaats, bv. Kelder')}
@@ -2144,6 +2187,7 @@ async function tekenInstellingen() {
   bestandBlokTekenen();
   syncBlokTekenen();
   $m('#i-handleiding').onclick = handleidingPaneel;
+  handleidingKnoppen($('#inhoud'));
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
   $$m('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {

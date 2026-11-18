@@ -1,6 +1,6 @@
 // Klikt automatisch op ELKE knop van elk scherm, en op elke knop in de panelen die daaruit openen.
 // Een knop faalt als er een JavaScript-fout optreedt, of als er na de klik niets gebeurt
-// (scherm onveranderd, geen paneel, geen vraag, geen bestandskiezer, geen download).
+// (scherm onveranderd, geen paneel, geen vraag, geen bestandskiezer, geen download, geen afdrukvenster).
 // Nieuwe knoppen worden vanzelf mee getest: er hoeft niets aan deze test toegevoegd te worden.
 //
 // Uitvoeren:  node test/knoppen.test.cjs   (vereist Playwright; op GitHub gebeurt dit automatisch)
@@ -81,6 +81,8 @@ async function main() {
   async function vers(view) {
     const ctx = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
     await ctx.addInitScript(nepBestand); // bestandskiezer van het systeem kan in de test niet open
+    // afdrukvenster kan in de test niet open: tellen hoe vaak het gevraagd wordt
+    await ctx.addInitScript(() => { window.__afgedrukt = 0; window.print = () => { window.__afgedrukt++; }; });
     const page = await ctx.newPage();
     page.jsFouten = [];
     page.on('pageerror', (e) => page.jsFouten.push(e.message));
@@ -114,9 +116,11 @@ async function main() {
     const toestand = () => page.evaluate(() => document.body.innerHTML + location.hash + document.querySelector('#vraag').open
       + [...document.querySelectorAll('input, select, textarea')].map((v) => v.type === 'checkbox' ? v.checked : v.value).join('|'));
     const voor = await toestand();
+    const afgedruktVoor = await page.evaluate(() => window.__afgedrukt);
     try { await knop.click({ timeout: 3000 }); } catch (e) { fouten.push(`${naam}: kon niet klikken (${e.message.split('\n')[0]})`); return; }
     await page.waitForTimeout(350);
     const na = await toestand();
+    if (await page.evaluate((v) => window.__afgedrukt > v, afgedruktVoor)) gebeurd.push('afdrukken');
     if (process.env.UITGEBREID) console.log('  ', naam);
     if (page.jsFouten.length) fouten.push(`${naam}: JavaScript-fout: ${page.jsFouten.join(' | ')}`);
     else if (voor === na && !gebeurd.length && !alGekozen) fouten.push(`${naam}: er gebeurt niets na klikken`);
