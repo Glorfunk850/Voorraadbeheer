@@ -88,6 +88,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <li>Zet je winkels bij <b>Instellingen → Winkels</b> (bv. Colruyt, Delhaize, Aldi).</li>
   <li>Vul bij een product de prijs per winkel in: bij <b>Bewerken → Prijs per winkel</b>, of door op de prijs (of <b>Prijs invullen</b>) onder een boodschap te tikken.</li>
   <li>Kies bij <b>Prijs per</b> de eenheid zoals op het prijskaartje: per kg, per l, per stuk, per pak … Koop je per pak maar staat de prijs per kg, vul dan ook de inhoud per pak in, anders kan de app de prijs niet berekenen.</li>
+  <li>De prijs geldt <b>per inhoud</b>: een pak à 500 g kan per kg duurder zijn dan een pak à 1 kg. In het venster <b>Prijzen</b> staat elke inhoud apart; met <b>+ Prijs voor een andere inhoud</b> voeg je er een toe. In een formulier gelden de prijzen voor de inhoud die erboven staat. Heeft een inhoud geen eigen prijs, dan gebruikt de app de prijs zonder inhoud (als die er is).</li>
 </ol>
 <p>Daarna verschijnen bovenaan tabbladen: <b>Alles</b> en één per winkel. Elk product staat op Alles én bij de winkel waar het het goedkoopst is. Het blijft dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere. Boven de lijst staat de geschatte totaalprijs.</p>
 

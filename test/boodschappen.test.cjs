@@ -122,6 +122,65 @@ async function main() {
   auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum').map((b) => `${b.hoeveelheid}x${b.inhoud}${b.inhoud_eenheid}`);
   controle(JSON.stringify(auto) === '["1x500g"]', `minimum 5 kg weg: alleen die regel verdwijnt (${auto.join(', ')})`);
 
+  // prijs per inhoud: een pak à 1 kg heeft een andere prijs per kg dan een pak à 500 g
+  for (const b of (await api('GET', 'alles')).boodschappen) await api('DELETE', `boodschappen/${b.id}`);
+  await api('POST', 'boodschappen', { naam: 'Rijst', hoeveelheid: 2, eenheid: 'pak', inhoud: 500, inhoud_eenheid: 'g' });
+  await api('POST', 'boodschappen', { naam: 'Rijst', hoeveelheid: 1, eenheid: 'pak', inhoud: 1, inhoud_eenheid: 'kg' });
+  await api('POST', 'prijzen', { naam: 'Rijst', eenheid: 'pak', prijzen_inhoud: { inhoud: 1, inhoud_eenheid: 'kg' },
+    prijzen: [{ winkel: 'Colruyt', prijs: 3, per: 'kg' }, { winkel: 'Aldi', prijs: 2.5, per: 'kg' }] });
+  d = await api('GET', 'alles');
+  const pr = d.catalogus.find((c) => c.naam === 'Rijst').prijzen.map((p) => `${p.winkel}:${p.prijs}/${p.per}:${p.inhoud || ''}${p.inhoud_eenheid || ''}`).sort();
+  controle(JSON.stringify(pr) === '["Aldi:2.5/kg:1kg","Colruyt:3/kg:1kg","Colruyt:4/kg:"]', `prijzen per inhoud bewaard, de algemene blijft (${pr.join(', ')})`);
+  await page.reload();
+  await page.waitForSelector('#b-menu');
+  let rijen = await page.$$eval('#inhoud .lijst .rij', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ')));
+  controle(rijen.some((t) => t.includes('à 1 kg') && t.includes('Aldi') && t.includes('2,50')), `pak à 1 kg: eigen prijs, goedkoopst bij Aldi (${rijen.join(' | ')})`);
+  controle(rijen.some((t) => t.includes('à 500 g') && t.includes('Colruyt') && t.includes('4,00')), 'pak à 500 g zonder eigen prijs: de algemene prijs');
+
+  // in het venster Prijzen: elke inhoud een eigen blok
+  const r500b = d.boodschappen.find((b) => b.inhoud === 500);
+  await page.click(`[data-prijs="${r500b.id}"]`);
+  await page.waitForSelector('#pz-form');
+  const titels = await page.$$eval('.pz-groep-titel', (l) => l.map((x) => x.textContent.trim()));
+  controle(titels.some((t) => t.includes('500 g')) && titels.some((t) => t.includes('1 kg')) && titels.some((t) => t.includes('zonder eigen prijs')),
+    `prijzenvenster toont elke inhoud (${titels.join(' | ')})`);
+  const groep500 = '.pz-groep[data-inhoud="500"]';
+  await page.fill(`${groep500} .prijs-rij[data-winkel="Colruyt"] .pz-prijs`, '5');
+  // een nieuwe inhoud toevoegen
+  await page.click('#pz-nieuw summary');
+  await page.fill('#pz-nieuw-inhoud', '5');
+  await page.selectOption('#pz-nieuw-eenheid', 'kg');
+  await page.click('#pz-nieuw-ok');
+  await page.fill('.pz-groep[data-inhoud="5"] .prijs-rij[data-winkel="Colruyt"] .pz-prijs', '2');
+  await page.click('#pz-form button[type="submit"]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const pr2 = d.catalogus.find((c) => c.naam === 'Rijst').prijzen.map((p) => `${p.winkel}:${p.prijs}:${p.inhoud || ''}${p.inhoud_eenheid || ''}`).sort();
+  controle(JSON.stringify(pr2) === '["Aldi:2.5:1kg","Colruyt:2:5kg","Colruyt:3:1kg","Colruyt:4:","Colruyt:5:500g"]', `prijzen per inhoud bewaard via het venster (${pr2.join(', ')})`);
+  rijen = await page.$$eval('#inhoud .lijst .rij', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ')));
+  controle(rijen.some((t) => t.includes('à 500 g') && t.includes('5,00')), `pak à 500 g nu met eigen prijs: 2 × 0,5 kg × € 5 (${rijen.join(' | ')})`);
+
+  // in het productformulier gelden de prijzen voor de inhoud die erboven staat
+  const pid = d.producten.find((p) => p.naam === 'Rijst' && p.inhoud === 2).id;
+  await api('PUT', `producten/${pid}`, { hoeveelheid: 0 }); // staat dan onder "Op" en is aan te tikken
+  await page.goto(basis + '#voorraad');
+  await page.reload(); // de app de nieuwe stand laten inlezen
+  await page.waitForSelector(`[data-product="${pid}"]`);
+  await page.click(`[data-product="${pid}"]`);
+  await page.click('#bewerk');
+  await page.waitForSelector('#pf-prijzen');
+  controle((await page.textContent('#pf-prijzen summary')).includes('2 kg'), 'formulier: prijzen voor pak à 2 kg');
+  await page.fill('#pf-inhoud', '1');
+  await page.selectOption('#pf-inhoud-eenheid', 'kg');
+  await page.waitForTimeout(100);
+  controle((await page.inputValue('#pf-prijzen .prijs-rij[data-winkel="Aldi"] .pz-prijs')) === '2,50', 'andere inhoud gekozen: de prijzen van pak à 1 kg verschijnen');
+  await page.fill('#pf-prijzen .prijs-rij[data-winkel="Aldi"] .pz-prijs', '2,4');
+  await page.click('#pf button[type="submit"]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const pr3 = d.catalogus.find((c) => c.naam === 'Rijst').prijzen.map((p) => `${p.winkel}:${p.prijs}:${p.inhoud || ''}${p.inhoud_eenheid || ''}`).sort();
+  controle(JSON.stringify(pr3) === '["Aldi:2.4:1kg","Colruyt:2:5kg","Colruyt:3:1kg","Colruyt:4:","Colruyt:5:500g"]', `formulier past alleen de prijzen van die inhoud aan (${pr3.join(', ')})`);
+
   controle(!jsFouten.length, `geen JavaScript-fouten (${jsFouten.join(' | ')})`);
   await browser.close();
   srv.close();
