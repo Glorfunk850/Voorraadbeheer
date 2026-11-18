@@ -70,7 +70,7 @@ export const HANDLEIDING = `
 <h3>Toevoegen</h3>
 <ul>
   <li><b>Snel:</b> typ bovenaan iets, bv. <code>2 l melk</code> of <code>6 eieren</code>, en tik op <b>+</b>. Hoeveelheid en eenheid worden herkend.</li>
-  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit je producten (je ziet meteen wat je in huis hebt) of typ zelf iets, stel het aantal in met <b>−</b> en <b>+</b> en kies de eenheid. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
+  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit je producten (je ziet meteen wat je in huis hebt) of typ zelf iets, stel het aantal in met <b>−</b> en <b>+</b> en kies de eenheid. Onder <b>Inhoud, categorie, plaats en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>: inhoud per stuk, categorie, plaats, houdbaarheid en prijs per winkel. Dat wordt in de catalogus bewaard; kies je een gekend product, dan staat het er al ingevuld. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
 </ul>
 
 <h3>Op de lijst</h3>

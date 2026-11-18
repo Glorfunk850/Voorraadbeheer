@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 41;
+const APP_VERSIE = 42;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1003,7 +1003,7 @@ function volgendeStap(h, e, richting) {
 
 /** Menu om zelf een boodschap te kiezen of te typen, met het aantal erbij. Blijft open om er meer toe te voegen. */
 function boodschapToevoegen() {
-  let zoek = '', eenheidZetten = () => {};
+  let zoek = '', eenheidZetten = () => {}, meerVullen = () => {}, meerLezen = () => ({}), meerVoor = null;
   const bekendeEenheid = (naam) => S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || catalogusVan(naam)?.eenheid || 'stuks';
   paneelOpenen((el) => {
     const lijstTekenen = () => {
@@ -1020,6 +1020,7 @@ function boodschapToevoegen() {
         const n = namen[+k.dataset.kies];
         $('#bt-naam', el).value = n; zoek = n;
         eenheidZetten(bekendeEenheid(n));
+        meerVullen(n);
         lijstTekenen();
         if (fijneMuis()) { $('#bt-hv', el).focus(); $('#bt-hv', el).select(); }
       }));
@@ -1032,11 +1033,64 @@ function boodschapToevoegen() {
           <input id="bt-hv" inputmode="decimal" value="1" aria-label="Hoeveelheid">
           <button type="button" class="rond" id="bt-plus" aria-label="Meer">+</button>
           <select id="bt-eenheid" aria-label="Eenheid">${opties(EENHEDEN, 'stuks')}</select></div></div>
+        <details class="meer" id="bt-meer" style="margin-bottom:1rem"><summary>Inhoud, categorie, plaats en prijzen</summary><div id="bt-meer-inhoud"></div></details>
         <div id="bt-lijst"></div>
         <div class="paneel-voet"><button class="knop" data-sluit>Klaar</button><button class="knop primair" id="bt-ok">Toevoegen</button></div>`;
       sluitKnoppen(el);
       const naam = $('#bt-naam', el), hv = $('#bt-hv', el), eenheid = $('#bt-eenheid', el);
-      naam.oninput = () => { zoek = naam.value; const e = catalogusnamen().find((n) => zelfde(n, naam.value)); if (e) eenheidZetten(bekendeEenheid(e)); lijstTekenen(); };
+      // Dezelfde gegevens als bij "Aan catalogus toevoegen"; ze worden in de catalogus bewaard (ingevuld voor een gekend product).
+      const meer = $('#bt-meer', el);
+      let type = 'THT', meerAangeraakt = false;
+      const productEenheid = () => catalogusVan(meerVoor || '')?.eenheid || eenheid.value || 'stuks';
+      meerVullen = (n) => {
+        const k = n ? catalogusnamen().find((x) => zelfde(x, n)) || null : null;
+        if (k !== null && meerVoor !== null && zelfde(k, meerVoor)) return;
+        if (k === null && meerVoor === null && meerAangeraakt) return; // zelf iets nieuws aan het invullen: niet wissen
+        meerVoor = k; meerAangeraakt = false;
+        const c = (k && catalogusVan(k)) || {};
+        type = c.datumtype === 'TGT' ? 'TGT' : 'THT';
+        const pe = productEenheid();
+        $('#bt-meer-inhoud', el).innerHTML = `
+          <div class="rij2" id="bt-inhoud-rij">
+            <label class="veld"><span id="bt-inhoud-titel">Inhoud per ${esc(perTekst(TELBAAR.has(pe) ? pe : 'stuks'))} (mag leeg)</span><input id="bt-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
+            <label class="veld"><span>Eenheid inhoud</span><select id="bt-inhoud-eenheid">${opties(INHOUD_EENHEDEN, c.inhoud_eenheid || 'g')}</select></label>
+          </div>
+          <div class="rij2">
+            <label class="veld"><span>Categorie</span><select id="bt-cat">${opties(categorieen(), c.categorie || '', 'Geen')}</select></label>
+            <label class="veld"><span>Plaats</span><select id="bt-plaats">${opties(locaties(), c.locatie || '', 'Geen')}</select></label>
+          </div>
+          <div class="segment" id="bt-type">
+            <button type="button" data-w="THT">Ten minste houdbaar tot</button>
+            <button type="button" data-w="TGT">Te gebruiken tot</button>
+          </div>
+          <details class="meer"${k && prijzenVan(k).length ? ' open' : ''} style="margin-top:.8rem" id="bt-prijzen"><summary>Prijs per winkel</summary>
+            ${prijzenVeldenHtml(k ? prijzenVan(k) : [], pe)}
+          </details>`;
+        const typeTekenen = () => $$('#bt-type button', el).forEach((b) => b.classList.toggle('aan', b.dataset.w === type));
+        typeTekenen();
+        $$('#bt-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; meerAangeraakt = true; typeTekenen(); }));
+        $('#bt-inhoud-rij', el).hidden = !TELBAAR.has(pe);
+        const pz = $('#bt-prijzen', el);
+        prijzenKoppelen(pz, () => ({ eenheid: productEenheid(), inhoud_eenheid: $('#bt-inhoud', el).value.trim() ? $('#bt-inhoud-eenheid', el).value : '' }));
+        $('#bt-inhoud', el).oninput = () => pz.prijsHint?.();
+        $('#bt-inhoud-eenheid', el).onchange = () => pz.prijsHint?.();
+        const aangeraakt = () => { meerAangeraakt = true; };
+        $('#bt-meer-inhoud', el).addEventListener('input', aangeraakt);
+        $('#bt-meer-inhoud', el).addEventListener('change', aangeraakt);
+        $('#bt-meer-inhoud', el).addEventListener('click', (e) => { if (e.target.closest('[data-pz-weg], .pz-erbij')) aangeraakt(); });
+      };
+      // null: er klopt iets niet (melding getoond); {}: niets te bewaren; anders de gegevens voor de catalogus
+      meerLezen = () => {
+        if (!meerAangeraakt) return {};
+        const pe = productEenheid(), telbaar = TELBAAR.has(pe);
+        const iTekst = $('#bt-inhoud', el).value.trim(), inhoud = telbaar ? num(iTekst) : null;
+        if (telbaar && iTekst && !(inhoud > 0)) { meer.open = true; toast('Vul een geldige inhoud in, of laat het veld leeg.'); return null; }
+        const pz = $('#bt-prijzen', el), prijzen = prijzenLezen(pz, pe);
+        if (!prijzen) { meer.open = true; pz.open = true; return null; }
+        return { eenheid: pe, categorie: $('#bt-cat', el).value, locatie: $('#bt-plaats', el).value, datumtype: type,
+          inhoud: inhoud > 0 ? inhoud : null, inhoud_eenheid: inhoud > 0 ? $('#bt-inhoud-eenheid', el).value : '', prijzen };
+      };
+      naam.oninput = () => { zoek = naam.value; const e = catalogusnamen().find((n) => zelfde(n, naam.value)); if (e) eenheidZetten(bekendeEenheid(e)); meerVullen(naam.value.trim()); lijstTekenen(); };
       const minKnopZetten = () => { $('#bt-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
       $('#bt-plus', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, 1)); minKnopZetten(); };
       $('#bt-min', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, -1)); minKnopZetten(); };
@@ -1044,16 +1098,36 @@ function boodschapToevoegen() {
       // stond het aantal nog op de standaardstap van de vorige eenheid (1 stuk), neem dan die van de nieuwe (100 g ...)
       let vorige = eenheid.value;
       eenheidZetten = (e) => { eenheid.value = e; if (num(hv.value) === stapVan(vorige)) hv.value = fmt(stapVan(e)); vorige = e; minKnopZetten(); };
-      eenheid.onchange = () => eenheidZetten(eenheid.value);
+      eenheid.onchange = () => {
+        eenheidZetten(eenheid.value);
+        if (meerVoor === null) { // nieuw product: de eenheid bepaalt of er een inhoud per stuk is
+          const pe = productEenheid();
+          $('#bt-inhoud-rij', el).hidden = !TELBAAR.has(pe);
+          if (TELBAAR.has(pe)) $('#bt-inhoud-titel', el).textContent = `Inhoud per ${perTekst(pe)} (mag leeg)`;
+          prijsPerZetten($('#bt-prijzen', el), pe);
+        }
+      };
       minKnopZetten();
+      meerVullen('');
       $('#bt-ok', el).onclick = async () => {
         const tekst = naam.value.trim();
         if (!tekst) { toast('Typ of kies eerst wat je wilt kopen.'); naam.focus(); return; }
         const n = catalogusnamen().find((x) => zelfde(x, tekst)) || tekst.charAt(0).toUpperCase() + tekst.slice(1);
         const h = num(hv.value);
-        await api('POST', 'boodschappen', { naam: n, hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, product_id: S.producten.find((p) => zelfde(p.naam, n))?.id || null });
+        const extra = meerLezen();
+        if (!extra) return;
+        try {
+          if (Object.keys(extra).length) {
+            const bestaat = catalogusVan(n);
+            // een gekend product houdt zijn eenheid
+            const { eenheid: pe, ...rest } = extra;
+            await api(bestaat ? 'PUT' : 'POST', 'catalogus', bestaat ? { naam: n, oudeNaam: bestaat.naam, ...rest } : { naam: n, eenheid: pe, ...rest });
+          }
+          await api('POST', 'boodschappen', { naam: n, hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, product_id: S.producten.find((p) => zelfde(p.naam, n))?.id || null });
+        } catch { return; /* melding al getoond */ }
         toast(lijstMelding(n));
         naam.value = ''; zoek = ''; hv.value = '1'; eenheid.value = vorige = 'stuks'; minKnopZetten();
+        meerVoor = null; meerAangeraakt = false; meerVullen(''); meer.open = false;
         lijstTekenen();
       };
     }

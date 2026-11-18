@@ -93,6 +93,38 @@ async function main() {
   controle(!d.catalogus.length, 'uit catalogus verwijderd');
   controle(d.producten.length === 1, 'voorraad blijft bij verwijderen');
 
+  // boodschap toevoegen met dezelfde gegevens als in de catalogus
+  await page.goto(basis + '#boodschappen');
+  await page.waitForSelector('#b-menu');
+  await page.click('#b-menu');
+  await page.fill('#bt-naam', 'Pasta');
+  await page.click('#bt-meer summary');
+  await page.fill('#bt-inhoud', '500');
+  await page.selectOption('#bt-inhoud-eenheid', 'g');
+  await page.click('#bt-type [data-w="TGT"]');
+  await page.click('#bt-prijzen summary');
+  await page.click('#bt-prijzen .pz-erbij');
+  await page.fill('#bt-prijzen .pz-winkel >> nth=-1', 'Delhaize');
+  await page.fill('#bt-prijzen .prijs-rij:last-child .pz-prijs', '1,80');
+  await page.click('#bt-ok');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const pasta = d.catalogus.find((c) => c.naam === 'Pasta');
+  controle(pasta && pasta.inhoud === 500 && pasta.inhoud_eenheid === 'g' && pasta.datumtype === 'TGT' && pasta.eenheid === 'stuks', 'boodschap: inhoud en datumsoort in de catalogus bewaard');
+  controle(pasta && pasta.prijzen.length === 1 && pasta.prijzen[0].prijs === 1.8 && pasta.prijzen[0].winkel === 'Delhaize', 'boodschap: prijs per winkel bewaard');
+  controle(d.boodschappen.some((b) => b.naam === 'Pasta'), 'boodschap staat op de lijst');
+  controle((await page.inputValue('#bt-naam')) === '' && (await page.inputValue('#bt-inhoud')) === '', 'velden leeg na toevoegen');
+  // een gekend product kiezen vult de gegevens in
+  await page.fill('#bt-naam', 'pasta');
+  await page.waitForTimeout(100);
+  controle((await page.inputValue('#bt-inhoud')) === '500', 'gekend product: inhoud ingevuld');
+  // zonder iets aan te passen blijft de catalogus zoals hij was
+  await page.fill('#bt-naam', 'Melk');
+  await page.click('#bt-ok');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(!d.catalogus.some((c) => c.naam === 'Melk') && d.boodschappen.some((b) => b.naam === 'Melk'), 'zonder extra gegevens alleen op de lijst');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();
