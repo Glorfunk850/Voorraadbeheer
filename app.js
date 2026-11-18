@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 34;
+const APP_VERSIE = 35;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1867,13 +1867,13 @@ function syncBlokTekenen() {
     blok.innerHTML = titel + p('Houd je voorraad, boodschappen, recepten en planning gelijk op al je toestellen. Alles wordt op het toestel zelf versleuteld met een geheime code die alleen jouw toestellen kennen: de server kan je gegevens niet lezen.')
       + (standaard ? '' : `<label class="veld"><span>Adres van je synchronisatieserver (zie LEESMIJ)</span>
         <input id="s-adres" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://voorraad-sync.jouwnaam.workers.dev"></label>`)
-      + `<div class="knoppenrij"><button class="knop primair" id="s-aan">Synchronisatie aanzetten</button><button class="knop" id="s-koppel">Koppelen met een code</button></div>`;
+      + `<div class="knoppenrij"><button class="knop primair" id="s-aan">Synchronisatie aanzetten</button><button class="knop" id="s-scan">QR-code scannen</button><button class="knop" id="s-koppel">Koppelen met een code</button></div>`;
   } else {
     const st = z.bezig ? 'Bezig met synchroniseren…' : z.fout ? '' : z.laatst ? `Aan. Laatst gesynchroniseerd ${tijdstipTekst(z.laatst)}.` : 'Aan.';
     blok.innerHTML = titel + p((st ? esc(st) : '') + (z.fout && !z.bezig ? `<b style="color:var(--rood)">${esc(z.fout)}</b>${z.offline ? ' Je wijzigingen worden verstuurd zodra het weer lukt.' : ''}` : '')
       + '<br>Je gegevens worden versleuteld; de server kan ze niet lezen.')
       + (ui.syncCode ? `<div class="sync-code">
-          <p style="font-size:.92rem;line-height:1.55;margin-bottom:.6rem">Op je andere toestel: open Voorraad → Instellingen → <b>Koppelen met een code</b> en typ deze code. Of scan de QR-code met de camera${isIOS() ? '' : ' (op een iPhone: typ de code in de app)'}.</p>
+          <p style="font-size:.92rem;line-height:1.55;margin-bottom:.6rem">Op je andere toestel: open Voorraad → Instellingen → <b>QR-code scannen</b> en richt de camera op deze QR-code. Of kies daar <b>Koppelen met een code</b> en typ de code.</p>
           <div class="sync-qr" id="s-qr"></div>
           <div class="sync-tekst">${esc(z.code)}</div>
           <p class="stil" style="font-size:.85rem;line-height:1.5;margin:.6rem 0">Houd deze code geheim: wie ze heeft, kan je gegevens lezen. Bewaar ze ook op een veilige plek: verlies je al je toestellen, dan haal je er alles mee terug.</p>
@@ -1899,6 +1899,7 @@ function syncBlokTekenen() {
     syncBlokTekenen();
   });
   knop('s-koppel', () => syncKoppelen('', adres()));
+  knop('s-scan', () => qrScannen(adres()));
   knop('s-toon', () => { ui.syncCode = true; syncBlokTekenen(); });
   knop('s-verberg', () => { ui.syncCode = false; syncBlokTekenen(); });
   knop('s-kopieer', async () => {
@@ -1917,6 +1918,96 @@ function syncBlokTekenen() {
     syncBlokTekenen();
   });
 }
+// QR-code van een ander toestel scannen met de camera, in de app zelf (ook op iPhone, waar de camera-app
+// de link in Safari zou openen). BarcodeDetector als de browser het heeft, anders jsQR (vendor/jsQR.js).
+let jsqrBelofte = null;
+const jsqrLaden = () => jsqrBelofte || (jsqrBelofte = new Promise((ok, nee) => {
+  if (window.jsQR) return ok(window.jsQR);
+  const s = document.createElement('script');
+  s.src = 'vendor/jsQR.js';
+  s.onload = () => ok(window.jsQR);
+  s.onerror = () => { jsqrBelofte = null; nee(new Error('laden')); };
+  document.head.appendChild(s);
+}));
+/** Tekst uit een QR-code: de link (#koppelen=…&server=…) of alleen de code. */
+function koppelGegevens(tekst) {
+  const t = String(tekst || '').trim();
+  const i = t.indexOf('#koppelen=');
+  if (i >= 0) { const q = new URLSearchParams(t.slice(i + 1)); return { code: q.get('koppelen') || '', server: q.get('server') || '' }; }
+  return /^[0-9a-z\s-]{32,40}$/i.test(t) ? { code: t, server: '' } : null;
+}
+async function qrScannen(adres) {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'vraag scanner';
+  dlg.innerHTML = `<p>Richt de camera op de QR-code op je andere toestel (Instellingen → Toestel koppelen).</p>
+    <div class="scanner-beeld"><video playsinline muted autoplay></video><span class="scanner-kader"></span></div>
+    <p class="stil scanner-status" style="font-size:.85rem;margin:.6rem 0 0">Camera openen…</p>
+    <div class="vraag-knoppen"><button type="button" class="knop">Annuleren</button></div>`;
+  document.body.appendChild(dlg);
+  const video = $('video', dlg), status = $('.scanner-status', dlg);
+  let stroom = null, klaar = false, timer = null;
+  const sluiten = () => {
+    klaar = true; clearTimeout(timer);
+    if (stroom) stroom.getTracks().forEach((t) => t.stop());
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+  $('button', dlg).onclick = sluiten;
+  dlg.addEventListener('cancel', sluiten);
+  dlg.showModal();
+  if (!navigator.mediaDevices?.getUserMedia) {
+    sluiten();
+    return toast('Deze browser kan de camera niet gebruiken. Typ de code met "Koppelen met een code".', null, null, true);
+  }
+  try {
+    stroom = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+  } catch (f) {
+    sluiten();
+    const nee = f && (f.name === 'NotAllowedError' || f.name === 'SecurityError');
+    return toast(nee ? 'De app mag de camera niet gebruiken. Geef toestemming in de instellingen van je browser, of typ de code met "Koppelen met een code".'
+      : 'De camera kon niet geopend worden. Typ de code met "Koppelen met een code".', null, null, true);
+  }
+  if (klaar) { stroom.getTracks().forEach((t) => t.stop()); return; }
+  video.srcObject = stroom;
+  try { await video.play(); } catch { /* autoplay: begint vanzelf */ }
+  let lezer = null;
+  try {
+    if ('BarcodeDetector' in window && (await window.BarcodeDetector.getSupportedFormats()).includes('qr_code')) {
+      const d = new window.BarcodeDetector({ formats: ['qr_code'] });
+      lezer = async () => ((await d.detect(video))[0] || {}).rawValue || null;
+    }
+  } catch { lezer = null; }
+  if (!lezer) {
+    let jsQR;
+    try { jsQR = await jsqrLaden(); } catch { sluiten(); return toast('De QR-lezer kon niet geladen worden. Typ de code met "Koppelen met een code".', null, null, true); }
+    const doek = document.createElement('canvas'), cx = doek.getContext('2d', { willReadFrequently: true });
+    lezer = async () => {
+      const w = video.videoWidth, h = video.videoHeight;
+      if (!w || !h) return null;
+      const f = Math.min(1, 720 / Math.max(w, h));
+      doek.width = Math.round(w * f); doek.height = Math.round(h * f);
+      cx.drawImage(video, 0, 0, doek.width, doek.height);
+      const r = jsQR(cx.getImageData(0, 0, doek.width, doek.height).data, doek.width, doek.height, { inversionAttempts: 'attemptBoth' });
+      return r ? r.data : null;
+    };
+  }
+  status.textContent = 'Zoeken naar een QR-code…';
+  let fout = false;
+  const kijken = async () => {
+    if (klaar) return;
+    let tekst = null;
+    try { tekst = await lezer(); } catch { /* volgend beeld */ }
+    if (klaar) return;
+    if (tekst) {
+      const g = koppelGegevens(tekst);
+      if (g && g.code) { sluiten(); return syncKoppelen(g.code, g.server || adres); }
+      if (!fout) { fout = true; status.textContent = 'Dit is geen QR-code van Voorraad. Scan de code bij Instellingen → Toestel koppelen op je andere toestel.'; }
+    }
+    timer = setTimeout(kijken, 200);
+  };
+  kijken();
+}
+
 /** Dit toestel koppelen aan een bestaande synchronisatie (code getypt, of uit een gescande link). */
 async function syncKoppelen(code, adres) {
   const viaSafari = isIOS() && !alsApp();

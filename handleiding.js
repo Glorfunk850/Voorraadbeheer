@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 34; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 35; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -226,13 +226,13 @@ export const HANDLEIDING = `
 <p>Houd je voorraad, boodschappen, recepten en planning gelijk op al je toestellen. Je koppelt ze met een geheime code; er is geen account of wachtwoord. Alles wordt op het toestel zelf versleuteld, de server kan je gegevens niet lezen. De server moet eenmalig geplaatst worden (zie de LEESMIJ).</p>
 <ol>
   <li>Op je eerste toestel: <b>Instellingen → Synchroniseren tussen toestellen → Synchronisatie aanzetten</b>. Je ziet een QR-code en een code van 32 tekens.</li>
-  <li>Op elk ander toestel: <b>Instellingen → Koppelen met een code</b> en typ de code. Of scan de QR-code met de camera (op Android opent de app dan meteen).</li>
+  <li>Op elk ander toestel: <b>Instellingen → QR-code scannen</b> en richt de camera op de QR-code van je eerste toestel. De app vraagt de eerste keer toestemming om de camera te gebruiken. Of kies <b>Koppelen met een code</b> en typ de code.</li>
   <li>Staan er op het nieuwe toestel al gegevens, kies dan <b>Samenvoegen</b> (alles houden) of <b>Vervangen</b> (de gegevens van je andere toestellen nemen).</li>
 </ol>
 <ul>
   <li>Daarna gaat elke wijziging vanzelf naar je andere toestellen. Zonder internet werk je gewoon verder; je wijzigingen gaan mee zodra er weer verbinding is.</li>
   <li>Wijzig je op twee toestellen tegelijk, dan gaat er niets verloren: elke wijziging wordt apart samengevoegd.</li>
-  <li><b>iPhone/iPad:</b> de camera opent de QR-code in Safari, niet in de app. Typ de code daarom in de app zelf.</li>
+  <li>Scan de QR-code met <b>QR-code scannen</b> in de app, niet met de gewone camera-app: op een iPhone opent die de code in Safari in plaats van in de app.</li>
   <li>Later nog een toestel koppelen: <b>Toestel koppelen</b> toont de code opnieuw.</li>
   <li>Houd de code geheim: wie ze heeft, kan je gegevens lezen. Bewaar ze wel op een veilige plek: ben je al je toestellen kwijt, dan haal je er alles mee terug.</li>
   <li>Een gezin dat één voorraad deelt, koppelt alle toestellen met dezelfde code. Wie apart wil, zet zelf synchronisatie aan en krijgt een eigen code.</li>

@@ -1,6 +1,6 @@
 // Service worker: laat de app installeren en offline werken.
 // Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v34';
+const VERSIE = 'voorraad-v35';
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
   './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'handleiding.js', 'manifest.webmanifest',
@@ -13,7 +13,7 @@ const PDF_BESTANDEN = [
   'vendor/standard_fonts/LiberationSans-Italic.ttf', 'vendor/standard_fonts/LiberationSans-BoldItalic.ttf',
   'vendor/wasm/jbig2.wasm', 'vendor/wasm/openjpeg.wasm', 'vendor/wasm/qcms_bg.wasm',
   'vendor/wasm/jbig2_nowasm_fallback.js', 'vendor/wasm/openjpeg_nowasm_fallback.js',
-  'sync-adres.js', 'vendor/qrcode.js', // ook los: ontbreekt sync-adres.js, dan werkt de app gewoon
+  'sync-adres.js', 'vendor/qrcode.js', 'vendor/jsQR.js', // ook los: ontbreekt sync-adres.js, dan werkt de app gewoon
 ];
 
 self.addEventListener('install', (e) => {
