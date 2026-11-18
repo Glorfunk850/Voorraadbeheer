@@ -211,7 +211,7 @@
       const tekort = Math.round((hoofd.minimum - totaal) * 100) / 100;
       if (auto) auto.hoeveelheid = tekort;
       else if (!S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt && inhoudSleutel(b) === sleutel)) {
-        S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid,
+        S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid, ...(hoofd.merk ? { merk: hoofd.merk } : {}),
           ...boodschapInhoud(hoofd.eenheid, hoofd.inhoud, hoofd.inhoud_eenheid), product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
       }
     } else weg();
@@ -545,12 +545,13 @@
             bestaand.hoeveelheid = Math.round((bestaand.hoeveelheid + omrekenen(h, item.eenheid, bestaand.eenheid)) * 1000) / 1000;
             if (item.vervaldatum) { bestaand.vervaldatum = item.vervaldatum; bestaand.datumtype = item.datumtype; }
             if (item.locatie) bestaand.locatie = item.locatie;
+            if (b.merk && !bestaand.merk) bestaand.merk = b.merk;
             bestaand.aankoopdatum = vandaag(); bestaand.gewijzigd = nu();
             catalogusBijwerken(bestaand);
           } else {
             const voorbeeld = S.producten.find((p) => zelfde(p.naam, b.naam));
             const bekend = voorbeeld || S.catalogus.find((x) => zelfde(x.naam, b.naam)) || {};
-            S.producten.push({ uitlekgewicht: !!bekend.uitlekgewicht, merk: bekend.merk || '', id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
+            S.producten.push({ uitlekgewicht: !!bekend.uitlekgewicht, merk: b.merk || bekend.merk || '', id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
               datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu(),
               ...(inh.inhoud ? inh : voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });
@@ -577,12 +578,14 @@
           // Alleen samentellen met een regel met dezelfde inhoud en een eenheid die om te rekenen is.
           const bestaand = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt
             && inhoudSleutel(b) === inhoudSleutel(inh) && (h === null || b.hoeveelheid === null || omrekenen(h, item.eenheid, b.eenheid) !== null));
+          const merk = String(item.merk || '').trim();
           if (bestaand) {
+            if (merk && !bestaand.merk) bestaand.merk = merk;
             const erbij = omrekenen(h, item.eenheid, bestaand.eenheid);
             if (h !== null && bestaand.hoeveelheid !== null && erbij !== null) bestaand.hoeveelheid = Math.round((bestaand.hoeveelheid + erbij) * 100) / 100;
             continue;
           }
-          S.boodschappen.push({ id: id(), naam, hoeveelheid: h, eenheid: item.eenheid || '', ...inh, product_id: item.product_id || null, afgevinkt: 0, bron: item.bron || 'handmatig' });
+          S.boodschappen.push({ id: id(), naam, hoeveelheid: h, eenheid: item.eenheid || '', ...inh, ...(merk ? { merk } : {}), product_id: item.product_id || null, afgevinkt: 0, bron: item.bron || 'handmatig' });
         }
         return alles();
       }
@@ -591,6 +594,7 @@
         if ('afgevinkt' in data) b.afgevinkt = data.afgevinkt ? 1 : 0;
         if ('hoeveelheid' in data) b.hoeveelheid = getal(data.hoeveelheid);
         if ('eenheid' in data) b.eenheid = data.eenheid || '';
+        if ('merk' in data) b.merk = String(data.merk || '').trim();
         if ('inhoud' in data || 'eenheid' in data) {
           const inh = boodschapInhoud(b.eenheid, 'inhoud' in data ? data.inhoud : b.inhoud, 'inhoud' in data ? data.inhoud_eenheid : b.inhoud_eenheid);
           delete b.inhoud; delete b.inhoud_eenheid; Object.assign(b, inh);

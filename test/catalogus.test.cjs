@@ -182,6 +182,31 @@ async function main() {
   await page.reload();
   controle((await page.textContent('[data-cat="Kikkererwten"]')).includes('Bonduelle'), 'merk staat achter de naam in de catalogus');
 
+  // boodschap toevoegen: kiezen uit de catalogus (ook zoeken op merk) en het merk invullen
+  await page.goto(basis + '#boodschappen');
+  await page.reload();
+  await page.click('#b-menu');
+  await page.fill('#bt-naam', 'bonduel');
+  await page.dispatchEvent('#bt-naam', 'input');
+  controle((await page.textContent('#bt-lijst')).includes('Kikkererwten'), 'boodschap: zoeken op merk toont het catalogusproduct');
+  await page.click('#bt-lijst [data-kies]');
+  controle((await page.inputValue('#bt-naam')) === 'Kikkererwten' && (await page.inputValue('#bt-merk')) === 'Bonduelle', 'boodschap: kiezen uit catalogus vult naam en merk in');
+  await page.click('#bt-ok');
+  await page.waitForTimeout(250);
+  await page.fill('#bt-naam', 'Tomatenpuree');
+  await page.fill('#bt-merk', 'Heinz');
+  await page.click('#bt-ok');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.boodschappen.find((b) => b.naam === 'Kikkererwten')?.merk === 'Bonduelle' && d.boodschappen.find((b) => b.naam === 'Tomatenpuree')?.merk === 'Heinz', 'boodschap: merk bewaard');
+  controle((await page.inputValue('#bt-merk')) === '', 'boodschap: merkveld leeg na toevoegen');
+  await page.click('#paneel [data-sluit]');
+  controle((await page.textContent('#inhoud')).includes('Heinz'), 'boodschap: merk staat op de lijst');
+  const tp = d.boodschappen.find((b) => b.naam === 'Tomatenpuree');
+  await api('POST', 'boodschappen/afrekenen', { items: [{ id: tp.id, hoeveelheid: 1, eenheid: 'stuks', locatie: '' }] });
+  d = await api('GET', 'alles');
+  controle(d.producten.find((p) => p.naam === 'Tomatenpuree')?.merk === 'Heinz' && d.catalogus.find((c) => c.naam === 'Tomatenpuree')?.merk === 'Heinz', 'boodschap: merk gaat mee naar voorraad en catalogus');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();
