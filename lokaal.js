@@ -35,13 +35,21 @@
     }
     return uit;
   };
-  // prijzen van een product: [{ winkel, prijs, per }] — prijs in euro per eenheid `per`, één regel per winkel
+  // prijzen van een product: [{ winkel, prijs, per }] — prijs in euro per eenheid `per`.
+  // Met een verpakking ({ ..., maat: 200, maat_eenheid: 'g' }) is `prijs` de prijs van die verpakking;
+  // zo kan een winkel meerdere regels hebben (bv. 200 g, 600 g en 1,5 kg), maar niet twee keer dezelfde verpakking.
+  const MAAT_EENHEDEN = ['g', 'kg', 'ml', 'cl', 'dl', 'l', 'stuks'];
   const prijzenLijst = (v) => {
     const uit = [];
     for (const x of Array.isArray(v) ? v : []) {
       const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs);
-      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel))) continue;
-      uit.push({ winkel, prijs: Math.round(prijs * 1000) / 1000, per: String((x && x.per) || '').trim() });
+      const m = getal(x && x.maat), me = String((x && x.maat_eenheid) || '').trim();
+      const maat = m > 0 && MAAT_EENHEDEN.includes(me) ? Math.round(m * 1000) / 1000 : null;
+      if (!winkel || !(prijs >= 0)) continue;
+      if (uit.some((y) => zelfde(y.winkel, winkel) && (y.maat || null) === maat && (maat === null || y.maat_eenheid === me))) continue;
+      const regel = { winkel, prijs: Math.round(prijs * 1000) / 1000, per: String((x && x.per) || '').trim() };
+      if (maat) { regel.maat = maat; regel.maat_eenheid = me; }
+      uit.push(regel);
     }
     return uit;
   };

@@ -165,6 +165,54 @@ async function main() {
   d = await api('POST', 'hernoemen', { veld: 'winkel', van: 'Aldi', naar: 'Lidl' });
   controle(d.catalogus.find((c) => c.naam === 'Kaas').prijzen.some((p) => p.winkel === 'Lidl'), 'winkel hernoemd: prijzen mee hernoemd');
 
+  // verschillende verpakkingen bij één winkel (200 g, 600 g en 1,5 kg), naast een prijs per kg bij een andere winkel
+  await api('POST', 'catalogus', { naam: 'Cashewnoten', eenheid: 'g' });
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  await page.waitForSelector('[data-cat="Cashewnoten"]');
+  await page.click('[data-cat="Cashewnoten"]');
+  await page.click('#c-prijzen');
+  await page.fill('#paneel [data-winkel="Colruyt"] .pz-prijs', '26');
+  await page.click('#paneel .pz-erbij');
+  await page.fill('#paneel .pz-winkel >> nth=-1', 'Pit & Pit');
+  await page.fill('#paneel .prijs-rij:last-child .pz-maat', '200 g');
+  await page.fill('#paneel .prijs-rij:last-child .pz-prijs', '4,99');
+  await page.click('#paneel .pz-maat-erbij');
+  controle((await page.inputValue('#paneel .prijs-rij:last-child .pz-winkel')) === 'Pit & Pit', '+ Verpakking neemt dezelfde winkel over');
+  await page.fill('#paneel .prijs-rij:last-child .pz-maat', '600g');
+  await page.fill('#paneel .prijs-rij:last-child .pz-prijs', '13,53');
+  await page.click('#paneel .pz-maat-erbij');
+  await page.fill('#paneel .prijs-rij:last-child .pz-maat', '1,5 kg');
+  await page.fill('#paneel .prijs-rij:last-child .pz-prijs', '24,63');
+  await page.click('#pz-form button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  let cash = d.catalogus.find((c) => c.naam === 'Cashewnoten');
+  const pit = cash.prijzen.filter((p) => p.winkel === 'Pit & Pit');
+  controle(pit.length === 3 && pit.some((p) => p.maat === 1.5 && p.maat_eenheid === 'kg' && p.prijs === 24.63) && pit.some((p) => p.maat === 200 && p.maat_eenheid === 'g'),
+    'drie verpakkingen bij één winkel bewaard');
+  controle(await page.isVisible('.prijzen-blok :text("€ 24,95 per kg")'), 'prijs per kg van een verpakking getoond');
+  // tweemaal dezelfde verpakking bij dezelfde winkel kan niet
+  await page.click('#c-prijzen');
+  controle((await page.inputValue('#paneel [data-winkel="Pit & Pit"] .pz-maat >> nth=2')) === '1,5 kg', 'verpakkingen staan terug in het formulier');
+  await page.fill('#paneel [data-winkel="Pit & Pit"] .pz-maat >> nth=1', '200 g');
+  await page.click('#pz-form button[type=submit]');
+  await page.waitForTimeout(150);
+  controle((await page.textContent('#toast')).includes('twee keer'), 'dubbele verpakking geweigerd');
+  await page.click('#paneel [data-sluit]');
+  // op de boodschappenlijst: goedkoopste voor de hoeveelheid die je nodig hebt
+  const kost = async (h, e) => {
+    for (const b of (await api('GET', 'alles')).boodschappen) await api('DELETE', `boodschappen/${b.id}`);
+    await api('POST', 'boodschappen', { naam: 'Cashewnoten', hoeveelheid: h, eenheid: e });
+    await page.goto(basis + '#boodschappen');
+    await page.reload();
+    await page.waitForSelector('[data-prijs]');
+    return page.textContent('.rij:has-text("Cashewnoten") [data-prijs]');
+  };
+  controle((await kost(200, 'g')).includes('Pit & Pit · € 4,99'), '200 g: één pot van 200 g');
+  controle((await kost(1, 'kg')).includes('Pit & Pit · € 24,63'), '1 kg: de zak van 1,5 kg is goedkoper dan 5 potten');
+  controle((await kost(400, 'g')).includes('Pit & Pit · € 9,98'), '400 g: twee potten van 200 g');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();

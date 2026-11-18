@@ -86,7 +86,9 @@ export const HANDLEIDING = `
   <li>Zet je winkels bij <b>Instellingen → Winkels</b> (bv. Colruyt, Delhaize, Aldi).</li>
   <li>Vul bij een product de prijs per winkel in: bij <b>Bewerken → Prijs per winkel</b>, of door op de prijs (of <b>Prijs invullen</b>) onder een boodschap te tikken.</li>
   <li>Kies bij <b>Prijs per</b> de eenheid zoals op het prijskaartje: per kg, per l, per stuk, per pak … Koop je per pak maar staat de prijs per kg, vul dan ook de inhoud per pak in, anders kan de app de prijs niet berekenen.</li>
+  <li>Verkoopt een winkel verschillende verpakkingen, bv. 200 g voor € 4,99, 600 g voor € 13,53 en 1,5 kg voor € 24,63? Vul dan bij <b>Verpakking</b> de maat in (bv. <code>200 g</code>, <code>1,5 kg</code>, <code>75 cl</code> of <code>6 st</code>) en daarnaast de prijs van die verpakking. Met <b>+ Verpakking</b> zet je er een regel voor dezelfde winkel bij. Je ziet dan ook de prijs per kg of per l.</li>
 </ol>
+<p>Met verpakkingen rekent de app met hele verpakkingen en kiest ze de goedkoopste voor wat je nodig hebt. Heb je 1 kg nodig, dan is één zak van 1,5 kg (€ 24,63) goedkoper dan vijf potten van 200 g (€ 24,95).</p>
 <p>Daarna verschijnen bovenaan tabbladen: <b>Alles</b> en één per winkel. Elk product staat op Alles én bij de winkel waar het het goedkoopst is. Het blijft dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere. Boven de lijst staat de geschatte totaalprijs.</p>
 
 <h3>Winkelen</h3>

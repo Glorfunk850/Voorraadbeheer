@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 42;
+const APP_VERSIE = 43;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -251,6 +251,24 @@ const perTekst = (e) => (e === 'stuks' ? 'stuk' : e);
 const PRIJS_EENHEDEN = ['kg', 'g', 'l', 'ml', 'stuks', 'pak', 'blik', 'fles', 'pot', 'zak', 'doos'];
 /** Eenheid van de prijzen die er al zijn, anders die die bij de eenheid van het product past. */
 const prijsPerVan = (prijzen, eenheid) => (prijzen || []).find((p) => p.per)?.per || prijsEenheid(eenheid);
+// Verpakking bij een prijs (bv. 200 g voor € 4,99): een winkel kan zo meerdere verpakkingen met elk een eigen prijs hebben.
+const MAAT_EENHEDEN = ['g', 'kg', 'ml', 'cl', 'dl', 'l', 'stuks'];
+const maatTekst = (p) => (p.maat_eenheid === 'stuks' ? `${fmt(p.maat)} st.` : hoeveelTekst(p.maat, p.maat_eenheid));
+/** "200 g", "1,5kg", "6 stuks", "6" → { maat, maat_eenheid }; leeg → null; onleesbaar → false. */
+function maatLezen(t) {
+  t = (t || '').trim().toLowerCase();
+  if (!t) return null;
+  const m = t.match(/^(\d+(?:[.,]\d+)?)\s*(g|gr|gram|kg|kilo|ml|cl|dl|l|liter|st|st\.|stuk|stuks)?$/);
+  if (!m || !(num(m[1]) > 0)) return false;
+  const e = { gr: 'g', gram: 'g', kilo: 'kg', liter: 'l', st: 'stuks', 'st.': 'stuks', stuk: 'stuks', '': 'stuks' }[m[2] || ''] || m[2];
+  return { maat: num(m[1]), maat_eenheid: e };
+}
+/** Prijs van regel p omgerekend naar één `basis` (bv. € per kg), of null als dat niet kan. */
+function eenheidsprijs(p, basis) {
+  if (p.maat > 0) { const n = omrekenen(p.maat, p.maat_eenheid, basis); return n ? p.prijs / n : null; }
+  const f = omrekenen(1, basis, p.per);
+  return f === null ? null : p.prijs * f;
+}
 const euro = (n) => '€ ' + n.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const catalogusVan = (naam) => (S.catalogus || []).find((c) => zelfde(c.naam, naam));
 const prijzenVan = (naam) => catalogusVan(naam)?.prijzen || [];
@@ -259,40 +277,72 @@ const winkelPlek = (w) => { const i = winkels().findIndex((x) => zelfde(x, w)); 
 function prijzenGesorteerd(naam) {
   const lijst = prijzenVan(naam);
   if (!lijst.length) return [];
-  const basis = lijst[0].per;
-  // alles omrekenen naar dezelfde eenheid (bv. € per kg en € per g), anders de prijs zoals ingevuld
-  const vergelijk = (p) => { const f = omrekenen(1, basis, p.per); return f === null ? p.prijs : p.prijs * f; };
+  const zonder = lijst.find((p) => !(p.maat > 0));
+  const basis = zonder ? zonder.per : prijsEenheid(lijst[0].maat_eenheid);
+  // alles omrekenen naar dezelfde eenheid (bv. € per kg en € per g, of een pot van 200 g), anders de prijs zoals ingevuld
+  const vergelijk = (p) => eenheidsprijs(p, basis) ?? p.prijs;
   return [...lijst].sort((a, b) => vergelijk(a) - vergelijk(b) || winkelPlek(a.winkel) - winkelPlek(b.winkel));
 }
 const goedkoopste = (naam) => prijzenGesorteerd(naam)[0] || null;
 /** Geschatte prijs van een boodschap bij prijsregel p, of null als dat niet te berekenen is. */
 function kostprijs(b, p) {
+  if (p.maat > 0) {
+    // je koopt hele verpakkingen: 500 g nodig en potten van 200 g = 3 potten
+    if (b.hoeveelheid === null || b.hoeveelheid === undefined) return p.prijs;
+    const e = b.eenheid || 'stuks', c = catalogusVan(b.naam);
+    let n = omrekenen(b.hoeveelheid, e, p.maat_eenheid);
+    if (n === null && c && zelfde(c.eenheid, e)) n = vanProduct(b.hoeveelheid, c, p.maat_eenheid);
+    if (n === null) return TELBAAR.has(e) ? Math.ceil(b.hoeveelheid - 1e-9) * p.prijs : null; // 2 stuks = 2 verpakkingen
+    return Math.max(1, Math.ceil(n / p.maat - 1e-9)) * p.prijs;
+  }
   if (b.hoeveelheid === null || b.hoeveelheid === undefined) return TELBAAR.has(p.per) ? p.prijs : null;
   const e = b.eenheid || 'stuks', c = catalogusVan(b.naam);
   let n = omrekenen(b.hoeveelheid, e, p.per);
   if (n === null && c && zelfde(c.eenheid, e)) n = vanProduct(b.hoeveelheid, c, p.per); // via inhoud per verpakking
   return n === null ? null : n * p.prijs;
 }
+/** Goedkoopste prijsregel voor deze boodschap: met verpakkingen hangt dat af van hoeveel je nodig hebt. */
+function goedkoopsteVoor(b) {
+  const lijst = prijzenGesorteerd(b.naam);
+  if (!lijst.length || b.hoeveelheid === null || b.hoeveelheid === undefined) return lijst[0] || null;
+  let beste = null, bk = Infinity;
+  for (const p of lijst) { const k = kostprijs(b, p); if (k !== null && k < bk - 1e-9) { beste = p; bk = k; } }
+  return beste || lijst[0];
+}
 const lijstMelding = (naam) => { const g = goedkoopste(naam); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
-const prijsRegelTekst = (p) => `${euro(p.prijs)} per ${perTekst(p.per)}`;
+/** Bij een verpakking de prijs per kg, l of stuk (bv. € 24,95 per kg voor 200 g); bij precies 1 kg of 1 stuk niets. */
+function verpakkingEenheidTekst(p) {
+  if (!(p.maat > 0)) return '';
+  const basis = prijsEenheid(p.maat_eenheid), n = omrekenen(p.maat, p.maat_eenheid, basis);
+  return n > 0 && Math.abs(n - 1) > 1e-9 ? `${euro(p.prijs / n)} per ${perTekst(basis)}` : '';
+}
+function prijsRegelTekst(p, metEenheid = true) {
+  if (!(p.maat > 0)) return `${euro(p.prijs)} per ${perTekst(p.per)}`;
+  const ep = metEenheid ? verpakkingEenheidTekst(p) : '';
+  return `${euro(p.prijs)} per ${maatTekst(p)}${ep ? ` (${ep})` : ''}`;
+}
 
 /** Invulvelden voor de prijzen: kies de eenheid (per kg, per stuk ...), één regel per winkel uit Instellingen, plus zelf winkels toevoegen. */
 function prijzenVeldenHtml(prijzen, eenheid) {
   const per = prijsPerVan(prijzen, eenheid);
   // een prijs die in een andere eenheid bewaard werd (bv. per g) tonen in de gekozen eenheid (per kg)
-  prijzen = prijzen.map((p) => { const f = omrekenen(1, per, p.per); return f === null || p.per === per ? p : { ...p, prijs: Math.round(p.prijs * f * 1000) / 1000 }; });
-  const vast = winkels().map((w) => ({ winkel: w, prijs: prijzen.find((p) => zelfde(p.winkel, w))?.prijs ?? null }));
+  prijzen = prijzen.map((p) => { const f = omrekenen(1, per, p.per); return p.maat > 0 || f === null || p.per === per ? p : { ...p, prijs: Math.round(p.prijs * f * 1000) / 1000 }; });
+  // per winkel uit Instellingen: elke ingevulde verpakking een regel, anders één lege regel
+  const vast = winkels().flatMap((w) => { const v = prijzen.filter((p) => zelfde(p.winkel, w)); return v.length ? v : [{ winkel: w, prijs: null }]; });
   const extra = prijzen.filter((p) => !winkels().some((w) => zelfde(w, p.winkel)));
   const keuzes = PRIJS_EENHEDEN.includes(per) ? PRIJS_EENHEDEN : [...PRIJS_EENHEDEN, per];
   return `<label class="pz-per-rij"><span>Prijs per</span><select class="pz-per" aria-label="Prijs per eenheid">${keuzes.map((e) => `<option value="${esc(e)}"${e === per ? ' selected' : ''}>${esc(perTekst(e))}</option>`).join('')}</select></label>
     <p class="stil pz-uitleg">Bv. per kg zoals op het prijskaartje, ook als je per stuk of pak koopt. Laat leeg als je de prijs niet kent.</p>
+    <p class="stil pz-uitleg">Heeft een winkel verschillende verpakkingen (bv. 200 g, 600 g en 1,5 kg)? Vul bij <b>Verpakking</b> de maat in en daarnaast de prijs van die verpakking. Met <b>+ Verpakking</b> zet je er nog een bij.</p>
     <p class="pz-uitleg pz-hint" hidden></p>
+    <div class="prijs-rij pz-kop" aria-hidden="true"><span>Winkel</span><span>Verpakking</span><span>Prijs</span><span></span></div>
     <div class="pz-lijst">${vast.map((p) => prijsRijHtml(p, true)).join('')}${extra.map((p) => prijsRijHtml(p, false)).join('')}
       ${!vast.length && !extra.length ? prijsRijHtml({ winkel: '', prijs: null }, false) : ''}</div>
-    <button type="button" class="chip pz-erbij">+ Andere winkel</button>`;
+    <div class="chips pz-knoppen"><button type="button" class="chip pz-erbij">+ Andere winkel</button><button type="button" class="chip pz-maat-erbij">+ Verpakking</button></div>`;
 }
 const prijsRijHtml = (p, vast) => `<div class="prijs-rij"${vast ? ` data-winkel="${esc(p.winkel)}"` : ''}>
     ${vast ? `<span class="pz-naam">${esc(p.winkel)}</span>` : `<input class="pz-winkel" placeholder="Winkel" value="${esc(p.winkel || '')}" autocapitalize="sentences" aria-label="Winkel">`}
+    <input class="pz-maat" placeholder="–" value="${p.maat > 0 ? esc(maatTekst(p).replace(' st.', ' st')) : ''}" autocomplete="off" aria-label="Verpakking bij ${esc(p.winkel || 'deze winkel')}, bv. 200 g">
     <span class="pz-euro"><span>€</span><input class="pz-prijs" inputmode="decimal" placeholder="–" value="${p.prijs !== null && p.prijs !== undefined ? esc(p.prijs.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 3, useGrouping: false })) : ''}" aria-label="Prijs bij ${esc(p.winkel || 'deze winkel')}"></span>
     ${vast ? '<span></span>' : '<button type="button" class="weg" data-pz-weg aria-label="Winkel weghalen">×</button>'}</div>`;
 /** Uitleg als de prijs niet om te rekenen is naar wat je koopt (bv. per kg, maar het product per stuk zonder inhoud). */
@@ -321,6 +371,17 @@ function prijzenKoppelen(el, product = () => ({})) {
     suggesties(v, winkels);
     v.focus();
   };
+  // nog een verpakking: een nieuwe regel voor dezelfde winkel als de laatst ingevulde (of de laatste regel)
+  $('.pz-maat-erbij', el).onclick = () => {
+    const rijen = $$('.prijs-rij', lijst);
+    const bron = [...rijen].reverse().find((r) => $('.pz-prijs', r).value.trim()) || rijen[rijen.length - 1];
+    const winkel = bron ? (bron.dataset.winkel || $('.pz-winkel', bron)?.value || '').trim() : '';
+    const html = prijsRijHtml({ winkel, prijs: null }, false);
+    if (bron) bron.insertAdjacentHTML('afterend', html); else lijst.insertAdjacentHTML('beforeend', html);
+    const nieuw = bron ? bron.nextElementSibling : lijst.lastElementChild;
+    suggesties($('.pz-winkel', nieuw), winkels);
+    (winkel ? $('.pz-maat', nieuw) : $('.pz-winkel', nieuw)).focus();
+  };
   lijst.onclick = (e) => { const w = e.target.closest('[data-pz-weg]'); if (w) w.closest('.prijs-rij').remove(); };
 }
 /** Eenheid van het product veranderd: de prijs-eenheid mee aanpassen (tenzij je die zelf koos). */
@@ -336,14 +397,18 @@ const prijsPerZetten = (el, eenheid) => $$('select.pz-per', el).forEach((s) => {
 /** Ingevulde prijzen lezen; null (met melding) als er iets niet klopt. */
 function prijzenLezen(el, eenheid) {
   const uit = [], per = $('select.pz-per', el)?.value || prijsEenheid(eenheid);
-  for (const r of $$('.prijs-rij', el)) {
+  for (const r of $$('.pz-lijst .prijs-rij', el)) {
     const winkel = (r.dataset.winkel || $('.pz-winkel', r)?.value || '').trim(), tekst = $('.pz-prijs', r).value.trim();
     if (!tekst) continue;
     const prijs = num(tekst.replace(/[€\s]/g, ''));
     if (prijs === null || prijs < 0) { toast(`Vul een geldige prijs in${winkel ? ' bij ' + winkel : ''}.`); return null; }
     if (!winkel) { toast('Vul bij elke prijs ook de winkel in.'); return null; }
-    if (uit.some((p) => zelfde(p.winkel, winkel))) { toast(`${winkel} staat er twee keer bij.`); return null; }
-    uit.push({ winkel, prijs, per });
+    const maat = maatLezen($('.pz-maat', r)?.value);
+    if (maat === false) { toast(`Vul de verpakking in als bv. 200 g, 1,5 kg, 75 cl of 6 st${winkel ? ' (bij ' + winkel + ')' : ''}.`); return null; }
+    if (uit.some((p) => zelfde(p.winkel, winkel) && (p.maat || null) === (maat ? maat.maat : null) && (!maat || p.maat_eenheid === maat.maat_eenheid))) {
+      toast(maat ? `${winkel} staat er twee keer bij met ${hoeveelTekst(maat.maat, maat.maat_eenheid) || maat.maat}.` : `${winkel} staat er twee keer bij. Vul bij een tweede regel de verpakking in.`); return null;
+    }
+    uit.push({ winkel, prijs, per, ...(maat || {}) });
   }
   return uit;
 }
@@ -354,12 +419,12 @@ function prijzenBlok(naam) {
   const c = catalogusVan(naam);
   // bv. € 12,50 per kg · € 6,25 per pak (als de inhoud per pak bekend is)
   const perStuk = (p) => {
-    if (!c || !TELBAAR.has(c.eenheid) || zelfde(c.eenheid, p.per)) return '';
+    if (p.maat > 0 || !c || !TELBAAR.has(c.eenheid) || zelfde(c.eenheid, p.per)) return '';
     const n = vanProduct(1, c, p.per);
     return n === null ? '' : ` · ${euro(n * p.prijs)} per ${perTekst(c.eenheid)}`;
   };
   return `<div class="datumblok prijzen-blok"><div><b>Prijzen</b>${lijst.map((p, i) => `<div class="stat"><span>${esc(p.winkel)}${i === 0 && lijst.length > 1 ? ' <small class="goedkoopst">goedkoopst</small>' : ''}</span>
-    <span class="stil">${esc(prijsRegelTekst(p) + perStuk(p))}</span></div>`).join('')}</div></div>`;
+    <span class="stil">${esc(prijsRegelTekst(p, false) + perStuk(p))}${verpakkingEenheidTekst(p) ? `<br><small>${esc(verpakkingEenheidTekst(p))}</small>` : ''}</span></div>`).join('')}</div></div>`;
 }
 /** Paneel om alleen de prijzen van een product aan te passen. */
 function prijzenPaneel(naam, eenheid, terug) {
@@ -884,7 +949,7 @@ function productFormulier(bestaand, sjabloon = {}) {
 function tekenBoodschappen() {
   // Elke boodschap staat op de algemene lijst én op de lijst van de winkel waar ze het goedkoopst is.
   // Het is telkens dezelfde boodschap: afvinken op de ene lijst vinkt ze dus ook af op de andere.
-  const metWinkel = S.boodschappen.map((b) => ({ b, p: goedkoopste(b.naam) }));
+  const metWinkel = S.boodschappen.map((b) => ({ b, p: goedkoopsteVoor(b) }));
   const telPer = new Map();
   for (const x of metWinkel) if (x.p && !x.b.afgevinkt) telPer.set(x.p.winkel.toLowerCase(), (telPer.get(x.p.winkel.toLowerCase()) || 0) + 1);
   const tabs = uniek(metWinkel.filter((x) => x.p).map((x) => x.p.winkel)).sort((a, b) => winkelPlek(a) - winkelPlek(b) || a.localeCompare(b, 'nl'));

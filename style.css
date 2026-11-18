@@ -340,7 +340,10 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 
 /* ---------- prijzen per winkel ---------- */
 .pz-uitleg { font-size: .82rem; margin: .1rem 0 .6rem; }
-.prijs-rij { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem 32px; gap: .5rem; align-items: center; margin-bottom: .5rem; }
+.prijs-rij { display: grid; grid-template-columns: minmax(0, 1fr) 4.6rem 6.4rem 28px; gap: .4rem; align-items: center; margin-bottom: .5rem; }
+.prijs-rij.pz-kop { margin-bottom: .2rem; font-size: .75rem; color: var(--stil); }
+.prijs-rij .pz-maat { text-align: center; }
+.pz-knoppen { margin-top: .1rem; }
 .prijs-rij .pz-naam { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prijs-rij input { padding: .5rem .65rem; font-size: .95rem; min-width: 0; }
 .pz-euro { display: flex; align-items: center; gap: .35rem; }
@@ -348,7 +351,9 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .pz-euro input { text-align: right; width: 100%; }
 .pz-erbij { margin-top: .1rem; }
 .prijzen-blok > div { flex: 1; }
-.prijzen-blok .stat { margin-top: .3rem; }
+.prijzen-blok .stat { margin-top: .3rem; gap: .6rem; }
+.prijzen-blok .stat > span:first-child { flex-shrink: 0; }
+.prijzen-blok .stat > span:last-child { text-align: right; }
 .goedkoopst { display: inline; color: var(--accent); font-weight: 600; font-size: .75rem; margin-left: .3rem; }
 .winkel-tabs { margin-bottom: .9rem; }
 .winkel-tabs .tab-tel { opacity: .7; font-variant-numeric: tabular-nums; margin-left: .15rem; }
