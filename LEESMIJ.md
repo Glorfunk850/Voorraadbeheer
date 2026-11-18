@@ -128,9 +128,10 @@ meestal minder dan 1 MB in.
 
 1. Op je eerste toestel: Instellingen → **Synchroniseren tussen toestellen** → **Synchronisatie aanzetten**.
    Je ziet een QR-code en de code (bv. `D09C-QAQQ-…`).
-2. Op elk ander toestel: Instellingen → **Koppelen met een code** en typ de code (hoofdletters, streepjes en spaties
-   maken niet uit). Of scan de QR-code met de camera: op Android opent de geïnstalleerde app dan meteen.
-   **iPhone/iPad:** de camera opent de QR-code in Safari, niet in de app op je beginscherm. Typ de code daarom in de app zelf.
+2. Op elk ander toestel: Instellingen → **QR-code scannen** en richt de camera op de QR-code van je eerste toestel
+   (de app vraagt de eerste keer toestemming voor de camera). Of kies **Koppelen met een code** en typ de code
+   (hoofdletters, streepjes en spaties maken niet uit).
+   Scan met de knop in de app, niet met de gewone camera-app: op een iPhone opent die de code in Safari in plaats van in de app.
 3. Staan er op het nieuwe toestel al gegevens, dan kies je: **Samenvoegen** (alles van beide toestellen houden; wat op
    beide stond, kan dubbel staan) of **Vervangen** (het nieuwe toestel krijgt de gegevens van de andere).
 

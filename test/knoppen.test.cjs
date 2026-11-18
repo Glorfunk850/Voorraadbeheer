@@ -21,6 +21,8 @@ const MAG_NIETS_DOEN = ['Geen datum'];
 function server() {
   return new Promise((ok) => {
     const s = http.createServer((req, res) => {
+      // nooit de echte synchronisatieserver (ingevuld in sync-adres.js) aanspreken in een test
+      if (req.url.split('?')[0] === '/sync-adres.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("window.VOORRAAD_SYNC_ADRES = '';"); }
       const pad = path.join(ROOT, decodeURIComponent(new URL(req.url, 'http://x').pathname));
       if (!pad.startsWith(ROOT) || !fs.existsSync(pad) || fs.statSync(pad).isDirectory()) {
         const index = path.join(ROOT, 'index.html');

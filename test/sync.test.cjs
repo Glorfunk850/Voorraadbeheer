@@ -4,6 +4,7 @@
 // - de server: versies, botsingen (412), toegang (401), wissen;
 // - toestel A zet synchronisatie aan; op de server staat alleen onleesbare (versleutelde) data;
 // - toestel B koppelt met de code (en voegt zijn eigen gegevens samen), toestel C via de link uit de QR-code;
+// - toestel D koppelt met de knop "QR-code scannen" (nagemaakte camera die de QR-code van A toont);
 // - een wijziging gaat vanzelf naar de andere toestellen; gelijktijdige wijzigingen aan hetzelfde product gaan niet verloren;
 // - een verkeerde code geeft een duidelijke melding;
 // - stoppen en wissen van de server: de andere toestellen stoppen ook, hun gegevens blijven.
@@ -14,6 +15,18 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 const { samenvoegen, gelijk, nieuweIds } = require('../samenvoegen.js');
+const qrcode = require('../vendor/qrcode.js');
+
+// Nagemaakte camera: een videobestand (y4m) met een QR-code, voor Chromium (--use-file-for-fake-video-capture)
+function cameraMetQr(tekst, bestand) {
+  const q = qrcode(0, 'M'); q.addData(tekst); q.make();
+  const n = q.getModuleCount(), B = 640, H = 480, cel = Math.floor(400 / (n + 8)), x0 = Math.floor((B - cel * n) / 2), y0 = Math.floor((H - cel * n) / 2);
+  const y = Buffer.alloc(B * H, 255);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c))
+    for (let dy = 0; dy < cel; dy++) y.fill(0, (y0 + r * cel + dy) * B + x0 + c * cel, (y0 + r * cel + dy) * B + x0 + (c + 1) * cel);
+  const uv = Buffer.alloc(B * H / 2, 128), beeld = Buffer.concat([Buffer.from('FRAME\n'), y, uv]);
+  fs.writeFileSync(bestand, Buffer.concat([Buffer.from(`YUV4MPEG2 W${B} H${H} F5:1 Ip A1:1 C420jpeg\n`), beeld, beeld]));
+}
 
 const ROOT = path.resolve(__dirname, '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -25,6 +38,8 @@ function appServer() {
     const s = http.createServer((req, res) => {
       let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
       if (p === '/') p = '/index.html';
+      // nooit de echte synchronisatieserver (ingevuld in sync-adres.js) gebruiken in een test
+      if (p === '/sync-adres.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); return res.end("window.VOORRAAD_SYNC_ADRES = '';"); }
       const pad = path.join(ROOT, p);
       if (!pad.startsWith(ROOT) || !fs.existsSync(pad) || fs.statSync(pad).isDirectory()) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { 'Content-Type': TYPES[path.extname(pad)] || 'application/octet-stream' });
@@ -229,6 +244,32 @@ async function main() {
   await C.toast('Gekoppeld');
   controle(await C.namen() === 'Kaas,Melk,Rijst', `C: via de link gekoppeld (${await C.namen()})`);
   controle(!(await C.evaluate(() => location.hash)).includes('koppelen'), 'C: code niet meer in de adresbalk');
+
+  // --- Toestel D koppelt met de knop "QR-code scannen" in de app (camera toont de QR-code van A)
+  const camBestand = path.join(require('os').tmpdir(), `voorraad-qr-${process.pid}.y4m`);
+  cameraMetQr(link, camBestand);
+  const camBrowser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-video-capture=${camBestand}`] });
+  const dctx = await camBrowser.newContext({ serviceWorkers: 'block', permissions: ['camera'] });
+  const D = await dctx.newPage();
+  D.jsFouten = [];
+  D.on('pageerror', (e) => D.jsFouten.push(`D: ${e.message}`));
+  await D.goto(basis + '#instellingen');
+  await D.waitForSelector('#s-scan');
+  await D.click('#s-scan');
+  await D.waitForFunction(() => document.querySelector('#vraag').open, null, { timeout: 15000 }).catch(() => {});
+  const ingevuld = await D.evaluate(() => document.querySelector('#vraag').open && document.querySelector('#vraag-invoer').value);
+  controle(ingevuld && ingevuld.replace(/-/g, '') === code.replace(/-/g, ''), 'D: QR-code gescand met de camera, code ingevuld');
+  if (ingevuld) {
+    await D.click('#vraag-ja');
+    await D.waitForFunction(() => document.querySelector('#vraag').open);
+    await D.click('#vraag-ja'); // Koppelen
+    await D.waitForFunction(() => !document.querySelector('#toast').hidden && document.querySelector('#toast').textContent.includes('Gekoppeld'), null, { timeout: 8000 });
+    const dNamen = await D.evaluate(() => fetch('api/alles').then((r) => r.json()).then((d) => d.producten.map((p) => p.naam).sort().join(',')));
+    controle(dNamen === 'Kaas,Melk,Rijst', `D: via de scanner gekoppeld (${dNamen})`);
+  }
+  controle(!D.jsFouten.length && !(await D.evaluate(() => !!document.querySelector('dialog.scanner'))), `D: scanner gesloten, geen fouten ${D.jsFouten.join(' | ')}`);
+  await camBrowser.close();
+  fs.unlinkSync(camBestand);
 
   // --- Een wijziging gaat vanzelf naar de server
   await A.api('POST', 'producten', { naam: 'Brood', hoeveelheid: 1, eenheid: 'stuks' });
