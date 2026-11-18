@@ -153,6 +153,19 @@ Later nog een toestel koppelen: Instellingen → **Toestel koppelen** toont de c
 - **Stoppen**: Instellingen → **Stoppen**. Je gegevens blijven op het toestel. Kies je daarna ook **Ook wissen**, dan
   wordt alles van de server gewist en stoppen ook je andere toestellen (hun gegevens blijven wel staan).
 
+### Moet ik opnieuw koppelen?
+
+Nee. Je koppelt een toestel één keer; de koppeling blijft, ook na het sluiten van de app, het herstarten van het
+toestel en een nieuwe versie van de app. Alleen in deze gevallen koppel je opnieuw:
+
+- **De opslag van de app is gewist** (app verwijderd, websitegegevens gewist, nieuw toestel). De koppeling en de gegevens
+  op dat toestel zijn dan weg; koppel opnieuw met de code en alles komt terug van de server.
+- **Iemand koos Stoppen → Ook wissen**: alle toestellen stoppen. Zet het opnieuw aan; je krijgt een nieuwe code.
+- **Je koos zelf Stoppen** op een toestel: alleen dat toestel stopt.
+
+Op een iPhone/iPad: gebruik de app vanaf het beginscherm, niet in Safari. Safari wist de gegevens van een website die
+je een week niet geopend hebt; een app op het beginscherm niet.
+
 ## Een nieuwe versie zetten
 
 Upload de gewijzigde bestanden opnieuw naar dezelfde repository. Verhoog in `sw.js` het
