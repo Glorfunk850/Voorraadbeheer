@@ -44,7 +44,6 @@ async function main() {
   await page.click('#cat-nieuw');
   await page.fill('#cf-naam', 'Rijst');
   await page.fill('#cf-hv', '3');
-  await page.selectOption('#cf-eenheid', 'pak');
   await page.fill('#cf-inhoud', '1');
   await page.selectOption('#cf-inhoud-eenheid', 'kg');
   await page.click('#cf-type [data-w="THT"]');
@@ -52,11 +51,11 @@ async function main() {
   await page.waitForTimeout(250);
   let d = await api('GET', 'alles');
   let rijst = d.catalogus.find((c) => c.naam === 'Rijst');
-  controle(rijst && rijst.hoeveelheid === 3 && rijst.eenheid === 'pak' && rijst.inhoud === 1 && rijst.inhoud_eenheid === 'kg', 'product toegevoegd aan catalogus');
+  controle(rijst && rijst.hoeveelheid === 3 && rijst.eenheid === 'stuks' && rijst.inhoud === 1 && rijst.inhoud_eenheid === 'kg', 'product toegevoegd aan catalogus (per stuk)');
   controle(!d.producten.length, 'toevoegen aan catalogus zet niets in de voorraad');
   controle(await page.isVisible('#c-bewerk'), 'na toevoegen opent het catalogusproduct');
   await page.click('#c-voorraad');
-  controle((await page.inputValue('#pf-hv')) === '3' && (await page.inputValue('#pf-eenheid')) === 'pak', 'hoeveelheid uit catalogus ingevuld bij aan voorraad toevoegen');
+  controle((await page.inputValue('#pf-hv')) === '3' && (await page.inputValue('#pf-eenheid')) === 'stuks', 'hoeveelheid uit catalogus ingevuld bij aan voorraad toevoegen');
   await page.click('#paneel [data-sluit]');
   controle(await page.isVisible('[data-cat="Rijst"]'), 'product staat in de lijst');
 

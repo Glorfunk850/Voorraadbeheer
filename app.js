@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 40;
+const APP_VERSIE = 41;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -689,16 +689,15 @@ function catalogusFormulier(bestaand) {
   if (nieuw && c.naam) c.naam = c.naam.charAt(0).toUpperCase() + c.naam.slice(1);
   paneelOpenen((el) => {
     if (alGetekend('catformulier')) return; // niet opnieuw tekenen terwijl je typt
+    // geen keuze van eenheid: nieuw is altijd per stuk, een bestaand product houdt zijn eenheid
+    const eenheid = c.eenheid || 'stuks';
     const inVoorraad = !nieuw && (S.producten.some((p) => zelfde(p.naam, c.naam)) || S.boodschappen.some((b) => zelfde(b.naam, c.naam)));
     el.innerHTML = `
       ${paneelKop(nieuw ? 'Aan catalogus toevoegen' : 'Bewerken', nieuw ? 'Komt niet in je voorraad; dat kan later vanuit de catalogus' : '')}
       <form id="cf" autocomplete="off">
         <label class="veld"><span>Naam</span><input id="cf-naam" value="${esc(c.naam || '')}" required autocomplete="off" autocapitalize="sentences"></label>
         ${inVoorraad ? '<p class="stil" style="margin-top:-.4rem">Een nieuwe naam wordt ook aangepast in je voorraad en op je boodschappenlijst.</p>' : ''}
-        <div class="rij2">
-          <label class="veld"><span>Hoeveelheid</span><input id="cf-hv" inputmode="decimal" value="${c.hoeveelheid > 0 ? esc(fmt(c.hoeveelheid)) : '1'}"></label>
-          <label class="veld"><span>Eenheid</span><select id="cf-eenheid">${opties(EENHEDEN, c.eenheid || 'stuks')}</select></label>
-        </div>
+        <label class="veld"><span>Aantal${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}</span><input id="cf-hv" inputmode="decimal" value="${c.hoeveelheid > 0 ? esc(fmt(c.hoeveelheid)) : '1'}"></label>
         <p class="stil" style="margin:-.4rem 0 1rem">Wordt ingevuld als je het product vanuit de catalogus aan je voorraad toevoegt.</p>
         <div class="rij2" id="cf-inhoud-rij">
           <label class="veld"><span id="cf-inhoud-titel">Inhoud per stuk</span><input id="cf-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
@@ -713,7 +712,7 @@ function catalogusFormulier(bestaand) {
           <button type="button" data-w="TGT">Te gebruiken tot</button>
         </div>
         <details class="meer"${!nieuw && prijzenVan(c.naam).length ? ' open' : ''} style="margin-top:.8rem" id="cf-prijzen"><summary>Prijs per winkel</summary>
-          ${prijzenVeldenHtml(nieuw ? [] : prijzenVan(c.naam), c.eenheid || 'stuks')}
+          ${prijzenVeldenHtml(nieuw ? [] : prijzenVan(c.naam), eenheid)}
         </details>
         <div class="paneel-voet"><button type="submit" class="knop primair">${nieuw ? 'Toevoegen' : 'Bewaren'}</button></div>
       </form>`;
@@ -722,15 +721,10 @@ function catalogusFormulier(bestaand) {
     const typeTekenen = () => $$('#cf-type button', el).forEach((b) => b.classList.toggle('aan', b.dataset.w === type));
     typeTekenen();
     $$('#cf-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; typeTekenen(); }));
-    const inhoudTonen = () => {
-      const e = $('#cf-eenheid', el).value;
-      $('#cf-inhoud-rij', el).hidden = !TELBAAR.has(e);
-      $('#cf-inhoud-titel', el).textContent = `Inhoud per ${perTekst(e)} (mag leeg)`;
-    };
-    inhoudTonen();
-    const info = () => ({ eenheid: $('#cf-eenheid', el).value, inhoud_eenheid: $('#cf-inhoud', el).value.trim() ? $('#cf-inhoud-eenheid', el).value : '' });
+    $('#cf-inhoud-rij', el).hidden = !TELBAAR.has(eenheid);
+    $('#cf-inhoud-titel', el).textContent = `Inhoud per ${perTekst(eenheid)} (mag leeg)`;
+    const info = () => ({ eenheid, inhoud_eenheid: $('#cf-inhoud', el).value.trim() ? $('#cf-inhoud-eenheid', el).value : '' });
     prijzenKoppelen($('#cf-prijzen', el), info);
-    $('#cf-eenheid', el).onchange = () => { inhoudTonen(); prijsPerZetten(el, $('#cf-eenheid', el).value); };
     $('#cf-inhoud', el).oninput = () => $('#cf-prijzen', el).prijsHint?.();
     $('#cf-inhoud-eenheid', el).onchange = () => $('#cf-prijzen', el).prijsHint?.();
     $('#cf', el).onsubmit = async (e) => {
@@ -738,8 +732,8 @@ function catalogusFormulier(bestaand) {
       const naam = $('#cf-naam', el).value.trim();
       if (!naam) return toast('Vul een naam in.');
       const hv = num($('#cf-hv', el).value);
-      if (!(hv > 0)) return toast('Vul een geldige hoeveelheid in.');
-      const eenheid = $('#cf-eenheid', el).value, telbaar = TELBAAR.has(eenheid);
+      if (!(hv > 0)) return toast('Vul een geldig aantal in.');
+      const telbaar = TELBAAR.has(eenheid);
       const inhoud = telbaar ? num($('#cf-inhoud', el).value) : null;
       if (telbaar && $('#cf-inhoud', el).value.trim() && !(inhoud > 0)) return toast('Vul een geldige inhoud in, of laat het veld leeg.');
       const prijzen = prijzenLezen($('#cf-prijzen', el), eenheid);
