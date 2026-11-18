@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 53;
+const APP_VERSIE = 54;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -637,16 +637,16 @@ function tekenVoorraad() {
     if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map((x) => rij(x, true)).join('')}</ul></section>`;
     // De rest van de voorraad verschijnt alleen bij zoeken
     if (zoek && rest.length) {
-      // Elk product maar één keer tonen (meerdere partijen van hetzelfde product samen), zonder aantallen
+      // Elk product maar één keer tonen per merk (meerdere partijen van hetzelfde product en merk samen), zonder aantallen
       const groepen = new Map();
       for (const x of rest) {
-        const k = x.p.naam.trim().toLowerCase();
+        const k = `${x.p.naam.trim().toLowerCase()}|${String(x.p.merk || '').trim().toLowerCase()}`;
         if (!groepen.has(k)) groepen.set(k, []);
         groepen.get(k).push(x.p);
       }
-      const items = [...groepen.values()].sort((a, b) => a[0].naam.localeCompare(b[0].naam, 'nl'));
+      const items = [...groepen.values()].sort((a, b) => a[0].naam.localeCompare(b[0].naam, 'nl') || (a[0].merk || '').localeCompare(b[0].merk || '', 'nl'));
       lijst += `<section class="sectie"><div class="sectie-titel">Gevonden</div><ul class="lijst">${items.map((g) =>
-        `<li><button class="rij" data-groep="${g.map((p) => p.id).join(',')}"><span class="naam">${esc(g[0].naam)}</span></button></li>`).join('')}</ul></section>`;
+        `<li><button class="rij" data-groep="${g.map((p) => p.id).join(',')}"><span class="naam">${esc(g[0].naam)}${merkTekst(g[0])}</span></button></li>`).join('')}</ul></section>`;
     }
     if (!zoek && !opTeGebruiken.length) {
       lijst += `<div class="leeg"><b>Niets dat binnenkort op moet</b>Zoek een product om het te bekijken of aan te passen.</div>`;
@@ -1248,10 +1248,11 @@ function boodschapToevoegen() {
       const namen = catalogusnamen().flatMap((n) => { const c = catalogusVan(n); return c ? variantenVan(c).map((v) => ({ n, v })) : [{ n, v: null }]; })
         .filter(({ n, v }) => !q || `${n} ${v ? v.merk || '' : merkVan(n)}`.toLowerCase().includes(q));
       const opLijst = (n) => S.boodschappen.filter((b) => zelfde(b.naam, n) && !b.afgevinkt);
-      const inHuis = (n) => S.producten.filter((p) => zelfde(p.naam, n) && p.hoeveelheid > 0);
+      // in huis: per merk en inhoud als het product er meer heeft
+      const inHuis = (n, v) => { const c = catalogusVan(n); return S.producten.filter((p) => (c && v ? hoortBijVariant(p, c, v) : zelfde(p.naam, n)) && p.hoeveelheid > 0); };
       $('#bt-zoek-blok', el).hidden = !catalogusnamen().length;
       $('#bt-lijst', el).innerHTML = namen.length ? `<ul class="lijst">${namen.map(({ n, v }, i) => {
-        const b = opLijst(n), h = inHuis(n);
+        const b = opLijst(n), h = inHuis(n, v);
         const onder = b.length ? `Staat op je lijst${b.some((x) => x.hoeveelheid) ? ': ' + b.map((x) => boodschapTekst(x) || '?').join(' + ') : ''}` : h.length ? `In huis: ${h.map(voorraadTekst).join(' + ')}` : 'Niet in huis';
         return `<li><button type="button" class="rij" data-kies="${i}"><span class="naam">${esc(n)}${merkTekst({ merk: v ? v.merk : merkVan(n) })}<small>${esc([v && inhoudLabel(v), onder].filter(Boolean).join(' · '))}</small></span><span class="rechts">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</span></button></li>`;
       }).join('')}</ul>` : q ? `<div class="leeg">Niets gevonden in je catalogus. Typ het bij Wat en tik op Toevoegen om "${esc(zoek.trim())}" op je lijst te zetten.</div>` : '';

@@ -282,6 +282,15 @@ async function main() {
   await page.reload();
   const inHuis = await page.$$eval('[data-cat="Koffie"]', (l) => l.map((x) => x.textContent.includes('in huis')));
   controle(inHuis.filter(Boolean).length === 1, 'variant: alleen Lavazza staat in huis');
+  // voorraadlijst: zoekresultaten per merk, met het merk achter de naam
+  await api('POST', 'producten', { naam: 'Koffie', hoeveelheid: 1, eenheid: 'stuks', merk: 'Douwe', inhoud: 500, inhoud_eenheid: 'g' });
+  await page.goto(basis + '#voorraad');
+  await page.reload();
+  await page.fill('#zoek-voorraad', 'koffie');
+  const gevonden = await page.$$eval('[data-groep]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(gevonden.length === 2 && gevonden.includes('Koffie · Douwe') && gevonden.includes('Koffie · Lavazza'), 'voorraad: merk in de zoekresultaten: ' + gevonden.join(' | '));
+  await page.goto(basis + '#catalogus');
+  await page.reload();
   // bewerken van één variant laat de andere staan
   await page.click('[data-cat="Koffie"]:has-text("250 g")');
   await page.click('#c-bewerk');
@@ -300,7 +309,7 @@ async function main() {
   await page.fill('#bt-zoek', 'koffie');
   await page.dispatchEvent('#bt-zoek', 'input');
   controle((await page.$$('#bt-lijst [data-kies]')).length === 3, 'boodschap: drie keuzes voor koffie');
-  await page.click('#bt-lijst [data-kies]:has-text("500 g")');
+  await page.click('#bt-lijst [data-kies]:has-text("Douwe"):has-text("à 500 g")');
   controle((await page.inputValue('#bt-merk')) === 'Douwe' && (await page.inputValue('#bt-inhoud')) === '500', 'boodschap: merk en inhoud van de gekozen variant ingevuld');
 
   // prijzen per merk (en per inhoud) in het venster Prijzen
