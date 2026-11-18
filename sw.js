@@ -1,9 +1,9 @@
 // Service worker: laat de app installeren en offline werken.
 // Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v36';
+const VERSIE = 'voorraad-v37';
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
-  './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'handleiding.js', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'handleiding.js', 'handleiding-pdf.js', 'manifest.webmanifest',
   'icoon.svg', 'icoon.png', 'icoon-192.png', 'icoon-512.png', 'icoon-maskable-512.png',
 ];
 // pdf-lezer, QR-codes en het serveradres: los bewaard, zodat één ontbrekend bestand de installatie niet tegenhoudt

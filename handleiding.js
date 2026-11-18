@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 36; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 37; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -190,6 +190,13 @@ export const HANDLEIDING = `
 
 <h3>Overzicht</h3>
 <p>Onder <b>Overzicht</b> zie je wat je het vaakst weggooit, koopt en kookt.</p>
+
+<h3>Handleiding downloaden of afdrukken</h3>
+<p>Bij <b>Instellingen → Handleiding</b>, en onderaan de handleiding zelf, staan twee knoppen:</p>
+<ul>
+  <li><b>Pdf downloaden</b>: bewaart deze handleiding als pdf-bestand op je toestel, bv. om door te sturen of later te lezen. De pdf wordt op je toestel zelf gemaakt, ook zonder internet.</li>
+  <li><b>Afdrukken</b>: opent het afdrukvenster met alleen de handleiding, zonder de rest van de app. Daar kun je ook <b>Opslaan als pdf</b> kiezen.</li>
+</ul>
 
 <h2>Je gegevens bewaren</h2>
 <p>Je gegevens staan in de opslag van de browser op dit toestel. Verwijder je de app of wis je de websitegegevens, dan zijn ze weg. Zorg dus altijd voor een back-up.</p>

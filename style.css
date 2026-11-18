@@ -422,3 +422,22 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .scanner-beeld { position: relative; margin-top: .8rem; border-radius: 12px; overflow: hidden; background: #000; aspect-ratio: 1; }
 .scanner-beeld video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .scanner-kader { position: absolute; inset: 15%; border: 3px solid rgba(255, 255, 255, .85); border-radius: 14px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .25); }
+
+/* handleiding afdrukken: alleen de handleiding op papier */
+#afdruk { display: none; }
+@media print {
+  body.afdrukken > *:not(#afdruk) { display: none !important; }
+  body.afdrukken { background: #fff !important; color: #111 !important; }
+  body.afdrukken #afdruk { display: block; color: #111; font-size: 10.5pt; line-height: 1.5; }
+  #afdruk h1 { font-size: 20pt; margin: 0 0 .2rem; color: #1a6e45; }
+  #afdruk .afdruk-versie { color: #666; margin: 0 0 1rem; }
+  #afdruk h2 { color: #1a6e45; border-top-color: #ccc; break-after: avoid; page-break-after: avoid; }
+  #afdruk h2:first-of-type { margin-top: 1rem; }
+  #afdruk h3 { color: #111; break-after: avoid; page-break-after: avoid; }
+  #afdruk table { display: table; font-size: 9.5pt; }
+  #afdruk tr, #afdruk li { break-inside: avoid; page-break-inside: avoid; }
+  #afdruk th, #afdruk td { border-bottom-color: #ccc; color: #111; }
+  #afdruk th { color: #555; }
+  #afdruk code { background: #eee; }
+  @page { margin: 18mm 16mm; }
+}
