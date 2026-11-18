@@ -125,6 +125,39 @@ async function main() {
   d = await api('GET', 'alles');
   controle(!d.catalogus.some((c) => c.naam === 'Melk') && d.boodschappen.some((b) => b.naam === 'Melk'), 'zonder extra gegevens alleen op de lijst');
 
+  // uitlekgewicht: vinkje in de catalogus, wordt overgenomen naar de voorraad en getoond
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  await page.waitForSelector('#cat-nieuw');
+  await page.click('#cat-nieuw');
+  await page.fill('#cf-naam', 'Kikkererwten');
+  await page.fill('#cf-inhoud', '240');
+  await page.selectOption('#cf-inhoud-eenheid', 'g');
+  await page.click('label:has(#cf-uitlek)');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.catalogus.find((c) => c.naam === 'Kikkererwten')?.uitlekgewicht === true, 'uitlekgewicht bewaard in catalogus');
+  await page.click('#c-voorraad');
+  controle(await page.isChecked('#pf-uitlek'), 'uitlekgewicht aangevinkt bij aan voorraad toevoegen');
+  await page.click('#pf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const kik = d.producten.find((p) => p.naam === 'Kikkererwten');
+  controle(kik && kik.uitlekgewicht === true, 'uitlekgewicht bewaard in voorraad');
+  await page.goto(basis + '#voorraad');
+  await page.reload();
+  await page.fill('#zoek-voorraad', 'Kikker');
+  await page.click(`[data-groep="${kik.id}"]`);
+  await page.waitForSelector('#paneel .hoeveelheid');
+  controle((await page.textContent('#paneel .hoeveelheid')).includes('à 240 g uitlekgewicht'), 'uitlekgewicht getoond bij het product');
+  await page.click('#bewerk');
+  await page.click('label:has(#pf-uitlek)');
+  await page.click('#pf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.producten.find((p) => p.naam === 'Kikkererwten').uitlekgewicht === false && d.catalogus.find((c) => c.naam === 'Kikkererwten').uitlekgewicht === false, 'uitlekgewicht uitvinken bewaard');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();
