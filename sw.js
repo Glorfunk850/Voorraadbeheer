@@ -1,9 +1,12 @@
 // Service worker: laat de app installeren en offline werken.
-// Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v38';
+// Verhoog V bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen. Hetzelfde nummer staat in
+// index.html (data-versie en ?v=) en app.js (APP_VERSIE en ?v= bij de imports); test/versie.test.cjs controleert dat.
+const V = 39;
+const VERSIE = 'voorraad-v' + V;
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
-  './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'handleiding.js', 'handleiding-pdf.js', 'manifest.webmanifest',
+  './', 'index.html', 'manifest.webmanifest',
+  ...['style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'handleiding.js', 'handleiding-pdf.js'].map((b) => `${b}?v=${V}`),
   'icoon.svg', 'icoon.png', 'icoon-192.png', 'icoon-512.png', 'icoon-maskable-512.png',
 ];
 // pdf-lezer, QR-codes en het serveradres: los bewaard, zodat één ontbrekend bestand de installatie niet tegenhoudt
@@ -63,6 +66,8 @@ self.addEventListener('fetch', (e) => {
     const antwoord = await Promise.race([vers, traag]);
     if (antwoord) return antwoord;
     e.waitUntil(vers);
-    return (await c.match(sleutel, { ignoreSearch: true })) || (await vers) || (await c.match('index.html')) || Response.error();
+    // Traag internet: alleen exact deze versie uit de cache nemen. Een oudere versie van een bestand (ander ?v=) pas
+    // als er echt geen internet is, anders kan een nieuwe index.html met een oude app.js samen geladen worden.
+    return (await c.match(sleutel)) || (await vers) || (await c.match(sleutel, { ignoreSearch: true })) || (await c.match('index.html')) || Response.error();
   })());
 });

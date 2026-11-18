@@ -1,7 +1,7 @@
 // Voorraad — interface. Praat met api/..., afgehandeld in lokaal.js (opslag op dit toestel).
-import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, sleutelwoorden, omrekenen } from './parser.js';
-import { tekstOpmaken, pdfStukjes, paginasStapelen } from './layout.js';
-import { HANDLEIDING } from './handleiding.js';
+import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, sleutelwoorden, omrekenen } from './parser.js?v=39';
+import { tekstOpmaken, pdfStukjes, paginasStapelen } from './layout.js?v=39';
+import { HANDLEIDING } from './handleiding.js?v=39';
 
 // ---------------------------------------------------------------------------
 // Basis
@@ -15,7 +15,17 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 38;
+const APP_VERSIE = 39;
+// Vangnet: hoort deze app.js niet bij dezelfde versie als index.html (bv. de ene al nieuw, de andere nog uit de cache),
+// dan één keer herladen, zodat je nooit een half bijgewerkte app ziet.
+if (document.documentElement.dataset.versie !== String(APP_VERSIE)) {
+  let al = 0;
+  try { al = +sessionStorage.getItem('herladen-voor-versie') || 0; } catch { /* */ }
+  if (Date.now() - al > 60000) {
+    try { sessionStorage.setItem('herladen-voor-versie', String(Date.now())); } catch { /* */ }
+    location.reload();
+  }
+}
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -409,7 +419,7 @@ const fijneMuis = () => window.matchMedia('(pointer: fine)').matches;
 // ---------------------------------------------------------------------------
 // Navigatie
 // ---------------------------------------------------------------------------
-$$('[data-icoon]').forEach((el) => (el.innerHTML = ICOON[el.dataset.icoon]));
+$$('[data-icoon]').forEach((el) => (el.innerHTML = ICOON[el.dataset.icoon] || ''));
 const VIEWS = ['voorraad', 'boodschappen', 'catalogus', 'recepten', 'planner', 'instellingen'];
 function naar(view) {
   ui.view = VIEWS.includes(view) ? view : 'voorraad';
@@ -2130,7 +2140,7 @@ function handleidingKnoppen(el) {
 /** De handleiding als pdf-bestand downloaden (gemaakt op het toestel zelf, ook zonder internet). */
 async function handleidingDownloaden() {
   try {
-    const { handleidingPdf } = await import('./handleiding-pdf.js');
+    const { handleidingPdf } = await import('./handleiding-pdf.js?v=39');
     const datum = new Date().toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' });
     const pdf = handleidingPdf(HANDLEIDING, { titel: 'Handleiding Voorraad', onderschrift: `Versie ${APP_VERSIE} · ${datum}` });
     const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
