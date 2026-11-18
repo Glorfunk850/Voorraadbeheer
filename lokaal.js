@@ -180,6 +180,13 @@
   }
 
   // ------------------------------------------------------------------ logica
+  // Inhoud per verpakking van één boodschap (bv. pak à 500 g): alleen bij telbare eenheden.
+  const TELBARE = new Set(['stuks', 'pak', 'blik', 'fles', 'pot', 'zak', 'doos']);
+  function boodschapInhoud(eenheid, inhoud, inhoudEenheid) {
+    const i = getal(inhoud);
+    return TELBARE.has(eenheid || 'stuks') && i > 0 && inhoudEenheid ? { inhoud: i, inhoud_eenheid: inhoudEenheid } : {};
+  }
+  const inhoudSleutel = (x) => (x && x.inhoud > 0 && x.inhoud_eenheid ? `${x.inhoud} ${x.inhoud_eenheid}` : '');
   function minimumControleren(naam) {
     const regels = S.producten.filter((p) => zelfde(p.naam, naam));
     const auto = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum');
@@ -503,7 +510,10 @@
           const b = S.boodschappen.find((x) => x.id === item.id);
           if (!b) continue;
           const h = getal(item.hoeveelheid) || 0;
+          const inh = boodschapInhoud(item.eenheid, b.inhoud, b.inhoud_eenheid);
+          // met een eigen inhoud (bv. pak à 1 kg) alleen bijtellen bij een voorraadregel met dezelfde inhoud
           const bestaand = S.producten.find((p) => zelfde(p.naam, b.naam) && omrekenen(1, item.eenheid, p.eenheid) !== null
+            && (!inh.inhoud || inhoudSleutel(boodschapInhoud(p.eenheid, p.inhoud, p.inhoud_eenheid)) === inhoudSleutel(inh))
             && (!item.vervaldatum || p.vervaldatum === item.vervaldatum || !p.hoeveelheid));
           if (bestaand) {
             bestaand.hoeveelheid = Math.round((bestaand.hoeveelheid + omrekenen(h, item.eenheid, bestaand.eenheid)) * 1000) / 1000;
@@ -516,7 +526,7 @@
             S.producten.push({ id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
               datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu(),
-              ...(voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });
+              ...(inh.inhoud ? inh : voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });
             catalogusBijwerken(S.producten[S.producten.length - 1]);
           }
           gebeurtenis('gekocht', b.naam);
@@ -534,14 +544,18 @@
         for (const item of data.items || [data]) {
           const naam = (item.naam || '').trim();
           if (!naam) continue;
-          const bestaand = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt);
           const h = getal(item.hoeveelheid);
+          const inh = boodschapInhoud(item.eenheid, item.inhoud, item.inhoud_eenheid);
+          // Hetzelfde product mag meermaals op de lijst, met een andere inhoud (bv. 2 pak à 500 g en 1 pak à 1 kg).
+          // Alleen samentellen met een regel met dezelfde inhoud en een eenheid die om te rekenen is.
+          const bestaand = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt
+            && inhoudSleutel(b) === inhoudSleutel(inh) && (h === null || b.hoeveelheid === null || omrekenen(h, item.eenheid, b.eenheid) !== null));
           if (bestaand) {
             const erbij = omrekenen(h, item.eenheid, bestaand.eenheid);
             if (h !== null && bestaand.hoeveelheid !== null && erbij !== null) bestaand.hoeveelheid = Math.round((bestaand.hoeveelheid + erbij) * 100) / 100;
             continue;
           }
-          S.boodschappen.push({ id: id(), naam, hoeveelheid: h, eenheid: item.eenheid || '', product_id: item.product_id || null, afgevinkt: 0, bron: item.bron || 'handmatig' });
+          S.boodschappen.push({ id: id(), naam, hoeveelheid: h, eenheid: item.eenheid || '', ...inh, product_id: item.product_id || null, afgevinkt: 0, bron: item.bron || 'handmatig' });
         }
         return alles();
       }
@@ -550,6 +564,10 @@
         if ('afgevinkt' in data) b.afgevinkt = data.afgevinkt ? 1 : 0;
         if ('hoeveelheid' in data) b.hoeveelheid = getal(data.hoeveelheid);
         if ('eenheid' in data) b.eenheid = data.eenheid || '';
+        if ('inhoud' in data || 'eenheid' in data) {
+          const inh = boodschapInhoud(b.eenheid, 'inhoud' in data ? data.inhoud : b.inhoud, 'inhoud' in data ? data.inhoud_eenheid : b.inhoud_eenheid);
+          delete b.inhoud; delete b.inhoud_eenheid; Object.assign(b, inh);
+        }
         if ('naam' in data && String(data.naam || '').trim() && !zelfde(data.naam, b.naam)) {
           b.naam = String(data.naam).trim();
           b.product_id = S.producten.find((p) => zelfde(p.naam, b.naam))?.id || null;

@@ -70,15 +70,16 @@ export const HANDLEIDING = `
 <h3>Toevoegen</h3>
 <ul>
   <li><b>Snel:</b> typ bovenaan iets, bv. <code>2 l melk</code> of <code>6 eieren</code>, en tik op <b>+</b>. Hoeveelheid en eenheid worden herkend.</li>
-  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit je producten (je ziet meteen wat je in huis hebt) of typ zelf iets, stel het aantal in met <b>−</b> en <b>+</b> en kies de eenheid. Onder <b>Inhoud, categorie, plaats en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>: inhoud per stuk, categorie, plaats, houdbaarheid en prijs per winkel. Dat wordt in de catalogus bewaard; kies je een gekend product, dan staat het er al ingevuld. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
+  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit je producten (je ziet meteen wat je in huis hebt) of typ zelf iets, stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
 </ul>
 
 <h3>Op de lijst</h3>
 <ul>
   <li><b>− en +</b> naast een boodschap veranderen het aantal: per stuk, per 100 g of 100 ml, per 0,5 kg of 0,5 l.</li>
   <li>Tik op het <b>getal met de eenheid</b> (bv. 2 stuks, 500 g) om het aantal te typen en de eenheid te kiezen: stuks, g, kg, ml, l, pak, fles ...</li>
-  <li>Tik op de <b>naam</b> om de boodschap te bewerken: naam, aantal, eenheid, prijzen per winkel, het product in je voorraad bewerken (of er een product van maken), of ze van de lijst halen.</li>
+  <li>Tik op de <b>naam</b> om de boodschap te bewerken: naam, aantal, eenheid, inhoud, prijzen per winkel, het product in je voorraad bewerken (of er een product van maken), of ze van de lijst halen.</li>
   <li><b>×</b> haalt een boodschap meteen weg.</li>
+  <li>Een product mag <b>meermaals</b> op de lijst, met een andere hoeveelheid en inhoud: bv. 2 pak rijst à 500 g én 1 pak à 1 kg. Elke regel krijgt zijn eigen prijs. Voeg je iets toe met dezelfde inhoud, dan wordt het bij die regel bijgeteld. Na het winkelen komt elke inhoud als aparte regel in je voorraad.</li>
 </ul>
 
 <h3>Winkels en prijzen</h3>
