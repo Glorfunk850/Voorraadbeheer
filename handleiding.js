@@ -59,7 +59,8 @@ export const HANDLEIDING = `
 <p>Na gebruiken, weggooien of verwijderen verschijnt onderaan <b>Ongedaan maken</b>. Heb je meerdere verpakkingen van hetzelfde product, dan kies je eerst welke je wilt bekijken.</p>
 
 <h3>Minimumvoorraad</h3>
-<p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.</p>
+<p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.
+Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, dan vul je bij elk zijn eigen minimum in. Elke inhoud wordt apart geteld en komt apart (met die inhoud) op je lijst.</p>
 
 <h3>Catalogus</h3>
 <p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, alfabetisch en met een zoekveld. Bij wat je nu in huis hebt, staat <i>in huis</i>. Met <b>Toevoegen</b> zet je er zelf een product bij, zonder dat het in je voorraad komt. Tik op een product: van daaruit zet je het terug in je voorraad of op je lijst, <b>bewerk</b> je het (naam, aantal, categorie, plaats, inhoud, prijzen), of haal je het uit de catalogus. Geef je een product een nieuwe naam, dan verandert die ook in je voorraad en op je boodschappenlijst.</p>
