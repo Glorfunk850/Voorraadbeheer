@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 42;
+const APP_VERSIE = 43;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -61,6 +61,9 @@ const hoeveelTekst = (n, e) => (n === null || n === undefined ? '' : `${fmt(n)}$
 // Inhoud per verpakking (bv. 2 pak à 500 g). Alleen bij telbare eenheden.
 const INHOUD_EENHEDEN = ['g', 'kg', 'ml', 'cl', 'dl', 'l'];
 const inhoudVan = (p) => (p && TELBAAR.has(p.eenheid) && p.inhoud > 0 && p.inhoud_eenheid ? { per: p.inhoud, eenheid: p.inhoud_eenheid } : null);
+/** Inhoud per verpakking van één boodschap (bv. pak à 500 g); een boodschap zonder eenheid telt als stuks. */
+const boodschapInhoudVan = (b) => inhoudVan(b && { ...b, eenheid: b.eenheid || 'stuks' });
+const boodschapTekst = (b) => { const i = boodschapInhoudVan(b); return hoeveelTekst(b.hoeveelheid, b.eenheid || 'stuks') + (i ? ` à ${hoeveelTekst(i.per, i.eenheid)}` : ''); };
 const voorraadTekst = (p) => { const i = inhoudVan(p); return hoeveelTekst(p.hoeveelheid, p.eenheid) + (i ? ` à ${hoeveelTekst(i.per, i.eenheid)}` : ''); };
 /** Totaal leesbaar maken: 1000 g wordt 1 kg, 1500 ml wordt 1,5 l. */
 function samenTekst(h, e) {
@@ -270,7 +273,9 @@ function kostprijs(b, p) {
   if (b.hoeveelheid === null || b.hoeveelheid === undefined) return TELBAAR.has(p.per) ? p.prijs : null;
   const e = b.eenheid || 'stuks', c = catalogusVan(b.naam);
   let n = omrekenen(b.hoeveelheid, e, p.per);
-  if (n === null && c && zelfde(c.eenheid, e)) n = vanProduct(b.hoeveelheid, c, p.per); // via inhoud per verpakking
+  const bi = boodschapInhoudVan(b);
+  if (n === null && bi) n = omrekenen(b.hoeveelheid * bi.per, bi.eenheid, p.per); // via de inhoud van deze boodschap
+  if (n === null && !bi && c && zelfde(c.eenheid, e)) n = vanProduct(b.hoeveelheid, c, p.per); // via inhoud per verpakking
   return n === null ? null : n * p.prijs;
 }
 const lijstMelding = (naam) => { const g = goedkoopste(naam); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
@@ -574,7 +579,7 @@ function productPaneel(id) {
     knop('erbij', () => productFormulier(null, { naam: p.naam, categorie: p.categorie, eenheid: p.eenheid, locatie: p.locatie,
       datumtype: p.datumtype, barcode: p.barcode || '', hoeveelheid: telbaar ? 1 : p.hoeveelheid || 1,
       inhoud: p.inhoud || null, inhoud_eenheid: p.inhoud_eenheid || '' }));
-    knop('lijst', async () => { await api('POST', 'boodschappen', { naam: p.naam, eenheid: p.eenheid, product_id: p.id }); toast(lijstMelding(p.naam)); });
+    knop('lijst', async () => { await api('POST', 'boodschappen', { naam: p.naam, eenheid: p.eenheid, inhoud: p.inhoud || null, inhoud_eenheid: p.inhoud_eenheid || '', product_id: p.id }); toast(lijstMelding(p.naam)); });
     knop('prijzen', () => prijzenPaneel(p.naam, p.eenheid, () => productPaneel(p.id)));
     knop('weggooien', () => verbruiken(p, null, 'weggegooid', true));
     knop('bewerk', () => productFormulier(p));
@@ -657,7 +662,7 @@ function catalogusItem(c0) {
     $('#c-voorraad', el).onclick = () => productFormulier(null, { naam: c.naam, eenheid: c.eenheid || 'stuks', categorie: c.categorie || '',
       locatie: c.locatie || locaties()[0] || '', datumtype: c.datumtype || 'THT', barcode: c.barcode || '',
       hoeveelheid: c.hoeveelheid > 0 ? c.hoeveelheid : 1, inhoud: c.inhoud || null, inhoud_eenheid: c.inhoud_eenheid || '' });
-    $('#c-lijst', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks' }); toast(lijstMelding(c.naam)); };
+    $('#c-lijst', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks', inhoud: c.inhoud || null, inhoud_eenheid: c.inhoud_eenheid || '' }); toast(lijstMelding(c.naam)); };
     $('#c-prijzen', el).onclick = () => prijzenPaneel(c.naam, c.eenheid, () => { const nu = catalogusVan(c.naam); if (nu) catalogusItem(nu); else paneelSluiten(); });
     $('#c-bewerk', el).onclick = () => catalogusFormulier(c);
     $('#c-weg', el).onclick = async () => {
@@ -904,7 +909,7 @@ function tekenBoodschappen() {
       <span class="naam"><button type="button" class="naam-knop" data-bewerk="${b.id}" aria-label="${esc(b.naam)} bewerken">${esc(b.naam)}</button><small>${b.bron === 'minimum' && !b.afgevinkt ? 'Onder je minimumvoorraad · ' : ''}<button type="button" class="prijs-link${p ? '' : ' leeg'}" data-prijs="${b.id}">${esc(prijs)}</button></small></span>
       <span class="aantal-stap">
         <button type="button" class="stap${b.hoeveelheid === null ? ' verborgen' : ''}" data-min="${b.id}" aria-label="Minder ${esc(b.naam)}" ${b.hoeveelheid > stapVan(b.eenheid) ? '' : 'disabled'}>−</button>
-        <button type="button" class="stap-getal" data-hv="${b.id}" aria-label="Hoeveelheid en eenheid van ${esc(b.naam)} aanpassen">${b.hoeveelheid === null || b.hoeveelheid === undefined ? '' : esc(`${fmt(b.hoeveelheid)} ${b.eenheid || 'stuks'}`)}</button>
+        <button type="button" class="stap-getal" data-hv="${b.id}" aria-label="Hoeveelheid en eenheid van ${esc(b.naam)} aanpassen">${b.hoeveelheid === null || b.hoeveelheid === undefined ? '' : esc(`${fmt(b.hoeveelheid)} ${b.eenheid || 'stuks'}`)}${boodschapInhoudVan(b) ? `<small class="inhoud-per">à ${esc(hoeveelTekst(boodschapInhoudVan(b).per, boodschapInhoudVan(b).eenheid))}</small>` : ''}</button>
         <button type="button" class="stap" data-plus="${b.id}" aria-label="Meer ${esc(b.naam)}">+</button></span>
       <button class="weg" data-weg="${b.id}" aria-label="Verwijderen">×</button></label></li>`;
   };
@@ -967,12 +972,14 @@ function hoeveelheidKiezen(id) {
     if (alGetekend('hoeveelheid-kiezen')) return; // niet opnieuw tekenen terwijl je typt
     const e0 = b.eenheid || S.producten.find((p) => zelfde(p.naam, b.naam))?.eenheid || catalogusVan(b.naam)?.eenheid || 'stuks';
     const keuzes = EENHEDEN.includes(e0) ? EENHEDEN : [...EENHEDEN, e0];
-    el.innerHTML = `${paneelKop(`Hoeveel ${esc(b.naam)}?`, 'Kies het aantal en de eenheid.')}
+    const bi = boodschapInhoudVan(b);
+    el.innerHTML = `${paneelKop(`Hoeveel ${esc(b.naam)}?`, 'Kies het aantal, de eenheid en eventueel de inhoud.')}
       <div style="margin-bottom:1rem"><span class="veld-titel">Hoeveel</span><div class="aantal-kies">
         <button type="button" class="rond" id="hk-min" aria-label="Minder">−</button>
         <input id="hk-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid ?? stapVan(e0)))}" aria-label="Hoeveelheid">
         <button type="button" class="rond" id="hk-plus" aria-label="Meer">+</button>
         <select id="hk-eenheid" aria-label="Eenheid">${opties(keuzes, e0)}</select></div></div>
+      ${inhoudVeldenHtml('hk', e0, bi?.per, bi?.eenheid)}
       <div class="paneel-voet"><button class="knop" data-sluit>Annuleren</button><button class="knop primair" id="hk-ok">Bewaren</button></div>`;
     sluitKnoppen(el);
     const hv = $('#hk-hv', el), eenheid = $('#hk-eenheid', el);
@@ -982,15 +989,39 @@ function hoeveelheidKiezen(id) {
     hv.oninput = minKnopZetten;
     // stond het aantal nog op de standaardstap van de vorige eenheid (1 stuk), neem dan die van de nieuwe (100 g ...)
     let vorige = eenheid.value;
-    eenheid.onchange = () => { if (num(hv.value) === stapVan(vorige)) hv.value = fmt(stapVan(eenheid.value)); vorige = eenheid.value; minKnopZetten(); };
+    eenheid.onchange = () => { if (num(hv.value) === stapVan(vorige)) hv.value = fmt(stapVan(eenheid.value)); vorige = eenheid.value; minKnopZetten(); inhoudVeldenZetten(el, 'hk', eenheid.value); };
     minKnopZetten();
     $('#hk-ok', el).onclick = async () => {
       const h = num(hv.value);
-      await api('PUT', `boodschappen/${b.id}`, { hoeveelheid: h, eenheid: h === null ? '' : eenheid.value });
+      const inh = inhoudVeldenLezen(el, 'hk', eenheid.value);
+      if (!inh) return;
+      await api('PUT', `boodschappen/${b.id}`, { hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, ...inh });
       paneelSluiten();
     };
     if (fijneMuis()) setTimeout(() => { hv.focus(); hv.select(); }, 30);
   });
+}
+
+/** Velden "inhoud per stuk/pak" van een boodschap (alleen zichtbaar bij telbare eenheden). */
+function inhoudVeldenHtml(id, eenheid, inhoud, inhoudEenheid) {
+  const e = eenheid || 'stuks';
+  return `<div class="rij2" id="${id}-inhoud-rij"${TELBAAR.has(e) ? '' : ' hidden'}>
+    <label class="veld"><span id="${id}-inhoud-titel">Inhoud per ${esc(perTekst(TELBAAR.has(e) ? e : 'stuks'))} (mag leeg)</span><input id="${id}-inhoud" inputmode="decimal" value="${inhoud > 0 ? esc(fmt(inhoud)) : ''}" placeholder="bv. 500"></label>
+    <label class="veld"><span>Eenheid inhoud</span><select id="${id}-inhoud-eenheid">${opties(INHOUD_EENHEDEN, inhoudEenheid || 'g')}</select></label></div>`;
+}
+/** Inhoudvelden tonen of verbergen bij een andere eenheid. */
+function inhoudVeldenZetten(el, id, eenheid) {
+  const rij = $(`#${id}-inhoud-rij`, el);
+  if (!rij) return;
+  rij.hidden = !TELBAAR.has(eenheid || 'stuks');
+  if (!rij.hidden) $(`#${id}-inhoud-titel`, el).textContent = `Inhoud per ${perTekst(eenheid || 'stuks')} (mag leeg)`;
+}
+/** De ingevulde inhoud lezen: { inhoud, inhoud_eenheid }, of null (met melding) als ze niet klopt. */
+function inhoudVeldenLezen(el, id, eenheid) {
+  const tekst = $(`#${id}-inhoud`, el).value.trim(), i = num(tekst);
+  if (!TELBAAR.has(eenheid || 'stuks') || !tekst) return { inhoud: null, inhoud_eenheid: '' };
+  if (!(i > 0)) { toast('Vul een geldige inhoud in, of laat het veld leeg.'); $(`#${id}-inhoud`, el).focus(); return null; }
+  return { inhoud: i, inhoud_eenheid: $(`#${id}-inhoud-eenheid`, el).value };
 }
 
 /** Met hoeveel de knoppen − en + een hoeveelheid veranderen. */
@@ -1009,11 +1040,11 @@ function boodschapToevoegen() {
     const lijstTekenen = () => {
       const q = zoek.trim().toLowerCase();
       const namen = catalogusnamen().filter((n) => !q || n.toLowerCase().includes(q));
-      const opLijst = (n) => S.boodschappen.find((b) => zelfde(b.naam, n) && !b.afgevinkt);
+      const opLijst = (n) => S.boodschappen.filter((b) => zelfde(b.naam, n) && !b.afgevinkt);
       const inHuis = (n) => S.producten.filter((p) => zelfde(p.naam, n) && p.hoeveelheid > 0);
       $('#bt-lijst', el).innerHTML = namen.length ? `<div class="sectie-titel"><span>Je producten</span></div><ul class="lijst">${namen.map((n, i) => {
         const b = opLijst(n), h = inHuis(n);
-        const onder = b ? `Staat op je lijst${b.hoeveelheid ? ': ' + hoeveelTekst(b.hoeveelheid, b.eenheid) : ''}` : h.length ? `In huis: ${h.map(voorraadTekst).join(' + ')}` : 'Niet in huis';
+        const onder = b.length ? `Staat op je lijst${b.some((x) => x.hoeveelheid) ? ': ' + b.map((x) => boodschapTekst(x) || '?').join(' + ') : ''}` : h.length ? `In huis: ${h.map(voorraadTekst).join(' + ')}` : 'Niet in huis';
         return `<li><button type="button" class="rij" data-kies="${i}"><span class="naam">${esc(n)}<small>${esc(onder)}</small></span><span class="rechts">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</span></button></li>`;
       }).join('')}</ul>` : q ? `<div class="leeg">Nog niet gekend. Tik op Toevoegen om "${esc(zoek.trim())}" op je lijst te zetten.</div>` : '';
       $$('[data-kies]', el).forEach((k) => (k.onclick = () => {
@@ -1033,7 +1064,8 @@ function boodschapToevoegen() {
           <input id="bt-hv" inputmode="decimal" value="1" aria-label="Hoeveelheid">
           <button type="button" class="rond" id="bt-plus" aria-label="Meer">+</button>
           <select id="bt-eenheid" aria-label="Eenheid">${opties(EENHEDEN, 'stuks')}</select></div></div>
-        <details class="meer" id="bt-meer" style="margin-bottom:1rem"><summary>Inhoud, categorie, plaats en prijzen</summary><div id="bt-meer-inhoud"></div></details>
+        ${inhoudVeldenHtml('bt', 'stuks', null, 'g')}
+        <details class="meer" id="bt-meer" style="margin-bottom:1rem"><summary>Categorie, plaats, houdbaarheid en prijzen</summary><div id="bt-meer-inhoud"></div></details>
         <div id="bt-lijst"></div>
         <div class="paneel-voet"><button class="knop" data-sluit>Klaar</button><button class="knop primair" id="bt-ok">Toevoegen</button></div>`;
       sluitKnoppen(el);
@@ -1050,11 +1082,11 @@ function boodschapToevoegen() {
         const c = (k && catalogusVan(k)) || {};
         type = c.datumtype === 'TGT' ? 'TGT' : 'THT';
         const pe = productEenheid();
+        if (k) { // de inhoud van het gekende product voorstellen; je mag ze voor deze boodschap aanpassen
+          $('#bt-inhoud', el).value = c.inhoud > 0 ? fmt(c.inhoud) : '';
+          $('#bt-inhoud-eenheid', el).value = c.inhoud_eenheid || 'g';
+        }
         $('#bt-meer-inhoud', el).innerHTML = `
-          <div class="rij2" id="bt-inhoud-rij">
-            <label class="veld"><span id="bt-inhoud-titel">Inhoud per ${esc(perTekst(TELBAAR.has(pe) ? pe : 'stuks'))} (mag leeg)</span><input id="bt-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
-            <label class="veld"><span>Eenheid inhoud</span><select id="bt-inhoud-eenheid">${opties(INHOUD_EENHEDEN, c.inhoud_eenheid || 'g')}</select></label>
-          </div>
           <div class="rij2">
             <label class="veld"><span>Categorie</span><select id="bt-cat">${opties(categorieen(), c.categorie || '', 'Geen')}</select></label>
             <label class="veld"><span>Plaats</span><select id="bt-plaats">${opties(locaties(), c.locatie || '', 'Geen')}</select></label>
@@ -1069,7 +1101,6 @@ function boodschapToevoegen() {
         const typeTekenen = () => $$('#bt-type button', el).forEach((b) => b.classList.toggle('aan', b.dataset.w === type));
         typeTekenen();
         $$('#bt-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; meerAangeraakt = true; typeTekenen(); }));
-        $('#bt-inhoud-rij', el).hidden = !TELBAAR.has(pe);
         const pz = $('#bt-prijzen', el);
         prijzenKoppelen(pz, () => ({ eenheid: productEenheid(), inhoud_eenheid: $('#bt-inhoud', el).value.trim() ? $('#bt-inhoud-eenheid', el).value : '' }));
         $('#bt-inhoud', el).oninput = () => pz.prijsHint?.();
@@ -1082,13 +1113,14 @@ function boodschapToevoegen() {
       // null: er klopt iets niet (melding getoond); {}: niets te bewaren; anders de gegevens voor de catalogus
       meerLezen = () => {
         if (!meerAangeraakt) return {};
-        const pe = productEenheid(), telbaar = TELBAAR.has(pe);
-        const iTekst = $('#bt-inhoud', el).value.trim(), inhoud = telbaar ? num(iTekst) : null;
-        if (telbaar && iTekst && !(inhoud > 0)) { meer.open = true; toast('Vul een geldige inhoud in, of laat het veld leeg.'); return null; }
+        const pe = productEenheid();
         const pz = $('#bt-prijzen', el), prijzen = prijzenLezen(pz, pe);
         if (!prijzen) { meer.open = true; pz.open = true; return null; }
-        return { eenheid: pe, categorie: $('#bt-cat', el).value, locatie: $('#bt-plaats', el).value, datumtype: type,
-          inhoud: inhoud > 0 ? inhoud : null, inhoud_eenheid: inhoud > 0 ? $('#bt-inhoud-eenheid', el).value : '', prijzen };
+        // de inhoud hoort bij de boodschap; het product krijgt ze alleen als het er nog geen heeft
+        const bi = inhoudVeldenLezen(el, 'bt', eenheid.value) || {};
+        const c = catalogusVan(meerVoor || '');
+        return { eenheid: pe, categorie: $('#bt-cat', el).value, locatie: $('#bt-plaats', el).value, datumtype: type, prijzen,
+          ...(bi.inhoud > 0 && TELBAAR.has(pe) && !(c?.inhoud > 0) ? bi : {}) };
       };
       naam.oninput = () => { zoek = naam.value; const e = catalogusnamen().find((n) => zelfde(n, naam.value)); if (e) eenheidZetten(bekendeEenheid(e)); meerVullen(naam.value.trim()); lijstTekenen(); };
       const minKnopZetten = () => { $('#bt-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
@@ -1097,15 +1129,10 @@ function boodschapToevoegen() {
       hv.oninput = minKnopZetten;
       // stond het aantal nog op de standaardstap van de vorige eenheid (1 stuk), neem dan die van de nieuwe (100 g ...)
       let vorige = eenheid.value;
-      eenheidZetten = (e) => { eenheid.value = e; if (num(hv.value) === stapVan(vorige)) hv.value = fmt(stapVan(e)); vorige = e; minKnopZetten(); };
+      eenheidZetten = (e) => { eenheid.value = e; if (num(hv.value) === stapVan(vorige)) hv.value = fmt(stapVan(e)); vorige = e; minKnopZetten(); inhoudVeldenZetten(el, 'bt', e); };
       eenheid.onchange = () => {
         eenheidZetten(eenheid.value);
-        if (meerVoor === null) { // nieuw product: de eenheid bepaalt of er een inhoud per stuk is
-          const pe = productEenheid();
-          $('#bt-inhoud-rij', el).hidden = !TELBAAR.has(pe);
-          if (TELBAAR.has(pe)) $('#bt-inhoud-titel', el).textContent = `Inhoud per ${perTekst(pe)} (mag leeg)`;
-          prijsPerZetten($('#bt-prijzen', el), pe);
-        }
+        if (meerVoor === null) prijsPerZetten($('#bt-prijzen', el), productEenheid()); // nieuw product
       };
       minKnopZetten();
       meerVullen('');
@@ -1114,6 +1141,8 @@ function boodschapToevoegen() {
         if (!tekst) { toast('Typ of kies eerst wat je wilt kopen.'); naam.focus(); return; }
         const n = catalogusnamen().find((x) => zelfde(x, tekst)) || tekst.charAt(0).toUpperCase() + tekst.slice(1);
         const h = num(hv.value);
+        const inh = inhoudVeldenLezen(el, 'bt', eenheid.value);
+        if (!inh) return;
         const extra = meerLezen();
         if (!extra) return;
         try {
@@ -1123,10 +1152,11 @@ function boodschapToevoegen() {
             const { eenheid: pe, ...rest } = extra;
             await api(bestaat ? 'PUT' : 'POST', 'catalogus', bestaat ? { naam: n, oudeNaam: bestaat.naam, ...rest } : { naam: n, eenheid: pe, ...rest });
           }
-          await api('POST', 'boodschappen', { naam: n, hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, product_id: S.producten.find((p) => zelfde(p.naam, n))?.id || null });
+          await api('POST', 'boodschappen', { naam: n, hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, ...inh, product_id: S.producten.find((p) => zelfde(p.naam, n))?.id || null });
         } catch { return; /* melding al getoond */ }
         toast(lijstMelding(n));
         naam.value = ''; zoek = ''; hv.value = '1'; eenheid.value = vorige = 'stuks'; minKnopZetten();
+        $('#bt-inhoud', el).value = ''; inhoudVeldenZetten(el, 'bt', 'stuks');
         meerVoor = null; meerAangeraakt = false; meerVullen(''); meer.open = false;
         lijstTekenen();
       };
@@ -1149,6 +1179,7 @@ function boodschapBewerken(id) {
         <input id="bb-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid))}" placeholder="–" aria-label="Hoeveelheid">
         <button type="button" class="rond" id="bb-plus" aria-label="Meer">+</button>
         <select id="bb-eenheid" aria-label="Eenheid">${opties(EENHEDEN, b.eenheid || 'stuks')}</select></div></div>
+      ${inhoudVeldenHtml('bb', b.eenheid || 'stuks', boodschapInhoudVan(b)?.per, boodschapInhoudVan(b)?.eenheid)}
       <ul class="acties">
         <li><button id="bb-prijs">Prijzen per winkel</button></li>
         <li><button id="bb-product">${product ? 'Product in je voorraad bewerken' : 'Als product in je voorraad zetten'}</button></li>
@@ -1157,18 +1188,20 @@ function boodschapBewerken(id) {
       <div class="paneel-voet"><button class="knop" data-sluit>Annuleren</button><button class="knop primair" id="bb-ok">Bewaren</button></div>`;
     sluitKnoppen(el);
     const naam = $('#bb-naam', el), hv = $('#bb-hv', el), eenheid = $('#bb-eenheid', el);
-    suggesties(naam, catalogusnamen, (n) => { const e = S.producten.find((p) => zelfde(p.naam, n))?.eenheid || catalogusVan(n)?.eenheid; if (e) eenheid.value = e; });
+    suggesties(naam, catalogusnamen, (n) => { const e = S.producten.find((p) => zelfde(p.naam, n))?.eenheid || catalogusVan(n)?.eenheid; if (e) { eenheid.value = e; inhoudVeldenZetten(el, 'bb', e); } });
     const minKnopZetten = () => { $('#bb-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
     $('#bb-plus', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, 1)); minKnopZetten(); };
     $('#bb-min', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, -1)); minKnopZetten(); };
     hv.oninput = minKnopZetten;
-    eenheid.onchange = minKnopZetten;
+    eenheid.onchange = () => { minKnopZetten(); inhoudVeldenZetten(el, 'bb', eenheid.value); };
     minKnopZetten();
     const bewaren = async () => {
       const n = naam.value.trim();
       if (!n) { toast('Vul een naam in.'); naam.focus(); return false; }
       const h = num(hv.value);
-      await api('PUT', `boodschappen/${b.id}`, { naam: n.charAt(0).toUpperCase() + n.slice(1), hoeveelheid: h, eenheid: h === null ? '' : eenheid.value });
+      const inh = inhoudVeldenLezen(el, 'bb', eenheid.value);
+      if (!inh) return false;
+      await api('PUT', `boodschappen/${b.id}`, { naam: n.charAt(0).toUpperCase() + n.slice(1), hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, ...inh });
       return true;
     };
     $('#bb-ok', el).onclick = async () => { if (await bewaren()) { paneelSluiten(); toast('Bewaard'); } };
@@ -1182,7 +1215,7 @@ function boodschapBewerken(id) {
       const nb = S.boodschappen.find((x) => x.id === b.id) || b;
       const p = S.producten.find((x) => zelfde(x.naam, nb.naam));
       if (p) productFormulier(p);
-      else productFormulier(null, { naam: nb.naam, eenheid: nb.eenheid || 'stuks', hoeveelheid: nb.hoeveelheid ?? 1 });
+      else productFormulier(null, { naam: nb.naam, eenheid: nb.eenheid || 'stuks', hoeveelheid: nb.hoeveelheid ?? 1, inhoud: nb.inhoud || null, inhoud_eenheid: nb.inhoud_eenheid || '' });
     };
     $('#bb-weg', el).onclick = async () => { await api('DELETE', `boodschappen/${b.id}`); paneelSluiten(); toast(`${b.naam} van je lijst gehaald`); };
   });
@@ -1199,7 +1232,7 @@ function winkelenAfronden(ids) {
     el.innerHTML = `${paneelKop('In je voorraad zetten', 'Vul een datum in als je die bij de hand hebt.')}
       <div id="af-lijst">${items.map((x, n) => `
         <div class="afronden-rij" data-n="${n}">
-          <div class="titel"><span>${esc(x.b.naam)}</span></div>
+          <div class="titel"><span>${esc(x.b.naam)}${boodschapInhoudVan(x.b) ? ` <small class="stil">à ${esc(hoeveelTekst(boodschapInhoudVan(x.b).per, boodschapInhoudVan(x.b).eenheid))}</small>` : ''}</span></div>
           <div class="velden">
             <input class="af-hv" inputmode="decimal" value="${esc(fmt(x.b.hoeveelheid ?? 1))}" aria-label="Hoeveelheid">
             <select class="af-eenheid" aria-label="Eenheid">${opties(EENHEDEN, x.eenheid)}</select>

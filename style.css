@@ -441,3 +441,4 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
   #afdruk code { background: #eee; }
   @page { margin: 18mm 16mm; }
 }
+.aantal-stap .stap-getal .inhoud-per { display: block; font-size: .8rem; line-height: 1.1; }
