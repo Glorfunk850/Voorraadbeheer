@@ -404,3 +404,16 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .sync-qr svg { display: block; width: 100%; height: auto; }
 .sync-tekst { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1.05rem; letter-spacing: .04em;
   text-align: center; word-break: break-all; user-select: all; -webkit-user-select: all; }
+
+/* handleiding (Instellingen → Handleiding lezen) */
+.handleiding { line-height: 1.6; font-size: .95rem; }
+.handleiding h2 { font-size: 1.25rem; margin: 2rem 0 .6rem; padding-top: 1.2rem; border-top: 1px solid var(--lijn); }
+.handleiding h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.handleiding h3 { color: var(--tekst); font-size: 1.02rem; margin: 1.4rem 0 .4rem; }
+.handleiding p { margin: .5rem 0; }
+.handleiding ul, .handleiding ol { margin: .5rem 0; padding-left: 1.3rem; }
+.handleiding li { margin: .25rem 0; }
+.handleiding code { background: var(--veld); border-radius: 4px; padding: .05rem .3rem; font-size: .9em; }
+.handleiding table { width: 100%; border-collapse: collapse; margin: .7rem 0; font-size: .88rem; display: block; overflow-x: auto; }
+.handleiding th, .handleiding td { text-align: left; vertical-align: top; padding: .4rem .5rem; border-bottom: 1px solid var(--lijn); }
+.handleiding th { font-weight: 600; color: var(--stil); }
