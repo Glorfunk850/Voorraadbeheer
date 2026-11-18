@@ -362,6 +362,11 @@ summary small.stil { font-weight: 400; margin-left: .3rem; }
 .lijst-totaal { margin-top: .2rem; }
 .prijs-link { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .prijs-link.leeg { opacity: .75; }
+.merk-prijzen { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem; }
+.merk-prijs { white-space: nowrap; text-align: left; background: none; border: 1px solid var(--lijn, rgba(127,127,127,.35)); border-radius: 999px; padding: .1rem .55rem; font-size: .78rem; color: inherit; cursor: pointer; line-height: 1.5; }
+.merk-prijs.aan { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.merk-prijs .stil { font-weight: 400; }
+.rij .naam small.cat-prijs { color: var(--accent); }
 .vink input:checked ~ .naam .prijs-link { text-decoration: none; }
 
 /* boodschappen: aantal met − en + */

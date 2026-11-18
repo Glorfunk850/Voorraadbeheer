@@ -59,19 +59,21 @@ async function main() {
   await page.click('#paneel [data-sluit]');
   controle(await page.isVisible('[data-cat="Rijst"]'), 'product staat in de lijst');
 
-  // dubbele naam wordt geweigerd
+  // hetzelfde product met dezelfde inhoud (en hetzelfde merk) wordt geweigerd
   await page.click('#cat-nieuw');
   await page.fill('#cf-naam', 'rijst');
+  await page.fill('#cf-inhoud', '1');
+  await page.selectOption('#cf-inhoud-eenheid', 'kg');
   await page.click('#cf button[type=submit]');
   await page.waitForTimeout(250);
   d = await api('GET', 'alles');
-  controle(d.catalogus.length === 1, 'dubbele naam niet toegevoegd');
+  controle(d.catalogus.length === 1 && d.catalogus[0].varianten.length === 1, 'dubbel product (zelfde inhoud) niet toegevoegd');
   await page.click('#paneel [data-sluit]');
 
   // bewerken en hernoemen: ook in voorraad en op de lijst
   await api('POST', 'producten', { naam: 'Rijst', hoeveelheid: 2, eenheid: 'pak' });
   await api('POST', 'boodschappen', { naam: 'Rijst', eenheid: 'pak' });
-  await page.click('[data-cat="Rijst"]');
+  await page.click('[data-cat="Rijst"] >> nth=0');
   await page.click('#c-bewerk');
   await page.fill('#cf-naam', 'Basmatirijst');
   await page.click('#cf-prijzen summary');
@@ -85,7 +87,14 @@ async function main() {
   controle(b && b.prijzen.length === 1 && b.prijzen[0].prijs === 2.4, 'prijs bewaard bij bewerken');
   controle(d.producten[0].naam === 'Basmatirijst' && d.boodschappen[0].naam === 'Basmatirijst', 'nieuwe naam ook in voorraad en op de lijst');
 
-  // verwijderen
+  // verwijderen: eerst één variant (merk en inhoud), dan het laatste
+  controle(b && b.varianten.length === 2, 'pak zonder inhoud staat als aparte variant naast pak à 1 kg');
+  await page.click('#c-weg');
+  await page.click('#vraag-ja');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.catalogus.length === 1 && d.catalogus[0].varianten.length === 1, 'één variant uit catalogus verwijderd, de andere blijft');
+  await page.click('[data-cat="Basmatirijst"]');
   await page.click('#c-weg');
   await page.click('#vraag-ja');
   await page.waitForTimeout(250);
@@ -217,6 +226,157 @@ async function main() {
   await api('POST', 'boodschappen/afrekenen', { items: [{ id: tp.id, hoeveelheid: 1, eenheid: 'stuks', locatie: '' }] });
   d = await api('GET', 'alles');
   controle(d.producten.find((p) => p.naam === 'Tomatenpuree')?.merk === 'Heinz' && d.catalogus.find((c) => c.naam === 'Tomatenpuree')?.merk === 'Heinz', 'boodschap: merk gaat mee naar voorraad en catalogus');
+
+  // hetzelfde product met een ander merk en/of een andere inhoud: aparte regels in de catalogus
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  await page.click('#cat-nieuw');
+  await page.fill('#cf-naam', 'Koffie');
+  await page.fill('#cf-merk', 'Douwe');
+  await page.fill('#cf-inhoud', '250');
+  await page.selectOption('#cf-inhoud-eenheid', 'g');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  await page.click('#c-variant');
+  controle((await page.inputValue('#cf-naam')) === 'Koffie' && (await page.inputValue('#cf-merk')) === '', 'ander merk of inhoud: naam ingevuld, merk leeg');
+  await page.fill('#cf-merk', 'Lavazza');
+  await page.fill('#cf-inhoud', '1');
+  await page.selectOption('#cf-inhoud-eenheid', 'kg');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  controle((await page.textContent('#paneel .paneel-kop, #paneel')).includes('Lavazza'), 'na bewaren opent de nieuwe variant');
+  await page.click('#paneel [data-sluit]');
+  // ook via Toevoegen met een gekende naam: zelfde merk, andere inhoud
+  await page.click('#cat-nieuw');
+  await page.fill('#cf-naam', 'koffie');
+  await page.fill('#cf-merk', 'Douwe');
+  await page.fill('#cf-inhoud', '500');
+  await page.selectOption('#cf-inhoud-eenheid', 'g');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  await page.click('#paneel [data-sluit]');
+  d = await api('GET', 'alles');
+  const koffie = d.catalogus.filter((c) => c.naam === 'Koffie');
+  controle(koffie.length === 1 && koffie[0].varianten.length === 3, 'koffie: één product met drie varianten');
+  controle((await page.$$('[data-cat="Koffie"]')).length === 3, 'koffie: drie regels in de catalogus');
+  const regels = await page.$$eval('[data-cat="Koffie"]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(regels.some((t) => t.includes('Douwe') && t.includes('250 g')) && regels.some((t) => t.includes('Douwe') && t.includes('500 g')) && regels.some((t) => t.includes('Lavazza') && t.includes('1 kg')), 'koffie: merk en inhoud per regel');
+  // dezelfde variant nog eens: geweigerd
+  await page.click('#cat-nieuw');
+  await page.fill('#cf-naam', 'Koffie');
+  await page.fill('#cf-merk', 'lavazza');
+  await page.fill('#cf-inhoud', '1');
+  await page.selectOption('#cf-inhoud-eenheid', 'kg');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.catalogus.find((c) => c.naam === 'Koffie').varianten.length === 3, 'koffie: zelfde merk en inhoud niet dubbel');
+  await page.click('#paneel [data-sluit]');
+  // aan voorraad toevoegen vanuit een variant neemt merk en inhoud over
+  await page.click('[data-cat="Koffie"]:has-text("Lavazza")');
+  await page.click('#c-voorraad');
+  controle((await page.inputValue('#pf-merk')) === 'Lavazza' && (await page.inputValue('#pf-inhoud')) === '1' && (await page.inputValue('#pf-inhoud-eenheid')) === 'kg', 'variant: merk en inhoud ingevuld bij aan voorraad toevoegen');
+  await page.click('#pf button[type=submit]');
+  await page.waitForTimeout(250);
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  const inHuis = await page.$$eval('[data-cat="Koffie"]', (l) => l.map((x) => x.textContent.includes('in huis')));
+  controle(inHuis.filter(Boolean).length === 1, 'variant: alleen Lavazza staat in huis');
+  // voorraadlijst: zoekresultaten per merk, met het merk achter de naam
+  await api('POST', 'producten', { naam: 'Koffie', hoeveelheid: 1, eenheid: 'stuks', merk: 'Douwe', inhoud: 500, inhoud_eenheid: 'g' });
+  await page.goto(basis + '#voorraad');
+  await page.reload();
+  await page.fill('#zoek-voorraad', 'koffie');
+  const gevonden = await page.$$eval('[data-groep]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(gevonden.length === 2 && gevonden.includes('Koffie · Douwe') && gevonden.includes('Koffie · Lavazza'), 'voorraad: merk in de zoekresultaten: ' + gevonden.join(' | '));
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  // bewerken van één variant laat de andere staan
+  await page.click('[data-cat="Koffie"]:has-text("250 g")');
+  await page.click('#c-bewerk');
+  controle((await page.inputValue('#cf-inhoud')) === '250' && (await page.inputValue('#cf-merk')) === 'Douwe', 'variant bewerken: velden van die variant');
+  await page.fill('#cf-inhoud', '200');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const kv = d.catalogus.find((c) => c.naam === 'Koffie').varianten.map((v) => `${v.merk} ${v.inhoud} ${v.inhoud_eenheid}`).sort();
+  controle(JSON.stringify(kv) === JSON.stringify(['Douwe 200 g', 'Douwe 500 g', 'Lavazza 1 kg']), 'variant bewerken: alleen die variant aangepast');
+  await page.click('#paneel [data-sluit]');
+  // boodschap: elke variant is een aparte keuze, met merk en inhoud
+  await page.goto(basis + '#boodschappen');
+  await page.reload();
+  await page.click('#b-menu');
+  await page.fill('#bt-zoek', 'koffie');
+  await page.dispatchEvent('#bt-zoek', 'input');
+  controle((await page.$$('#bt-lijst [data-kies]')).length === 3, 'boodschap: drie keuzes voor koffie');
+  await page.click('#bt-lijst [data-kies]:has-text("Douwe"):has-text("à 500 g")');
+  controle((await page.inputValue('#bt-merk')) === 'Douwe' && (await page.inputValue('#bt-inhoud')) === '500', 'boodschap: merk en inhoud van de gekozen variant ingevuld');
+
+  // prijzen per merk (en per inhoud) in het venster Prijzen
+  await page.goto(basis + '#catalogus');
+  await page.reload();
+  await page.click('[data-cat="Koffie"]:has-text("Lavazza")');
+  await page.click('#c-prijzen');
+  controle(!!(await page.$('.pz-groep[data-merk="Lavazza"][data-inhoud="1"]')) && !!(await page.$('.pz-groep[data-merk="Douwe"][data-inhoud="500"]')), 'prijzen: een blok per merk en inhoud');
+  controle((await page.textContent('.pz-groep[data-merk="Lavazza"] .pz-groep-titel')).includes('Lavazza'), 'prijzen: merk in de titel');
+  // prijs invullen bij een winkel: een vaste winkel uit Instellingen, of een nieuwe regel
+  const prijsZetten = async (groep, winkel, prijs) => {
+    const vast = await page.$(`${groep} .prijs-rij[data-winkel="${winkel}"] .pz-prijs`);
+    if (vast) return vast.fill(prijs);
+    await page.click(`${groep} .pz-erbij`);
+    await page.fill(`${groep} .pz-winkel >> nth=-1`, winkel);
+    await page.fill(`${groep} .prijs-rij:last-child .pz-prijs`, prijs);
+  };
+  await prijsZetten('.pz-groep[data-merk="Lavazza"]', 'Colruyt', '9');
+  await prijsZetten('.pz-groep[data-merk="Douwe"][data-inhoud="500"]', 'Colruyt', '5');
+  // een merk zonder inhoud toevoegen
+  await page.click('#pz-nieuw summary');
+  await page.fill('#pz-nieuw-merk', 'Huismerk');
+  await page.click('#pz-nieuw-ok');
+  controle(!!(await page.$('.pz-groep[data-merk="Huismerk"]')), 'prijzen: blok voor een nieuw merk toegevoegd');
+  await prijsZetten('.pz-groep[data-merk="Huismerk"]', 'Aldi', '3');
+  await page.click('#pz-form button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const kp = d.catalogus.find((c) => c.naam === 'Koffie').prijzen;
+  controle(kp.some((p) => p.merk === 'Lavazza' && p.inhoud === 1 && p.inhoud_eenheid === 'kg' && p.prijs === 9)
+    && kp.some((p) => p.merk === 'Douwe' && p.inhoud === 500 && p.prijs === 5)
+    && kp.some((p) => p.merk === 'Huismerk' && !p.inhoud && p.prijs === 3 && p.winkel === 'Aldi'), 'prijzen: per merk bewaard');
+  controle((await page.textContent('#paneel .prijzen-blok')).includes('Lavazza'), 'prijzen: overzicht per merk');
+  // in de catalogus-lijst: per merk en inhoud de goedkoopste prijs
+  await page.click('#paneel [data-sluit]');
+  const catRegels = await page.$$eval('[data-cat="Koffie"]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(catRegels.some((t) => t.includes('Lavazza') && t.includes('€ 9,00 per stuk bij Colruyt'))
+    && catRegels.some((t) => t.includes('Douwe') && t.includes('500 g') && t.includes('€ 5,00 per stuk bij Colruyt'))
+    && catRegels.some((t) => t.includes('Douwe') && t.includes('200 g') && !t.includes('€')), 'catalogus: prijs per merk in de lijst: ' + catRegels.join(' | '));
+  await page.click('[data-cat="Koffie"]:has-text("Lavazza")');
+  // het formulier toont de prijs van het merk en de inhoud die erin staan
+  await page.click('#c-voorraad');
+  controle((await page.textContent('#pf-prijzen summary')).includes('Lavazza') && (await page.inputValue('#pf-prijzen .prijs-rij[data-winkel="Colruyt"] .pz-prijs')) === '9,00', 'formulier: prijs van dit merk ingevuld');
+  await page.fill('#pf-merk', 'Huismerk');
+  await page.fill('#pf-inhoud', '');
+  await page.dispatchEvent('#pf-inhoud', 'input');
+  controle((await page.$$eval('#pf-prijzen .pz-prijs', (l) => l.map((x) => x.value))).includes('3,00'), 'formulier: ander merk, andere prijs');
+  await page.click('#paneel [data-sluit]');
+  // boodschappen: de prijs van het merk dat je koopt
+  await api('POST', 'boodschappen', { naam: 'Koffie', hoeveelheid: 1, eenheid: 'stuks', merk: 'Lavazza', inhoud: 1, inhoud_eenheid: 'kg' });
+  await api('POST', 'boodschappen', { naam: 'Koffie', hoeveelheid: 2, eenheid: 'stuks', merk: 'Huismerk' });
+  await page.goto(basis + '#boodschappen');
+  await page.reload();
+  const lijstTekst = (await page.textContent('#inhoud')).replace(/\s+/g, ' ');
+  controle(lijstTekst.includes('Colruyt · € 9,00') && lijstTekst.includes('Aldi · € 6,00'), 'boodschappen: prijs per merk berekend');
+  // prijzen per merk op de lijst: 2 stuks koffie van elk merk met een prijs (zonder inhoud: alleen Huismerk heeft er een)
+  d = await api('GET', 'alles');
+  const huis = d.boodschappen.find((b) => b.naam === 'Koffie' && b.merk === 'Huismerk');
+  await api('PUT', `boodschappen/${huis.id}`, { inhoud: 500, inhoud_eenheid: 'g' });
+  await page.reload();
+  const knoppen = await page.$$eval(`[data-merkkies="${huis.id}"]`, (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(knoppen.length === 2 && knoppen[0].startsWith('Huismerk € 6,00') && knoppen[1].startsWith('Douwe € 10,00'), 'boodschappen: prijzen per merk onder de boodschap: ' + knoppen.join(' | '));
+  await page.click(`[data-merkkies="${huis.id}"][data-merk="Douwe"]`);
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.boodschappen.find((b) => b.id === huis.id).merk === 'Douwe', 'boodschappen: merk kiezen via de prijs');
+  controle(!!(await page.$(`[data-merkkies="${huis.id}"][data-merk="Douwe"].aan`)), 'boodschappen: gekozen merk aangeduid');
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();

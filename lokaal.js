@@ -35,16 +35,19 @@
     }
     return uit;
   };
-  // prijzen van een product: [{ winkel, prijs, per, inhoud?, inhoud_eenheid? }] — prijs in euro per eenheid `per`.
-  // Met een inhoud geldt de prijs alleen voor die verpakking (bv. pak à 500 g); zonder inhoud voor elke inhoud zonder eigen prijs.
-  // Eén regel per winkel en per inhoud.
+  // prijzen van een product: [{ winkel, prijs, per, merk?, inhoud?, inhoud_eenheid? }] — prijs in euro per eenheid `per`.
+  // Met een merk en/of inhoud geldt de prijs alleen voor dat merk en die verpakking (bv. Lavazza, pak à 500 g);
+  // zonder merk en inhoud voor alles zonder eigen prijs. Eén regel per winkel, per merk en per inhoud.
   const prijsSleutel = (x) => (x && getal(x.inhoud) > 0 && x.inhoud_eenheid ? `${getal(x.inhoud)} ${x.inhoud_eenheid}` : '');
+  const prijsMerk = (x) => String((x && x.merk) || '').trim();
+  const prijsGroep = (x) => `${prijsMerk(x).toLowerCase()}|${prijsSleutel(x)}`;
   const prijzenLijst = (v) => {
     const uit = [];
     for (const x of Array.isArray(v) ? v : []) {
-      const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs), sleutel = prijsSleutel(x);
-      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel) && prijsSleutel(y) === sleutel)) continue;
+      const winkel = String((x && x.winkel) || '').trim(), prijs = getal(x && x.prijs), sleutel = prijsSleutel(x), groep = prijsGroep(x);
+      if (!winkel || !(prijs >= 0) || uit.some((y) => zelfde(y.winkel, winkel) && prijsGroep(y) === groep)) continue;
       uit.push({ winkel, prijs: Math.round(prijs * 1000) / 1000, per: String((x && x.per) || '').trim(),
+        ...(prijsMerk(x) ? { merk: prijsMerk(x) } : {}),
         ...(sleutel ? { inhoud: getal(x.inhoud), inhoud_eenheid: String(x.inhoud_eenheid) } : {}) });
     }
     return uit;
@@ -217,6 +220,27 @@
     } else weg();
   }
   // Catalogus: elk product dat ooit werd toegevoegd, ook als het later op is of verwijderd werd
+  // Varianten van een catalogusproduct: hetzelfde product met een ander merk en/of een andere inhoud
+  // (bv. Rijst van Lassie à 1 kg en Rijst van Boni à 500 g). Categorie, plaats, prijzen ... gelden voor alle varianten.
+  // Oudere gegevens zonder lijst: één variant uit merk en inhoud van het product zelf.
+  const variantSleutel = (v) => `${String((v && v.merk) || '').trim().toLowerCase()}|${inhoudSleutel(v)}`;
+  function variantenVan(c) {
+    if (Array.isArray(c.varianten) && c.varianten.length) return c.varianten;
+    return [{ merk: c.merk || '', inhoud: c.inhoud > 0 ? c.inhoud : null, inhoud_eenheid: c.inhoud > 0 ? c.inhoud_eenheid || '' : '', uitlekgewicht: !!c.uitlekgewicht }];
+  }
+  const variantUit = (x) => {
+    const i = getal(x.inhoud);
+    return { merk: String(x.merk || '').trim(), inhoud: i > 0 ? i : null, inhoud_eenheid: i > 0 ? x.inhoud_eenheid || '' : '', uitlekgewicht: !!x.uitlekgewicht };
+  };
+  /** Variant v bewaren (in de plaats van `oud`, als die gegeven is); ze wordt ook de standaard van het product. */
+  function variantBewaren(c, v, oud = null, lijst = Array.isArray(c.varianten) ? c.varianten : variantenVan(c)) {
+    lijst = lijst.map((x) => ({ ...x }));
+    if (oud) lijst = lijst.filter((x) => variantSleutel(x) !== variantSleutel(oud));
+    const bestaand = lijst.find((x) => variantSleutel(x) === variantSleutel(v));
+    if (bestaand) Object.assign(bestaand, v); else lijst.push({ ...v });
+    c.varianten = lijst;
+    Object.assign(c, { merk: v.merk, inhoud: v.inhoud, inhoud_eenheid: v.inhoud_eenheid, uitlekgewicht: v.uitlekgewicht });
+  }
   function catalogusBijwerken(p, teller = true, oudeNaam = null) {
     const naam = (p.naam || '').trim();
     if (!naam) return;
@@ -225,18 +249,21 @@
       c = S.catalogus.find((x) => zelfde(x.naam, oudeNaam));
       if (c && S.producten.some((x) => x !== p && zelfde(x.naam, oudeNaam))) c = null; // oude naam nog in gebruik
     }
-    if (!c) { c = { naam, aantal: 0, eerst: nu() }; S.catalogus.push(c); }
+    if (!c) { c = { naam, aantal: 0, eerst: nu(), varianten: [] }; S.catalogus.push(c); }
     c.naam = naam;
     for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype', 'barcode']) if (p[k]) c[k] = p[k];
     if (p.hoeveelheid > 0) c.hoeveelheid = p.hoeveelheid;
-    if ('inhoud' in p) { c.inhoud = p.inhoud > 0 ? p.inhoud : null; c.inhoud_eenheid = p.inhoud > 0 ? p.inhoud_eenheid || '' : ''; }
-    if ('uitlekgewicht' in p) c.uitlekgewicht = !!p.uitlekgewicht;
-    if ('merk' in p) c.merk = String(p.merk || '').trim();
+    if ('inhoud' in p || 'merk' in p) {
+      // elk merk en elke inhoud die je ooit had, blijft als variant in de catalogus staan
+      const v = variantUit({ merk: 'merk' in p ? p.merk : c.merk, inhoud: 'inhoud' in p ? p.inhoud : c.inhoud,
+        inhoud_eenheid: 'inhoud' in p ? p.inhoud_eenheid : c.inhoud_eenheid, uitlekgewicht: 'uitlekgewicht' in p ? p.uitlekgewicht : c.uitlekgewicht });
+      variantBewaren(c, v);
+    } else if ('uitlekgewicht' in p) c.uitlekgewicht = !!p.uitlekgewicht;
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
   }
   // prijzen van een product (per naam, in de catalogus) vervangen.
-  // Met `voor` ({ inhoud, inhoud_eenheid }, of null voor zonder inhoud) alleen de prijzen van die inhoud.
+  // Met `voor` ({ merk, inhoud, inhoud_eenheid }, of null voor zonder merk en inhoud) alleen de prijzen van dat merk en die inhoud.
   function prijzenZetten(naam, prijzen, eenheid, voor) {
     naam = (naam || '').trim();
     if (!naam) return;
@@ -244,8 +271,9 @@
     if (!c) { catalogusBijwerken({ naam, eenheid: eenheid || '' }, false); c = S.catalogus.find((x) => zelfde(x.naam, naam)); }
     if (voor === undefined) c.prijzen = prijzenLijst(prijzen);
     else {
-      const sleutel = prijsSleutel(voor), v = sleutel ? { inhoud: getal(voor.inhoud), inhoud_eenheid: voor.inhoud_eenheid } : { inhoud: null, inhoud_eenheid: '' };
-      c.prijzen = prijzenLijst([...(c.prijzen || []).filter((p) => prijsSleutel(p) !== sleutel), ...prijzen.map((p) => ({ ...p, ...v }))]);
+      const sleutel = prijsSleutel(voor), groep = prijsGroep(voor);
+      const v = { merk: prijsMerk(voor), ...(sleutel ? { inhoud: getal(voor.inhoud), inhoud_eenheid: voor.inhoud_eenheid } : { inhoud: null, inhoud_eenheid: '' }) };
+      c.prijzen = prijzenLijst([...(c.prijzen || []).filter((p) => prijsGroep(p) !== groep), ...prijzen.map((p) => ({ ...p, ...v }))]);
     }
     lijstAanvullen(S.instellingen, 'winkels', c.prijzen.map((p) => p.winkel));
   }
@@ -436,7 +464,11 @@
 
     if (bron === 'prijzen') { prijzenZetten(data.naam, data.prijzen, data.eenheid, data.prijzen_inhoud); return alles(); }
     if (bron === 'catalogus' && methode === 'DELETE') {
-      S.catalogus = S.catalogus.filter((c) => !zelfde(c.naam, data && data.naam));
+      // met `variant`: alleen dat merk en die inhoud weghalen (zolang er nog andere zijn)
+      const c = S.catalogus.find((x) => zelfde(x.naam, data && data.naam));
+      const rest = c && data.variant ? variantenVan(c).filter((x) => variantSleutel(x) !== variantSleutel(variantUit(data.variant))) : [];
+      if (c && rest.length) variantBewaren(c, rest[0], null, rest);
+      else S.catalogus = S.catalogus.filter((x) => x !== c);
       return alles();
     }
     // Catalogus: zelf een product toevoegen (POST) of bewerken (PUT, met oudeNaam), los van je voorraad
@@ -444,22 +476,27 @@
       const naam = ((data && data.naam) || '').trim();
       if (!naam) fout(400, 'Vul een naam in.');
       const oudeNaam = methode === 'PUT' ? ((data && data.oudeNaam) || '').trim() : '';
-      let c = methode === 'PUT' ? S.catalogus.find((x) => zelfde(x.naam, oudeNaam)) : null;
+      // Hetzelfde product mag meermaals in de catalogus, met een ander merk en/of een andere inhoud (een variant).
+      const v = variantUit(data), oud = methode === 'PUT' && data.oudeVariant ? variantUit(data.oudeVariant) : null;
+      let c = S.catalogus.find((x) => zelfde(x.naam, methode === 'PUT' ? oudeNaam : naam)) || null;
       if (methode === 'PUT' && !c) fout(404, 'Dit product staat niet (meer) in de catalogus.');
+      const al = c && (methode === 'POST' || !oud || variantSleutel(oud) !== variantSleutel(v)) && variantenVan(c).some((x) => variantSleutel(x) === variantSleutel(v));
+      if (al) fout(409, `${naam}${v.merk ? ` van ${v.merk}` : ''}${v.inhoud ? ` à ${String(v.inhoud).replace('.', ',')} ${v.inhoud_eenheid}` : ''} staat al in de catalogus.`);
       if (S.catalogus.some((x) => x !== c && zelfde(x.naam, naam))) fout(409, `${naam} staat al in de catalogus.`);
-      if (!c) { c = { naam, aantal: 0, eerst: nu() }; S.catalogus.push(c); }
+      const nieuwProduct = !c;
+      if (!c) { c = { naam, aantal: 0, eerst: nu(), varianten: [] }; S.catalogus.push(c); }
       if (oudeNaam && !zelfde(oudeNaam, naam)) {
         // nieuwe naam: ook in je voorraad, op je boodschappenlijst en bij de barcodes
         for (const p of S.producten) if (zelfde(p.naam, oudeNaam)) p.naam = naam;
         for (const b of S.boodschappen) if (zelfde(b.naam, oudeNaam)) b.naam = naam;
         for (const b of Object.values(S.barcodes)) if (b && zelfde(b.naam, oudeNaam)) b.naam = naam;
       }
-      c.naam = naam;
-      for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype']) if (k in data) c[k] = (data[k] || '').trim();
+      if (methode === 'PUT' || nieuwProduct) c.naam = naam; // een nieuwe variant houdt de naam van het product
+      // een nieuwe variant van een gekend product houdt de eenheid van dat product
+      for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype']) if (k in data && !(k === 'eenheid' && methode === 'POST' && !nieuwProduct)) c[k] = (data[k] || '').trim();
       if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
-      if ('inhoud' in data) { const i = getal(data.inhoud); c.inhoud = i > 0 ? i : null; c.inhoud_eenheid = i > 0 ? data.inhoud_eenheid || '' : ''; }
-      if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
-      if ('merk' in data) c.merk = String(data.merk || '').trim();
+      if ('inhoud' in data || 'merk' in data) variantBewaren(c, v, oud);
+      else if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
       c.laatst = nu();
       if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid, data.prijzen_inhoud);
       return alles();
