@@ -1,7 +1,8 @@
 # Voorraadbeheer – installeerbare webapp
 
 Alles werkt in de browser: je gegevens staan op het toestel zelf (ook offline).
-Er is geen server en geen AI-dienst; er wordt niets naar buiten gestuurd.
+Er is geen AI-dienst en er wordt niets naar buiten gestuurd. Alleen als je **synchroniseren tussen toestellen**
+aanzet, gaan je gegevens naar je eigen server, en dan versleuteld: die server kan ze niet lezen (zie verder).
 
 Voorlopig uitgeschakeld: barcodes scannen en recepten inlezen vanaf een foto (of een gescande pdf).
 Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf te typen.
@@ -81,13 +82,75 @@ De volledige handleiding staat in de app zelf: Instellingen → **Handleiding le
 - Een bestand koppelen kan niet op een iPhone/iPad (Apple laat het niet toe). Staat de automatische back-up uit en
   is je laatste back-up meer dan 14 dagen oud, dan herinnert de app je eraan bij het openen, met een knop om meteen
   een back-up te maken.
-- Elk toestel heeft zijn eigen voorraad. Overzetten: Instellingen → **Back-up downloaden**,
-  en op het andere toestel **Back-up terugzetten**.
+- Elk toestel heeft zijn eigen voorraad, tenzij je **synchroniseren tussen toestellen** aanzet (zie hieronder).
+  Eenmalig overzetten kan ook: Instellingen → **Back-up downloaden**, en op het andere toestel **Back-up terugzetten**.
 - Maak af en toe een back-up. Verwijder je de app of wis je de websitegegevens, dan is de voorraad weg.
 - Bij het terugzetten zie je eerst hoeveel producten, recepten en boodschappen in de back-up zitten.
   Op het voorraadscherm staat daarna alleen wat binnenkort op moet; zoek een product om de rest te zien.
 - Een back-up uit de vorige versie (de app met voorraad.db) kun je proberen terug te zetten; lukt het niet, laat het weten.
 - Welke versie een toestel heeft, zie je onderaan bij Instellingen ("Versie …").
+
+## Synchroniseren tussen toestellen
+
+Houd je voorraad, boodschappen, recepten en planning gelijk op je telefoon, tablet en laptop. Het werkt zoals de
+synchronisatie van DuckDuckGo:
+
+- Je koppelt toestellen met een **geheime code** (32 tekens, ook als QR-code). Er is geen account, e-mail of wachtwoord.
+- Alles wordt **op het toestel zelf versleuteld** met die code (AES-256). De code zelf gaat nooit naar de server.
+- De server bewaart alleen het versleutelde pakket. Wie de server beheert (ook Cloudflare), kan je gegevens niet lezen.
+- De server is van jou: een gratis Cloudflare Worker op je eigen account (map `sync-server`).
+
+### Eenmalig: de server plaatsen (±15 minuten)
+
+1. Maak een gratis account op https://dash.cloudflare.com/sign-up en bevestig je e-mailadres.
+2. Klik in Cloudflare links op **Workers & Pages** (bij sommige accounts onder **Compute**). Vraagt Cloudflare om een
+   *subdomein* voor workers.dev te kiezen, kies er dan een (bv. je naam). Rechts op die pagina staat je **Account ID**:
+   kopieer het.
+3. Klik rechtsboven op je profiel → **My Profile** → **API Tokens** → **Create Token**. Kies bij de sjabloon
+   **Edit Cloudflare Workers** op **Use template**. Kies bij *Account Resources* je account en bij *Zone Resources*
+   **All zones**. Klik **Continue to summary** → **Create Token** en kopieer de token (je ziet hem maar één keer).
+4. Ga in GitHub naar je repository → **Settings** → **Secrets and variables** → **Actions** →
+   **New repository secret**. Maak er twee:
+   - naam `CLOUDFLARE_API_TOKEN`, met de token van stap 3;
+   - naam `CLOUDFLARE_ACCOUNT_ID`, met het Account ID van stap 2.
+5. Ga naar het tabblad **Actions** → links **Synchronisatieserver plaatsen** → **Run workflow** → **Run workflow**.
+   Na een minuut staat er een groen vinkje. De actie zet het adres van je server (bv.
+   `https://voorraad-sync.jouwnaam.workers.dev`) vanzelf in `sync-adres.js`; de app kent het daarna op elk toestel.
+   Open je dat adres in de browser, dan zie je: *deze synchronisatieserver voor Voorraadbeheer werkt*.
+
+Zonder GitHub-actie kan het ook met de opdrachtregel: `cd sync-server` en `npx wrangler deploy`. Vul het adres dan in
+`sync-adres.js` in, of typ het in de app (er verschijnt een veld zolang `sync-adres.js` leeg is).
+
+Het gratis abonnement van Cloudflare is ruim genoeg: 100.000 verzoeken per dag, en je gegevens nemen (gecomprimeerd)
+meestal minder dan 1 MB in.
+
+### Toestellen koppelen
+
+1. Op je eerste toestel: Instellingen → **Synchroniseren tussen toestellen** → **Synchronisatie aanzetten**.
+   Je ziet een QR-code en de code (bv. `D09C-QAQQ-…`).
+2. Op elk ander toestel: Instellingen → **Koppelen met een code** en typ de code (hoofdletters, streepjes en spaties
+   maken niet uit). Of scan de QR-code met de camera: op Android opent de geïnstalleerde app dan meteen.
+   **iPhone/iPad:** de camera opent de QR-code in Safari, niet in de app op je beginscherm. Typ de code daarom in de app zelf.
+3. Staan er op het nieuwe toestel al gegevens, dan kies je: **Samenvoegen** (alles van beide toestellen houden; wat op
+   beide stond, kan dubbel staan) of **Vervangen** (het nieuwe toestel krijgt de gegevens van de andere).
+
+Later nog een toestel koppelen: Instellingen → **Toestel koppelen** toont de code opnieuw.
+
+### Hoe het werkt
+
+- Na elke wijziging (na ±1,5 seconde), bij het openen van de app en elke halve minuut zolang de app open staat,
+  haalt de app op wat nieuw is, voegt het samen met dit toestel en stuurt het resultaat terug.
+- Zonder internet werk je gewoon verder; je wijzigingen gaan mee zodra er weer verbinding is.
+- Wijzig je op twee toestellen tegelijk, dan gaat er niets verloren: elke wijziging wordt apart samengevoegd.
+  Op de laptop de hoeveelheid melk en op de telefoon de plaats aangepast? Beide blijven. Alleen als je hetzelfde veld van
+  hetzelfde product op twee toestellen anders invult voordat ze synchroniseerden, wint het toestel dat als laatste synchroniseert.
+  Een product dat op het ene toestel verwijderd en op het andere gewijzigd werd, blijft staan.
+- Per toestel (niet gesynchroniseerd): de automatische back-up (aan/uit), de laatste back-up en het bestand bij
+  *Bewaren in een bestand*.
+- **Houd de code geheim**: wie ze heeft, kan je gegevens lezen. Bewaar ze ook op een veilige plek (bv. in je
+  wachtwoordbeheerder): ben je al je toestellen kwijt, dan haal je met de code alles terug op een nieuw toestel.
+- **Stoppen**: Instellingen → **Stoppen**. Je gegevens blijven op het toestel. Kies je daarna ook **Ook wissen**, dan
+  wordt alles van de server gewist en stoppen ook je andere toestellen (hun gegevens blijven wel staan).
 
 ## Een nieuwe versie zetten
 
@@ -106,6 +169,12 @@ rood kruisje in plaats van een groen vinkje (tabblad **Actions**). Zet dan geen 
 `test/bestand.test.cjs` controleert dat het gekozen bestand meteen gevuld wordt en bij elke wijziging bijgewerkt,
 dat de koppeling blijft na het herstarten, dat alles terugkomt na het wissen van de app-gegevens, het opnieuw
 vragen van toestemming, "Stoppen", en de back-upherinnering in browsers zonder bestandskiezer.
+
+## Automatische test: synchroniseren
+
+`test/sync.test.cjs` start de echte servercode lokaal en controleert het samenvoegen, dat op de server alleen onleesbare
+gegevens staan, koppelen met de code en via de QR-link, gelijktijdige wijzigingen op twee toestellen, een verkeerde code,
+en stoppen en wissen.
 
 ## Automatische recepttest
 

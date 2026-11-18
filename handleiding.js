@@ -2,8 +2,8 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 33; je versie zie je onderaan bij <b>Instellingen</b>.</p>
-<p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens; overzetten doe je met een back-up (zie <i>Je gegevens bewaren</i>).</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 34; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
 <ul>
@@ -200,6 +200,7 @@ export const HANDLEIDING = `
   <tr><td>Automatische back-up in Downloads</td><td>Ja, standaard aan</td><td>Ja, standaard aan</td><td>Kan, standaard uit</td></tr>
   <tr><td>Bewaren in een bestand</td><td>Ja</td><td>Nee</td><td>Nee</td></tr>
   <tr><td>Zelf een back-up downloaden</td><td>Ja</td><td>Ja</td><td>Ja</td></tr>
+  <tr><td>Synchroniseren tussen toestellen</td><td>Ja</td><td>Ja</td><td>Ja</td></tr>
 </table>
 
 <h3>Automatische back-up</h3>
@@ -221,8 +222,25 @@ export const HANDLEIDING = `
 </ul>
 <p>Is je laatste back-up meer dan 14 dagen oud en staat de automatische back-up uit, dan herinnert de app je eraan bij het openen.</p>
 
-<h3>Naar een ander toestel</h3>
-<p>Elk toestel heeft zijn eigen voorraad; er is geen automatische synchronisatie. Maak op het ene toestel een back-up, stuur het bestand naar het andere toestel (bv. via mail of Drive) en kies daar <b>Back-up terugzetten</b>. Op een nieuwe laptop met een gekoppeld bestand kies je <b>Bestaand bestand openen</b>.</p>
+<h3>Synchroniseren tussen toestellen</h3>
+<p>Houd je voorraad, boodschappen, recepten en planning gelijk op al je toestellen. Je koppelt ze met een geheime code; er is geen account of wachtwoord. Alles wordt op het toestel zelf versleuteld, de server kan je gegevens niet lezen. De server moet eenmalig geplaatst worden (zie de LEESMIJ).</p>
+<ol>
+  <li>Op je eerste toestel: <b>Instellingen → Synchroniseren tussen toestellen → Synchronisatie aanzetten</b>. Je ziet een QR-code en een code van 32 tekens.</li>
+  <li>Op elk ander toestel: <b>Instellingen → Koppelen met een code</b> en typ de code. Of scan de QR-code met de camera (op Android opent de app dan meteen).</li>
+  <li>Staan er op het nieuwe toestel al gegevens, kies dan <b>Samenvoegen</b> (alles houden) of <b>Vervangen</b> (de gegevens van je andere toestellen nemen).</li>
+</ol>
+<ul>
+  <li>Daarna gaat elke wijziging vanzelf naar je andere toestellen. Zonder internet werk je gewoon verder; je wijzigingen gaan mee zodra er weer verbinding is.</li>
+  <li>Wijzig je op twee toestellen tegelijk, dan gaat er niets verloren: elke wijziging wordt apart samengevoegd.</li>
+  <li><b>iPhone/iPad:</b> de camera opent de QR-code in Safari, niet in de app. Typ de code daarom in de app zelf.</li>
+  <li>Later nog een toestel koppelen: <b>Toestel koppelen</b> toont de code opnieuw.</li>
+  <li>Houd de code geheim: wie ze heeft, kan je gegevens lezen. Bewaar ze wel op een veilige plek: ben je al je toestellen kwijt, dan haal je er alles mee terug.</li>
+  <li>Een gezin dat één voorraad deelt, koppelt alle toestellen met dezelfde code. Wie apart wil, zet zelf synchronisatie aan en krijgt een eigen code.</li>
+  <li><b>Stoppen</b> stopt alleen dit toestel. Kies je daarna ook <b>Ook wissen</b>, dan gaat alles van de server en stoppen ook je andere toestellen; hun gegevens blijven staan.</li>
+</ul>
+
+<h3>Eenmalig naar een ander toestel</h3>
+<p>Zonder synchronisatie heeft elk toestel zijn eigen voorraad. Maak op het ene toestel een back-up, stuur het bestand naar het andere toestel (bv. via mail of Drive) en kies daar <b>Back-up terugzetten</b>. Op een nieuwe laptop met een gekoppeld bestand kies je <b>Bestaand bestand openen</b>.</p>
 
 <h3>Nieuwe versie</h3>
 <p>Komt er een nieuwe versie van de app, dan verschijnt de melding <b>Er is een nieuwe versie</b>. Tik op <b>Vernieuwen</b>. Je gegevens blijven gewoon staan.</p>
@@ -235,7 +253,7 @@ export const HANDLEIDING = `
   <tr><td>Het recept is verkeerd verdeeld</td><td>Verbeter het in het scherm <b>Klopt dit?</b>, of pas de <b>Herkende tekst</b> aan en tik op <b>Opnieuw verdelen</b>.</td></tr>
   <tr><td>Een ingrediënt staat op "niet in huis" terwijl ik het heb</td><td>Bewerk het recept en kies bij <b>In voorraad als</b> het juiste product.</td></tr>
   <tr><td>De prijs van een boodschap wordt niet berekend</td><td>Vul bij het product de inhoud per stuk of pak in, of kies een prijs-eenheid die past (bv. per stuk).</td></tr>
-  <tr><td>Op mijn telefoon staan andere gegevens dan op mijn laptop</td><td>Elk toestel heeft zijn eigen gegevens. Zet ze over met een back-up.</td></tr>
+  <tr><td>Op mijn telefoon staan andere gegevens dan op mijn laptop</td><td>Zet synchroniseren tussen toestellen aan, of zet de gegevens over met een back-up. Synchroniseer je al: kijk bij Instellingen of er een foutmelding staat en tik op <b>Nu synchroniseren</b>.</td></tr>
   <tr><td>Melding "deze browser bewaart je gegevens niet"</td><td>Je gebruikt een privévenster. Open de app in een gewoon venster of installeer ze.</td></tr>
   <tr><td>"De app kon niet starten"</td><td>Herlaad de pagina en gebruik geen privévenster.</td></tr>
   <tr><td>Iets per ongeluk weggegooid of verwijderd</td><td>Tik meteen op <b>Ongedaan maken</b> in de melding onderaan.</td></tr>

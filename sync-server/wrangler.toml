@@ -1,0 +1,14 @@
+# Synchronisatieserver voor Voorraadbeheer (zie LEESMIJ.md → "Synchroniseren tussen toestellen").
+# Werkt op het gratis abonnement van Cloudflare Workers.
+name = "voorraad-sync"
+main = "worker.mjs"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "RUIMTE"
+class_name = "Ruimte"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Ruimte"]

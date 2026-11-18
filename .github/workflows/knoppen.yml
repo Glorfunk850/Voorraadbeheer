@@ -31,3 +31,5 @@ jobs:
         run: node test/planner.test.cjs
       - name: Bewaren in een bestand op het toestel
         run: node test/bestand.test.cjs
+      - name: Synchroniseren tussen toestellen
+        run: node test/sync.test.cjs
