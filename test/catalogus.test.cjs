@@ -334,6 +334,13 @@ async function main() {
     && kp.some((p) => p.merk === 'Douwe' && p.inhoud === 500 && p.prijs === 5)
     && kp.some((p) => p.merk === 'Huismerk' && !p.inhoud && p.prijs === 3 && p.winkel === 'Aldi'), 'prijzen: per merk bewaard');
   controle((await page.textContent('#paneel .prijzen-blok')).includes('Lavazza'), 'prijzen: overzicht per merk');
+  // in de catalogus-lijst: per merk en inhoud de goedkoopste prijs
+  await page.click('#paneel [data-sluit]');
+  const catRegels = await page.$$eval('[data-cat="Koffie"]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(catRegels.some((t) => t.includes('Lavazza') && t.includes('€ 9,00 per stuk bij Colruyt'))
+    && catRegels.some((t) => t.includes('Douwe') && t.includes('500 g') && t.includes('€ 5,00 per stuk bij Colruyt'))
+    && catRegels.some((t) => t.includes('Douwe') && t.includes('200 g') && !t.includes('€')), 'catalogus: prijs per merk in de lijst: ' + catRegels.join(' | '));
+  await page.click('[data-cat="Koffie"]:has-text("Lavazza")');
   // het formulier toont de prijs van het merk en de inhoud die erin staan
   await page.click('#c-voorraad');
   controle((await page.textContent('#pf-prijzen summary')).includes('Lavazza') && (await page.inputValue('#pf-prijzen .prijs-rij[data-winkel="Colruyt"] .pz-prijs')) === '9,00', 'formulier: prijs van dit merk ingevuld');

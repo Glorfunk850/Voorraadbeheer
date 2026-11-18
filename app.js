@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 52;
+const APP_VERSIE = 53;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -777,8 +777,10 @@ function tekenCatalogus() {
     if (!groepen.has(k)) groepen.set(k, []);
     groepen.get(k).push(x);
   }
+  // de goedkoopste prijs voor dit merk en deze inhoud (bv. € 9,00 per stuk bij Colruyt)
+  const prijsTekst = (c, v) => { const p = goedkoopste(c.naam, v); return p ? `${prijsRegelTekst(p)} bij ${p.winkel}` : ''; };
   const rij = ({ c, v, i }) => `<li><button class="rij" data-cat="${esc(c.naam)}" data-var="${i}">
-      <span class="naam">${esc(c.naam)}${merkTekst(v)}<small>${esc([inhoudLabel(v) + (v.uitlekgewicht && prijsSleutel(v) ? ' uitlekgewicht' : ''), c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small></span>
+      <span class="naam">${esc(c.naam)}${merkTekst(v)}<small>${esc([inhoudLabel(v) + (v.uitlekgewicht && prijsSleutel(v) ? ' uitlekgewicht' : ''), c.categorie, c.locatie].filter(Boolean).join(' · ') || ' ')}</small>${prijsTekst(c, v) ? `<small class="cat-prijs">${esc(prijsTekst(c, v))}</small>` : ''}</span>
       <span class="rechts">${inHuis(c, v) ? 'in huis' : ''}</span></button></li>`;
   const lijst = !alles.length
     ? `<div class="leeg"><b>De catalogus is nog leeg</b>Elk product dat je aan je voorraad toevoegt, komt hier vanzelf bij. Zo vind je het later terug, ook als het op is. Met Toevoegen zet je er zelf een product bij.</div>`
