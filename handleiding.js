@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 55; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 56; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -61,6 +61,7 @@ export const HANDLEIDING = `
 <h3>Minimumvoorraad</h3>
 <p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.
 Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, dan vul je bij elk zijn eigen minimum in. Elke inhoud wordt apart geteld en komt apart (met die inhoud) op je lijst.</p>
+<p><b>Minimum voor alle merken samen.</b> Maakt het niet uit welk merk of welke inhoud je in huis hebt (bv. je wilt altijd 3 blikken doperwten en wortelen, van Everyday of van Jumbo), tik dan in de <b>Catalogus</b> op het product, kies <b>Bewerken</b> en vul <b>Minimum in huis, alle merken en inhouden samen</b> in. Alles van dat product wordt dan samengeteld, om het even welk merk of welke inhoud: 1 blik à 530 g en 2 blikken à 450 g zijn samen 3. Heb je minder, dan komt het tekort <b>zonder merk en inhoud</b> op je lijst; in de winkel kies je zelf. Dit minimum gaat voor op het minimum per inhoud bij dat product.</p>
 
 <h3>Catalogus</h3>
 <p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, alfabetisch en met een zoekveld. Bij wat je nu in huis hebt, staat <i>in huis</i>. Met <b>Toevoegen</b> zet je er zelf een product bij, zonder dat het in je voorraad komt. Tik op een product: van daaruit zet je het terug in je voorraad of op je lijst, <b>bewerk</b> je het (naam, aantal, categorie, plaats, inhoud, prijzen), of haal je het uit de catalogus. Geef je een product een nieuwe naam, dan verandert die ook in je voorraad en op je boodschappenlijst.</p>
@@ -72,7 +73,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <h3>Toevoegen</h3>
 <ul>
   <li><b>Snel:</b> typ bovenaan iets, bv. <code>2 l melk</code> of <code>6 eieren</code>, en tik op <b>+</b>. Hoeveelheid en eenheid worden herkend.</li>
-  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit de producten in je catalogus (je ziet meteen het merk, de inhoud en wat je daarvan in huis hebt, per merk en inhoud; zoek met het <b>zoekveld</b> boven de lijst of door te typen bij <b>Wat</b>, ook op merk) of typ zelf iets, vul eventueel het <b>merk</b> in, stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
+  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit de producten in je catalogus (je ziet meteen het merk, de inhoud en wat je daarvan in huis hebt, per merk en inhoud; zoek met het <b>zoekveld</b> boven de lijst of door te typen bij <b>Wat</b>, ook op merk) of typ zelf iets, vul eventueel het <b>merk</b> in, stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Heeft een product meer merken of inhouden, dan staat bovenaan ook <b>elk merk</b>: kies dat als je nog niet weet in welke winkel je gaat; de boodschap komt dan zonder merk en inhoud op je lijst. Vanuit de catalogus kan het ook, met <b>Op boodschappenlijst, elk merk</b>. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
 </ul>
 
 <h3>Op de lijst</h3>
@@ -98,7 +99,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <ol>
   <li>Vink af wat in je mandje ligt door op het <b>rondje</b> te tikken. Het schuift naar <b>In je mandje</b>.</li>
   <li>Tik op <b>Klaar met winkelen</b>.</li>
-  <li>Controleer per product hoeveelheid, eenheid en plaats, en vul de houdbaarheidsdatum in als je die bij de hand hebt.</li>
+  <li>Controleer per product hoeveelheid, eenheid en plaats, en vul de houdbaarheidsdatum in als je die bij de hand hebt. Stond een product er met <b>elk merk</b> op, kies dan bij <b>Welk merk?</b> wat je gekocht hebt: het wordt bij dat merk en die inhoud in je voorraad gezet.</li>
   <li>Tik op <b>In voorraad zetten</b>. Wil je de producten niet in je voorraad, tik dan op <b>Alleen van lijst halen</b>.</li>
 </ol>
 <p>Sta je op een winkeltabblad, dan rond je alleen de producten van die winkel af.</p>

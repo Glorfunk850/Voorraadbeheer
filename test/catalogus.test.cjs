@@ -302,13 +302,13 @@ async function main() {
   const kv = d.catalogus.find((c) => c.naam === 'Koffie').varianten.map((v) => `${v.merk} ${v.inhoud} ${v.inhoud_eenheid}`).sort();
   controle(JSON.stringify(kv) === JSON.stringify(['Douwe 200 g', 'Douwe 500 g', 'Lavazza 1 kg']), 'variant bewerken: alleen die variant aangepast');
   await page.click('#paneel [data-sluit]');
-  // boodschap: elke variant is een aparte keuze, met merk en inhoud
+  // boodschap: elke variant is een aparte keuze, met merk en inhoud (en bovenaan "elk merk")
   await page.goto(basis + '#boodschappen');
   await page.reload();
   await page.click('#b-menu');
   await page.fill('#bt-zoek', 'koffie');
   await page.dispatchEvent('#bt-zoek', 'input');
-  controle((await page.$$('#bt-lijst [data-kies]')).length === 3, 'boodschap: drie keuzes voor koffie');
+  controle((await page.$$('#bt-lijst [data-kies]')).length === 4, 'boodschap: drie keuzes voor koffie, plus elk merk');
   await page.click('#bt-lijst [data-kies]:has-text("Douwe"):has-text("à 500 g")');
   controle((await page.inputValue('#bt-merk')) === 'Douwe' && (await page.inputValue('#bt-inhoud')) === '500', 'boodschap: merk en inhoud van de gekozen variant ingevuld');
 
