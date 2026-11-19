@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 60;
+const APP_VERSIE = 61;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -802,6 +802,10 @@ function minimumVinkjeLezen(el, id, altijd = false) {
   return m;
 }
 
+// Sortering van de catalogus (op naam of op categorie): onthouden op dit toestel.
+const ZONDER_CATEGORIE = 'Zonder categorie';
+const catSorteringLezen = () => { try { return localStorage.getItem('catalogus-sortering') === 'categorie' ? 'categorie' : 'naam'; } catch { return ui.catSortering || 'naam'; } };
+const catSorteringBewaren = (w) => { ui.catSortering = w; try { localStorage.setItem('catalogus-sortering', w); } catch { /* */ } };
 function tekenCatalogus() {
   const q = ui.catZoek.trim().toLowerCase();
   const alles = [...(S.catalogus || [])].sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
@@ -810,11 +814,20 @@ function tekenCatalogus() {
     .sort((a, b) => a.c.naam.localeCompare(b.c.naam, 'nl') || (a.v.merk || '').localeCompare(b.v.merk || '', 'nl') || variantSleutel(a.v).localeCompare(variantSleutel(b.v), 'nl'));
   const items = regels.filter(({ c, v }) => !q || `${c.naam} ${v.merk || ''} ${c.categorie || ''} ${c.locatie || ''} ${c.barcode || ''}`.toLowerCase().includes(q));
   const inHuis = (c, v) => S.producten.some((p) => hoortBijVariant(p, c, v) && p.hoeveelheid > 0);
-  // per beginletter gegroepeerd, zodat je in een lange lijst snel vindt wat je zoekt
+  // per beginletter gegroepeerd, zodat je in een lange lijst snel vindt wat je zoekt; of per categorie (zonder categorie onderaan)
+  const opCategorie = catSorteringLezen() === 'categorie';
   const groepen = new Map();
-  for (const x of items) {
+  const groepVan = (x) => {
+    if (opCategorie) return (x.c.categorie || '').trim() || ZONDER_CATEGORIE;
     const l = (x.c.naam.trim().charAt(0) || '#').toLocaleUpperCase('nl').normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const k = /[A-Z]/.test(l) ? l : '#';
+    return /[A-Z]/.test(l) ? l : '#';
+  };
+  const volgorde = opCategorie ? [...items].sort((a, b) => {
+    const ka = groepVan(a), kb = groepVan(b);
+    return (ka === ZONDER_CATEGORIE) - (kb === ZONDER_CATEGORIE) || ka.localeCompare(kb, 'nl');
+  }) : items;
+  for (const x of volgorde) {
+    const k = groepVan(x);
     if (!groepen.has(k)) groepen.set(k, []);
     groepen.get(k).push(x);
   }
@@ -834,8 +847,14 @@ function tekenCatalogus() {
         <button class="knop primair" id="cat-nieuw">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}<span>Toevoegen</span></button>
       </div></header>
     ${alles.length ? `<p class="stil">${alles.length} ${alles.length === 1 ? 'product' : 'producten'} die je ooit toevoegde, ook als ze op zijn.</p>
-    <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-catalogus" placeholder="Zoeken in catalogus" value="${esc(ui.catZoek)}" autocomplete="off"></div>` : ''}
+    <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-catalogus" placeholder="Zoeken in catalogus" value="${esc(ui.catZoek)}" autocomplete="off"></div>
+    <label class="cat-sortering"><span>Sorteren</span>
+      <select id="cat-sortering" aria-label="Sorteren">
+        <option value="naam"${opCategorie ? '' : ' selected'}>Op naam (A–Z)</option>
+        <option value="categorie"${opCategorie ? ' selected' : ''}>Op categorie</option></select></label>` : ''}
     ${lijst}`);
+  const sorteer = $m('#cat-sortering');
+  if (sorteer) sorteer.onchange = () => { catSorteringBewaren(sorteer.value); tekenCatalogus(); };
   const z = $m('#zoek-catalogus');
   if (z) z.oninput = () => { ui.catZoek = z.value; tekenCatalogus(); };
   $m('#cat-nieuw').onclick = () => catalogusFormulier(null);
