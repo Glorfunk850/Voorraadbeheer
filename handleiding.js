@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 37; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 54; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -26,7 +26,7 @@ export const HANDLEIDING = `
 <p>Bijna alles opent in een paneel dat van onderen inschuift (telefoon) of rechts verschijnt (computer). Sluiten doe je met <b>×</b>, door ernaast te tikken of met Esc.</p>
 
 <h2>Voorraad</h2>
-<p>Het voorraadscherm toont alleen wat aandacht vraagt: <b>Op te gebruiken</b> (datum komt eraan of is voorbij) en <b>Op</b> (producten waarvan je niets meer hebt). Al de rest vind je door bovenaan te <b>zoeken</b> op naam, plaats, categorie of notitie.</p>
+<p>Het voorraadscherm toont alleen wat aandacht vraagt: <b>Op te gebruiken</b> (datum komt eraan of is voorbij) en <b>Op</b> (producten waarvan je niets meer hebt). Al de rest vind je door bovenaan te <b>zoeken</b> op naam, merk, plaats, categorie of notitie. Bij <b>Gevonden</b> staat elk product één keer per merk, met het merk achter de naam; tik erop om de verpakkingen van dat merk te zien.</p>
 
 <h3>Een product toevoegen</h3>
 <ol>
@@ -72,7 +72,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <h3>Toevoegen</h3>
 <ul>
   <li><b>Snel:</b> typ bovenaan iets, bv. <code>2 l melk</code> of <code>6 eieren</code>, en tik op <b>+</b>. Hoeveelheid en eenheid worden herkend.</li>
-  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit de producten in je catalogus (je ziet meteen het merk en wat je in huis hebt; zoek met het <b>zoekveld</b> boven de lijst of door te typen bij <b>Wat</b>, ook op merk) of typ zelf iets, vul eventueel het <b>merk</b> in, stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
+  <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit de producten in je catalogus (je ziet meteen het merk, de inhoud en wat je daarvan in huis hebt, per merk en inhoud; zoek met het <b>zoekveld</b> boven de lijst of door te typen bij <b>Wat</b>, ook op merk) of typ zelf iets, vul eventueel het <b>merk</b> in, stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
 </ul>
 
 <h3>Op de lijst</h3>
