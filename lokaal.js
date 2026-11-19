@@ -237,6 +237,13 @@
     if (S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt)) return; // staat er zelf al op
     S.boodschappen.push({ id: id(), naam: c.naam, hoeveelheid: tekort, eenheid, product_id: S.producten.find((p) => zelfde(p.naam, naam))?.id || null, afgevinkt: 0, bron: 'minimum' });
   }
+  /** Minimum voor alle merken samen zetten (0: uit); maakt het catalogusproduct aan als het er nog niet is. */
+  function catalogusMinimumZetten(naam, minimum, eenheid) {
+    if (minimum === undefined || !(naam || '').trim()) return;
+    if (!S.catalogus.some((x) => zelfde(x.naam, naam))) catalogusBijwerken({ naam: naam.trim(), eenheid: eenheid || 'stuks' }, false);
+    const c = S.catalogus.find((x) => zelfde(x.naam, naam)), m = getal(minimum);
+    if (m > 0) c.minimum = m; else delete c.minimum;
+  }
   // Catalogus: elk product dat ooit werd toegevoegd, ook als het later op is of verwijderd werd
   // Varianten van een catalogusproduct: hetzelfde product met een ander merk en/of een andere inhoud
   // (bv. Rijst van Lassie à 1 kg en Rijst van Boni à 500 g). Categorie, plaats, prijzen ... gelden voor alle varianten.
@@ -557,6 +564,7 @@
         catalogusBijwerken(p);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
+        catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid);
         minimumControleren(p.naam);
         return alles();
       }
@@ -574,6 +582,7 @@
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
+        catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid);
         minimumControleren(oudeNaam); minimumControleren(p.naam);
         return alles();
       }
@@ -649,6 +658,11 @@
             continue;
           }
           S.boodschappen.push({ id: id(), naam, hoeveelheid: h, eenheid: item.eenheid || '', ...inh, ...(merk ? { merk } : {}), product_id: item.product_id || null, afgevinkt: 0, bron: item.bron || 'handmatig' });
+        }
+        // minimum voor alle merken samen, aangezet bij het toevoegen van een boodschap
+        for (const item of data.items || [data]) if ('catalogus_minimum' in item && (item.naam || '').trim()) {
+          catalogusMinimumZetten(item.naam, item.catalogus_minimum, item.eenheid);
+          minimumControleren(item.naam);
         }
         return alles();
       }
