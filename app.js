@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 61;
+const APP_VERSIE = 62;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -839,6 +839,13 @@ function tekenCatalogus() {
   const lijst = !alles.length
     ? `<div class="leeg"><b>De catalogus is nog leeg</b>Elk product dat je aan je voorraad toevoegt, komt hier vanzelf bij. Zo vind je het later terug, ook als het op is. Met Toevoegen zet je er zelf een product bij.</div>`
     : !items.length ? '<div class="leeg">Niets gevonden.</div>'
+    // op categorie: elke categorie is uitklapbaar (dicht tot je erop tikt; open/dicht blijft onthouden zolang de app open is);
+    // tijdens het zoeken staat alles open, zodat je meteen ziet wat je vond
+    : opCategorie ? [...groepen].map(([k, g]) => {
+      const sleutel = `catalogus-categorie:${k.toLowerCase()}`;
+      return `<details class="sectie uitklap cat-groep" data-uitklap="${esc(sleutel)}"${q || ui.uitgeklapt.has(sleutel) ? ' open' : ''}>
+        <summary><span>${esc(k)}</span><span class="stil">${g.length}</span></summary><ul class="lijst">${g.map(rij).join('')}</ul></details>`;
+    }).join('')
     : [...groepen].map(([k, g]) => `<section class="sectie"><div class="sectie-titel">${esc(k)}</div><ul class="lijst">${g.map(rij).join('')}</ul></section>`).join('');
   inhoudZetten(`
     <header class="kop"><h1>Catalogus</h1>
@@ -859,6 +866,9 @@ function tekenCatalogus() {
   if (z) z.oninput = () => { ui.catZoek = z.value; tekenCatalogus(); };
   $m('#cat-nieuw').onclick = () => catalogusFormulier(null);
   $$m('[data-cat]').forEach((b) => (b.onclick = () => { const c = catalogusVan(b.dataset.cat); if (c) catalogusItem(c, +b.dataset.var || 0); }));
+  if (!q) $$m('.cat-groep[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) ui.uitgeklapt.add(d.dataset.uitklap); else ui.uitgeklapt.delete(d.dataset.uitklap);
+  }));
 }
 /** Catalogusproduct openen; `vi` is de variant (merk en inhoud) die je koos. */
 function catalogusItem(c0, vi = 0) {
