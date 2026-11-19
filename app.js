@@ -900,10 +900,11 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
         <label class="veld"><span>Naam</span><input id="cf-naam" value="${esc(c.naam || '')}" required autocomplete="off" autocapitalize="sentences"></label>
         <label class="veld"><span>Merk (mag leeg)</span><input id="cf-merk" value="${esc(c.merk || '')}" autocomplete="off" autocapitalize="words" placeholder="bv. Bonduelle"></label>
         ${inVoorraad ? '<p class="stil" style="margin-top:-.4rem">Een nieuwe naam wordt ook aangepast in je voorraad en op je boodschappenlijst.</p>' : ''}
+        ${sjabloon ? '' : `<label class="vink uitlek-vink"><input type="checkbox" id="cf-min-aan" ${c.minimum > 0 ? 'checked' : ''}><span class="vakje"></span>
+          <span>Minimum voor alle merken samen <small class="stil">alle merken en inhouden tellen samen; het tekort komt zonder merk en inhoud op je boodschappenlijst</small></span></label>
+        <label class="veld" id="cf-min-veld"${c.minimum > 0 ? '' : ' hidden'}><span>Minimum in huis${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}</span><input id="cf-min" inputmode="decimal" value="${c.minimum > 0 ? esc(fmt(c.minimum)) : ''}" placeholder="bv. 3"></label>`}
         <label class="veld"><span>Aantal${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}</span><input id="cf-hv" inputmode="decimal" value="${c.hoeveelheid > 0 ? esc(fmt(c.hoeveelheid)) : '1'}"></label>
         <p class="stil" style="margin:-.4rem 0 1rem">Wordt ingevuld als je het product vanuit de catalogus aan je voorraad toevoegt.</p>
-        ${sjabloon ? '' : `<label class="veld"><span>Minimum in huis${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}, alle merken en inhouden samen</span><input id="cf-min" inputmode="decimal" value="${c.minimum > 0 ? esc(fmt(c.minimum)) : ''}" placeholder="Geen"></label>
-        <p class="stil" style="margin:-.4rem 0 1rem">Heb je minder in huis, dan komt het tekort zonder merk en inhoud op je boodschappenlijst. Je kiest dan in de winkel welk merk het wordt.</p>`}
         <div class="rij2" id="cf-inhoud-rij">
           <label class="veld"><span id="cf-inhoud-titel">Inhoud per stuk</span><input id="cf-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
           <label class="veld"><span>Eenheid inhoud</span><select id="cf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, c.inhoud_eenheid || 'g')}</select></label>
@@ -926,6 +927,8 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
     typeTekenen();
     $$('#cf-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; typeTekenen(); }));
     $('#cf-inhoud-rij', el).hidden = !TELBAAR.has(eenheid);
+    const minAanEl = $('#cf-min-aan', el);
+    if (minAanEl) minAanEl.onchange = () => { $('#cf-min-veld', el).hidden = !minAanEl.checked; if (minAanEl.checked) { if (!$('#cf-min', el).value) $('#cf-min', el).value = '1'; $('#cf-min', el).focus(); $('#cf-min', el).select(); } };
     $('#cf-inhoud-titel', el).textContent = `Inhoud per ${perTekst(eenheid)} (mag leeg)`;
     const info = () => ({ eenheid, inhoud_eenheid: $('#cf-inhoud', el).value.trim() ? $('#cf-inhoud-eenheid', el).value : '' });
     // de prijzen gelden voor de inhoud die hier staat
@@ -943,8 +946,9 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
       const telbaar = TELBAAR.has(eenheid);
       const inhoud = telbaar ? num($('#cf-inhoud', el).value) : null;
       if (telbaar && $('#cf-inhoud', el).value.trim() && !(inhoud > 0)) return toast('Vul een geldige inhoud in, of laat het veld leeg.');
-      const minVeld = $('#cf-min', el), minimum = minVeld ? num(minVeld.value) : null;
-      if (minVeld && minVeld.value.trim() && !(minimum >= 0)) return toast('Vul een geldig minimum in, of laat het veld leeg.');
+      // vinkje uit: geen minimum voor alle merken samen
+      const minAan = $('#cf-min-aan', el), minVeld = minAan ? $('#cf-min', el) : null, minimum = minAan && minAan.checked ? num(minVeld.value) : 0;
+      if (minAan && minAan.checked && !(minimum > 0)) { $('#cf-min', el).focus(); return toast('Vul een minimum in, of zet het vinkje uit.'); }
       cfPrijzen();
       const pz = $('#cf-prijzen', el), prijzen = prijzenLezen(pz, eenheid);
       if (!prijzen) { pz.open = true; return; }
