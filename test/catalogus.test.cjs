@@ -378,6 +378,22 @@ async function main() {
   controle(d.boodschappen.find((b) => b.id === huis.id).merk === 'Douwe', 'boodschappen: merk kiezen via de prijs');
   controle(!!(await page.$(`[data-merkkies="${huis.id}"][data-merk="Douwe"].aan`)), 'boodschappen: gekozen merk aangeduid');
 
+  // voorraad toevoegen: een gekende naam typen vult geen merk of inhoud in; kiezen uit de catalogus wel
+  await page.goto(basis + '#voorraad');
+  await page.waitForSelector('#nieuw');
+  await page.click('#nieuw');
+  await page.fill('#pf-naam', 'Koffie');
+  await page.dispatchEvent('#pf-naam', 'change');
+  controle((await page.inputValue('#pf-merk')) === '' && (await page.inputValue('#pf-inhoud')) === '', 'toevoegen: gekende naam, merk en inhoud blijven leeg');
+  const keuzes = await page.$$eval('#pf-catkeuze [data-catkies]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(keuzes.length === 3 && keuzes.some((t) => t.includes('Lavazza') && t.includes('1 kg')), 'toevoegen: varianten uit de catalogus om te kiezen: ' + keuzes.join(' | '));
+  await page.click('#pf-catkeuze [data-catkies]:has-text("Lavazza")');
+  controle((await page.inputValue('#pf-merk')) === 'Lavazza' && (await page.inputValue('#pf-inhoud')) === '1' && (await page.inputValue('#pf-inhoud-eenheid')) === 'kg', 'toevoegen: gekozen variant ingevuld');
+  controle(await page.isHidden('#pf-catkeuze'), 'toevoegen: keuzelijst weg na kiezen');
+  await page.fill('#pf-naam', 'lava');
+  controle((await page.$$('#pf-catkeuze [data-catkies]')).length === 1, 'toevoegen: zoeken op merk');
+  await page.click('#paneel [data-sluit]');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();

@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 58;
+const APP_VERSIE = 59;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1011,6 +1011,7 @@ function productFormulier(bestaand, sjabloon = {}) {
       ${paneelKop(nieuw ? 'Toevoegen' : 'Bewerken')}
       <form id="pf" autocomplete="off">
         <label class="veld"><span>Naam</span><input id="pf-naam" value="${esc(p.naam)}" required autocomplete="off" autocapitalize="sentences"></label>
+        ${nieuw ? '<div id="pf-catkeuze" class="catkeuze" hidden></div>' : ''}
         <label class="veld"><span>Merk (mag leeg)</span><input id="pf-merk" value="${esc(p.merk || '')}" autocomplete="off" autocapitalize="words" placeholder="bv. Bonduelle"></label>
         ${minimumVinkjeHtml('pf', catalogusVan(p.naam)?.minimum)}
         <div class="rij2">
@@ -1087,19 +1088,52 @@ function productFormulier(bestaand, sjabloon = {}) {
       if (info.datumtype) { type = info.datumtype === 'TGT' ? 'TGT' : 'THT'; typeTekenen(); }
       if ('uitlekgewicht' in info) $('#pf-uitlek', el).checked = !!info.uitlekgewicht;
     };
-    // bekende naam: gegevens van dat product overnemen
+    // bekende naam: algemene gegevens van dat product overnemen (eenheid, categorie, plaats ...);
+    // merk, inhoud en uitlekgewicht niet: die vul je zelf in of kies je hieronder uit de catalogus
     const bekendeNaam = () => {
       if (!nieuw) return;
       const naam = $('#pf-naam', el).value;
-      const b = S.producten.find((x) => zelfde(x.naam, naam)) || (S.catalogus || []).find((x) => zelfde(x.naam, naam));
+      const b = (S.catalogus || []).find((x) => zelfde(x.naam, naam)) || S.producten.find((x) => zelfde(x.naam, naam));
       minimumVinkjeZetten(el, 'pf', naam);
-      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype, inhoud: b.inhoud, inhoud_eenheid: b.inhoud_eenheid, uitlekgewicht: !!b.uitlekgewicht, merk: b.merk || '' });
+      if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype });
       // gekende prijzen overnemen (alleen als je zelf nog niets invulde)
       pfPrijzen();
       if (prijzenVan(naam).length && !$('#pf-prijzen', el).dataset.aangeraakt) $('#pf-prijzen', el).open = true;
     };
+    // kiezen uit de catalogus: elk merk en elke inhoud als aparte keuze; pas na je keuze komen merk en inhoud in het formulier
+    const catKeuze = $('#pf-catkeuze', el);
+    let keuzes = [];
+    const variantKiezen = (k) => {
+      const { n, v } = keuzes[k];
+      $('#pf-naam', el).value = n;
+      bekendeNaam();
+      $('#pf-merk', el).value = v ? v.merk || '' : '';
+      $('#pf-inhoud', el).value = v && v.inhoud > 0 ? fmt(v.inhoud) : '';
+      if (v && v.inhoud > 0) $('#pf-inhoud-eenheid', el).innerHTML = opties(INHOUD_EENHEDEN, v.inhoud_eenheid || 'g');
+      $('#pf-uitlek', el).checked = !!(v && v.uitlekgewicht);
+      pfPrijzen();
+      catKeuze.hidden = true;
+      if (fijneMuis()) { $('#pf-hv', el).focus(); $('#pf-hv', el).select(); }
+    };
+    const catKeuzeTonen = () => {
+      if (!catKeuze) return;
+      const q = $('#pf-naam', el).value.trim().toLowerCase();
+      keuzes = q.length < 2 ? [] : catalogusnamen().flatMap((n) => { const c = catalogusVan(n); return c ? variantenVan(c).map((v) => ({ n, v })) : [{ n, v: null }]; })
+        .filter(({ n, v }) => `${n} ${v ? v.merk || '' : ''}`.toLowerCase().includes(q))
+        .sort((a, b) => (b.n.toLowerCase().startsWith(q) - a.n.toLowerCase().startsWith(q)) || a.n.localeCompare(b.n, 'nl')).slice(0, 8);
+      catKeuze.innerHTML = keuzes.length ? `<span class="veld-titel">Kies uit je catalogus</span><div class="catkeuze-lijst">${keuzes.map(({ n, v }, i) => {
+        const extra = v ? [v.merk, v.inhoud > 0 ? hoeveelTekst(v.inhoud, v.inhoud_eenheid) : '', v.uitlekgewicht ? 'uitlekgewicht' : ''].filter(Boolean).join(' · ') : '';
+        return `<button type="button" class="catkeuze-knop" data-catkies="${i}"><b>${esc(n)}</b><small>${esc(extra || 'zonder merk of inhoud')}</small></button>`;
+      }).join('')}</div>` : '';
+      catKeuze.hidden = !keuzes.length;
+      $$('[data-catkies]', catKeuze).forEach((b) => {
+        b.onmousedown = (e) => e.preventDefault(); // veld niet laten blurren voor de klik
+        b.onclick = () => variantKiezen(+b.dataset.catkies);
+      });
+    };
     $('#pf-naam', el).onchange = bekendeNaam;
-    suggesties($('#pf-naam', el), catalogusnamen, bekendeNaam);
+    if (catKeuze) $('#pf-naam', el).addEventListener('input', catKeuzeTonen);
+    else suggesties($('#pf-naam', el), catalogusnamen, bekendeNaam);
     $('#pf', el).onsubmit = async (e) => {
       e.preventDefault();
       const hv = num($('#pf-hv', el).value);

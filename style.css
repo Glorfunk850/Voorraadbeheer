@@ -456,3 +456,9 @@ summary small.stil { font-weight: 400; margin-left: .3rem; }
 .aantal-stap .stap-getal .inhoud-per { display: block; font-size: .8rem; line-height: 1.1; }
 .uitlek-vink { display: flex; align-items: center; gap: .7rem; margin: -.2rem 0 1rem; position: relative; }
 .uitlek-vink small { display: block; font-size: .8rem; }
+.catkeuze { margin: -.4rem 0 1rem; }
+.catkeuze-lijst { display: flex; flex-direction: column; gap: .35rem; margin-top: .35rem; }
+.catkeuze-knop { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: .1rem; padding: .55rem .8rem;
+  border: 1px solid var(--lijn); border-radius: 12px; background: var(--veld); color: inherit; font: inherit; cursor: pointer; }
+.catkeuze-knop b { font-weight: 600; }
+.catkeuze-knop small { color: var(--stil); font-size: .8rem; }
