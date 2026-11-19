@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 59;
+const APP_VERSIE = 60;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1550,9 +1550,9 @@ function boodschapBewerken(id) {
 function winkelenAfronden(ids) {
   const items = S.boodschappen.filter((b) => b.afgevinkt && (!ids || ids.includes(b.id))).map((b) => {
     const bekend = S.producten.find((p) => zelfde(p.naam, b.naam));
-    // zonder merk en inhoud op de lijst (elk merk): bij het afronden kies je welk merk en welke inhoud je kocht
+    // zonder merk en inhoud op de lijst: bij het afronden kies je welk merk en welke inhoud je kocht (uit de catalogus, of zelf ingevuld)
     const c = catalogusVan(b.naam);
-    const varianten = !b.merk && !boodschapInhoudVan(b) && c && variantenVan(c).length > 1 ? variantenVan(c) : null;
+    const varianten = !b.merk && !boodschapInhoudVan(b) ? (c ? variantenVan(c).filter((v) => v.merk || prijsSleutel(v)) : []) : null;
     return { b, varianten, eenheid: b.eenheid || bekend?.eenheid || 'stuks', locatie: bekend?.locatie || locaties()[0] || '', type: bekend?.datumtype || 'THT', datum: '' };
   });
   paneelOpenen((el) => {
@@ -1562,7 +1562,14 @@ function winkelenAfronden(ids) {
         <div class="afronden-rij" data-n="${n}">
           <div class="titel"><span>${esc(x.b.naam)}${boodschapInhoudVan(x.b) ? ` <small class="stil">à ${esc(hoeveelTekst(boodschapInhoudVan(x.b).per, boodschapInhoudVan(x.b).eenheid))}</small>` : ''}</span></div>
           <div class="velden">
-            ${x.varianten ? `<select class="af-variant" aria-label="Welk merk en welke inhoud">${['<option value="">Welk merk?</option>', ...x.varianten.map((v, i) => `<option value="${i}">${esc(variantLabel(v))}</option>`)].join('')}</select>` : ''}
+            ${x.varianten ? `<select class="af-variant" aria-label="Welk merk en welke inhoud">${['<option value="">Zonder merk of inhoud</option>',
+              ...x.varianten.map((v, i) => `<option value="${i}">${esc(variantLabel(v))}</option>`), '<option value="ander">Ander merk of inhoud invullen…</option>'].join('')}</select>
+            <div class="af-ander" hidden>
+              <input class="af-merk" placeholder="Merk (mag leeg)" aria-label="Merk" autocomplete="off" autocapitalize="words">
+              <div class="af-inhoud-rij"><input class="af-inhoud" inputmode="decimal" placeholder="Inhoud per stuk" aria-label="Inhoud per stuk">
+                <select class="af-inhoud-eenheid" aria-label="Eenheid inhoud">${opties(INHOUD_EENHEDEN, 'g')}</select></div>
+              <label class="vink uitlek-vink af-uitlek-vink"><input type="checkbox" class="af-uitlek"><span class="vakje"></span><span>Uitlekgewicht</span></label>
+            </div>` : ''}
             <input class="af-hv" inputmode="decimal" value="${esc(fmt(x.b.hoeveelheid ?? 1))}" aria-label="Hoeveelheid">
             <select class="af-eenheid" aria-label="Eenheid">${opties(EENHEDEN, x.eenheid)}</select>
             <select class="af-plaats" aria-label="Plaats">${opties(locaties(), x.locatie, 'Plaats')}</select>
@@ -1575,9 +1582,25 @@ function winkelenAfronden(ids) {
     sluitKnoppen(el);
     $$('.af-type', el).forEach((seg) => $$('button', seg).forEach((b) => (b.onclick = () => $$('button', seg).forEach((c) => c.classList.toggle('aan', c === b)))));
     $('#af-alleen', el).onclick = async () => { await api('POST', 'boodschappen/afgevinkte-wissen', { ids: items.map((x) => x.b.id) }); paneelSluiten(); };
+    $$('.af-variant', el).forEach((s) => (s.onchange = () => {
+      const ander = $('.af-ander', s.closest('.afronden-rij'));
+      ander.hidden = s.value !== 'ander';
+      if (!ander.hidden) $('.af-merk', ander).focus();
+    }));
+    // het gekozen merk en de inhoud van een rij; null als de ingevulde inhoud niet klopt
+    const variantVan = (r) => {
+      const x = items[+r.dataset.n], k = $('.af-variant', r)?.value;
+      if (!x.varianten || !k) return {};
+      if (k !== 'ander') return { variant: x.varianten[+k] };
+      const tekst = $('.af-inhoud', r).value.trim(), i = num(tekst);
+      if (tekst && !(i > 0)) { toast('Vul een geldige inhoud in, of laat het veld leeg.'); $('.af-inhoud', r).focus(); return null; }
+      return { variant: { merk: $('.af-merk', r).value.trim(), inhoud: i > 0 ? i : null, inhoud_eenheid: i > 0 ? $('.af-inhoud-eenheid', r).value : '', uitlekgewicht: $('.af-uitlek', r).checked } };
+    };
     $('#af-ok', el).onclick = async () => {
-      const regels = $$('.afronden-rij', el).map((r) => ({
-        ...(() => { const x = items[+r.dataset.n], k = $('.af-variant', r)?.value; return x.varianten && k ? { variant: x.varianten[+k] } : {}; })(),
+      const keuzes = $$('.afronden-rij', el).map(variantVan);
+      if (keuzes.includes(null)) return;
+      const regels = $$('.afronden-rij', el).map((r, n) => ({
+        ...keuzes[n],
         id: items[+r.dataset.n].b.id, hoeveelheid: num($('.af-hv', r).value) ?? 1, eenheid: $('.af-eenheid', r).value,
         locatie: $('.af-plaats', r).value, vervaldatum: $('.af-datum', r).value, datumtype: $('.af-type .aan', r)?.dataset.w || 'THT',
       }));

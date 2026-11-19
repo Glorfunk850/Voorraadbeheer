@@ -146,6 +146,39 @@ async function main() {
   d = await api('GET', 'alles');
   controle(!d.catalogus.find((x) => x.naam === 'Doperwten en wortelen').minimum, 'boodschappen: vinkje uit haalt het minimum weg');
 
+  // minimum per inhoud (Everyday à 530 g): de boodschap komt toch zonder merk en inhoud op de lijst
+  for (const x of (await api('GET', 'alles')).boodschappen) await api('DELETE', `boodschappen/${x.id}`);
+  const ev = (await api('GET', 'alles')).producten.find((p) => p.naam === 'Doperwten en wortelen' && p.merk === 'Everyday');
+  await api('PUT', `producten/${ev.id}`, { minimum: 10 });
+  d = await api('GET', 'alles');
+  b = d.boodschappen.filter((x) => x.naam === 'Doperwten en wortelen');
+  controle(b.length === 1 && b[0].bron === 'minimum' && !b[0].merk && !b[0].inhoud, `minimum per inhoud: boodschap zonder merk en inhoud (${JSON.stringify(b)})`);
+  // na het winkelen: zelf een nieuw merk en een nieuwe inhoud invullen
+  await api('PUT', `boodschappen/${b[0].id}`, { afgevinkt: 1 });
+  await page.goto(basis + '#boodschappen'); await page.reload(); await page.waitForSelector('#inhoud h1');
+  await page.click('#klaar');
+  await page.waitForSelector('.af-variant');
+  const opt2 = await page.$$eval('.af-variant option', (o) => o.map((x) => x.textContent));
+  controle(opt2[0] === 'Zonder merk of inhoud' && opt2.some((t) => t.includes('Everyday')) && opt2[opt2.length - 1].startsWith('Ander merk'), `keuzes na het winkelen (${opt2.join(', ')})`);
+  controle(!(await page.isVisible('.af-merk')), 'velden voor een ander merk pas na die keuze');
+  await page.selectOption('.af-variant', 'ander');
+  await page.fill('.af-merk', 'Bonduelle');
+  await page.fill('.af-inhoud', '400');
+  await page.click('#af-ok');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const bon = d.producten.find((p) => p.naam === 'Doperwten en wortelen' && p.merk === 'Bonduelle');
+  controle(bon && bon.inhoud === 400 && bon.inhoud_eenheid === 'g', 'ander merk en inhoud in de voorraad gezet');
+  controle(d.catalogus.find((x) => x.naam === 'Doperwten en wortelen').varianten.some((v) => v.merk === 'Bonduelle' && v.inhoud === 400), 'ander merk en inhoud komen in de catalogus');
+  // zonder keuze: geen merk of inhoud van een ander product overnemen
+  await api('POST', 'boodschappen', { naam: 'Doperwten en wortelen', hoeveelheid: 1, eenheid: 'stuks' });
+  d = await api('GET', 'alles');
+  const zb = d.boodschappen.find((x) => x.naam === 'Doperwten en wortelen' && !x.merk);
+  await api('POST', 'boodschappen/afrekenen', { items: [{ id: zb.id, hoeveelheid: 1, eenheid: 'stuks', locatie: '' }] });
+  d = await api('GET', 'alles');
+  const zonder = d.producten.filter((p) => p.naam === 'Doperwten en wortelen' && !p.merk && !p.inhoud);
+  controle(zonder.length === 1 && zonder[0].hoeveelheid >= 1, 'zonder keuze: in de voorraad zonder merk en inhoud');
+
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
