@@ -49,6 +49,8 @@ async function main() {
   // minimum 3 voor alle merken samen, via het catalogusformulier
   await page.click('[data-cat="Doperwten en wortelen"][data-var="0"]');
   await page.click('#c-bewerk');
+  controle(!(await page.isVisible('#cf-min')), 'minimumveld verborgen zolang het vinkje uit staat');
+  await page.click('label:has(#cf-min-aan)');
   await page.fill('#cf-min', '3');
   await page.click('#cf button[type=submit]');
   await page.waitForTimeout(250);
@@ -98,6 +100,18 @@ async function main() {
   d = await api('GET', 'alles');
   b = d.boodschappen.filter((x) => x.naam === 'Doperwten en wortelen');
   controle(b.length === 1 && !b[0].merk && !b[0].inhoud, 'boodschap zonder merk en inhoud op de lijst');
+
+  // vinkje uitzetten: geen minimum meer voor alle merken samen
+  await page.goto(basis + '#catalogus'); await page.reload(); await page.waitForSelector('#inhoud h1');
+  await page.click('[data-cat="Doperwten en wortelen"][data-var="0"]');
+  await page.click('#c-bewerk');
+  controle(await page.isChecked('#cf-min-aan') && (await page.inputValue('#cf-min')) === '3', 'vinkje staat aan met minimum 3');
+  await page.click('label:has(#cf-min-aan)');
+  controle(!(await page.isVisible('#cf-min')), 'vinkje uit: minimumveld verdwijnt');
+  await page.click('#cf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(!d.catalogus.find((x) => x.naam === 'Doperwten en wortelen').minimum, 'vinkje uit: minimum weg uit de catalogus');
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
