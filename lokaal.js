@@ -197,7 +197,11 @@
   // inhoud per verpakking van een voorraadregel als sleutel (bv. "500 g"); leeg zonder inhoud
   const productSleutel = (p) => inhoudSleutel(boodschapInhoud(p.eenheid, p.inhoud, p.inhoud_eenheid));
   // De minimumvoorraad geldt per inhoud: 2 pak à 500 g en 1 pak à 1 kg zijn aparte voorraden met elk hun eigen minimum.
+  // Staat er in de catalogus een minimum voor het hele product (alle merken en inhouden samen), dan geldt dat:
+  // bv. 3 blikken doperwten in huis, om het even van welk merk of welke inhoud. Het tekort komt zonder merk en inhoud op je lijst.
   function minimumControleren(naam) {
+    const c = S.catalogus.find((x) => zelfde(x.naam, naam));
+    if (c && c.minimum > 0) return minimumTotaal(naam, c);
     const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam)).map(productSleutel),
       ...S.boodschappen.filter((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum').map(inhoudSleutel)]);
     for (const sleutel of sleutels) minimumPerInhoud(naam, sleutel);
@@ -218,6 +222,20 @@
           ...boodschapInhoud(hoofd.eenheid, hoofd.inhoud, hoofd.inhoud_eenheid), product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
       }
     } else weg();
+  }
+  function minimumTotaal(naam, c) {
+    const eenheid = c.eenheid || S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || 'stuks';
+    // verpakkingen tellen per stuk (blik, pot, pak ... samen); gewicht en volume worden omgerekend
+    const tel = (p) => omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid) ?? (TELBARE.has(p.eenheid || 'stuks') && TELBARE.has(eenheid) ? p.hoeveelheid || 0 : 0);
+    const totaal = S.producten.filter((p) => zelfde(p.naam, naam)).reduce((s, p) => s + tel(p), 0);
+    const autos = S.boodschappen.filter((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum');
+    const houden = totaal < c.minimum ? autos[0] : null;
+    if (autos.length) S.boodschappen = S.boodschappen.filter((b) => !autos.includes(b) || b === houden);
+    if (totaal >= c.minimum) return;
+    const tekort = Math.round((c.minimum - totaal) * 100) / 100;
+    if (houden) { houden.hoeveelheid = tekort; houden.eenheid = eenheid; return; }
+    if (S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt)) return; // staat er zelf al op
+    S.boodschappen.push({ id: id(), naam: c.naam, hoeveelheid: tekort, eenheid, product_id: S.producten.find((p) => zelfde(p.naam, naam))?.id || null, afgevinkt: 0, bron: 'minimum' });
   }
   // Catalogus: elk product dat ooit werd toegevoegd, ook als het later op is of verwijderd werd
   // Varianten van een catalogusproduct: hetzelfde product met een ander merk en/of een andere inhoud
@@ -469,6 +487,7 @@
       const rest = c && data.variant ? variantenVan(c).filter((x) => variantSleutel(x) !== variantSleutel(variantUit(data.variant))) : [];
       if (c && rest.length) variantBewaren(c, rest[0], null, rest);
       else S.catalogus = S.catalogus.filter((x) => x !== c);
+      if (c) minimumControleren(c.naam);
       return alles();
     }
     // Catalogus: zelf een product toevoegen (POST) of bewerken (PUT, met oudeNaam), los van je voorraad
@@ -495,10 +514,13 @@
       // een nieuwe variant van een gekend product houdt de eenheid van dat product
       for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype']) if (k in data && !(k === 'eenheid' && methode === 'POST' && !nieuwProduct)) c[k] = (data[k] || '').trim();
       if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
+      // minimum voor het hele product: alle merken en inhouden samen
+      if ('minimum' in data) { const m = getal(data.minimum); if (m > 0) c.minimum = m; else delete c.minimum; }
       if ('inhoud' in data || 'merk' in data) variantBewaren(c, v, oud);
       else if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
       c.laatst = nu();
       if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid, data.prijzen_inhoud);
+      minimumControleren(c.naam);
       return alles();
     }
 
@@ -573,22 +595,26 @@
           const b = S.boodschappen.find((x) => x.id === item.id);
           if (!b) continue;
           const h = getal(item.hoeveelheid) || 0;
-          const inh = boodschapInhoud(item.eenheid, b.inhoud, b.inhoud_eenheid);
-          // met een eigen inhoud (bv. pak à 1 kg) alleen bijtellen bij een voorraadregel met dezelfde inhoud
+          // stond er geen merk of inhoud op de lijst, dan kies je bij het afronden welk merk en welke inhoud je kocht
+          const gekozen = item.variant && typeof item.variant === 'object' ? variantUit(item.variant) : null;
+          const merk = gekozen ? gekozen.merk : String(b.merk || '').trim();
+          const inh = gekozen ? boodschapInhoud(item.eenheid, gekozen.inhoud, gekozen.inhoud_eenheid) : boodschapInhoud(item.eenheid, b.inhoud, b.inhoud_eenheid);
+          // met een eigen inhoud (bv. pak à 1 kg) alleen bijtellen bij een voorraadregel met dezelfde inhoud (en hetzelfde merk)
           const bestaand = S.producten.find((p) => zelfde(p.naam, b.naam) && omrekenen(1, item.eenheid, p.eenheid) !== null
             && (!inh.inhoud || inhoudSleutel(boodschapInhoud(p.eenheid, p.inhoud, p.inhoud_eenheid)) === inhoudSleutel(inh))
+            && (!gekozen || zelfde(p.merk, merk))
             && (!item.vervaldatum || p.vervaldatum === item.vervaldatum || !p.hoeveelheid));
           if (bestaand) {
             bestaand.hoeveelheid = Math.round((bestaand.hoeveelheid + omrekenen(h, item.eenheid, bestaand.eenheid)) * 1000) / 1000;
             if (item.vervaldatum) { bestaand.vervaldatum = item.vervaldatum; bestaand.datumtype = item.datumtype; }
             if (item.locatie) bestaand.locatie = item.locatie;
-            if (b.merk && !bestaand.merk) bestaand.merk = b.merk;
+            if (merk && !bestaand.merk) bestaand.merk = merk;
             bestaand.aankoopdatum = vandaag(); bestaand.gewijzigd = nu();
             catalogusBijwerken(bestaand);
           } else {
             const voorbeeld = S.producten.find((p) => zelfde(p.naam, b.naam));
             const bekend = voorbeeld || S.catalogus.find((x) => zelfde(x.naam, b.naam)) || {};
-            S.producten.push({ uitlekgewicht: !!bekend.uitlekgewicht, merk: b.merk || bekend.merk || '', id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
+            S.producten.push({ uitlekgewicht: gekozen ? gekozen.uitlekgewicht : !!bekend.uitlekgewicht, merk: gekozen ? merk : merk || bekend.merk || '', id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
               datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu(),
               ...(inh.inhoud ? inh : voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });
@@ -936,7 +962,7 @@
       if (gezien.has(k)) return false;
       gezien.add(k); return true;
     });
-    for (const n of new Set(S.producten.filter((p) => p.minimum > 0).map((p) => p.naam))) minimumControleren(n);
+    for (const n of new Set([...S.producten.filter((p) => p.minimum > 0).map((p) => p.naam), ...S.catalogus.filter((c) => c.minimum > 0).map((c) => c.naam)])) minimumControleren(n);
   }
   const syncMeld = (melding) => document.dispatchEvent(new CustomEvent('syncstatus', { detail: { melding } }));
   const zBewaren = () => idb(SYNC_SLEUTEL, Z ? JSON.parse(JSON.stringify(Z)) : undefined, !Z).catch((f) => console.warn('Synchronisatie niet bewaard', f));

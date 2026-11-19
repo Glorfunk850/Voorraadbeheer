@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 55;
+const APP_VERSIE = 56;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -760,6 +760,16 @@ const variantenVan = (c) => (Array.isArray(c.varianten) && c.varianten.length ? 
 const variantSleutel = (v) => `${String((v && v.merk) || '').trim().toLowerCase()}|${prijsSleutel(v)}`;
 /** Hoort een voorraadregel bij deze variant? Met maar één variant: alles met die naam. */
 const hoortBijVariant = (p, c, v) => zelfde(p.naam, c.naam) && (variantenVan(c).length < 2 || variantSleutel(p) === variantSleutel(v));
+/** Heeft dit product meer dan één merk of inhoud in de catalogus? */
+const meerVarianten = (naam) => { const c = catalogusVan(naam); return !!c && variantenVan(c).length > 1; };
+const variantLabel = (v) => [v.merk, inhoudLabel(v)].filter(Boolean).join(' ') || 'zonder merk';
+/** Hoeveel heb je in huis van alle merken en inhouden samen (in de eenheid van het product)? */
+function totaalInHuis(naam) {
+  const c = catalogusVan(naam), eenheid = c?.eenheid || S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || 'stuks';
+  return S.producten.filter((p) => zelfde(p.naam, naam)).reduce((s, p) => s + (omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid)
+    ?? (TELBAAR.has(p.eenheid || 'stuks') && TELBAAR.has(eenheid) ? p.hoeveelheid || 0 : 0)), 0);
+}
+const minimumTekst = (c) => (c && c.minimum > 0 ? `minimum ${hoeveelTekst(c.minimum, c.eenheid || 'stuks') || fmt(c.minimum)} in huis, alle merken samen` : '');
 
 function tekenCatalogus() {
   const q = ui.catZoek.trim().toLowerCase();
@@ -818,7 +828,8 @@ function catalogusItem(c0, vi = 0) {
       if (groot && omrekenen(t.hoeveelheid, t.eenheid, groot) >= 1) { t.hoeveelheid = omrekenen(t.hoeveelheid, t.eenheid, groot); t.eenheid = groot; }
     }
     const anderen = varianten.length - 1;
-    const info = [v.uitlekgewicht ? 'gewicht = uitlekgewicht' : '', anderen ? `nog ${anderen} ${anderen === 1 ? 'ander merk of inhoud' : 'andere merken of inhouden'}` : '',
+    const samen = anderen ? totaalInHuis(c.naam) : 0;
+    const info = [anderen && samen ? `alle merken samen: ${hoeveelTekst(samen, c.eenheid || 'stuks') || fmt(samen)}` : '', minimumTekst(c), v.uitlekgewicht ? 'gewicht = uitlekgewicht' : '', anderen ? `nog ${anderen} ${anderen === 1 ? 'ander merk of inhoud' : 'andere merken of inhouden'}` : '',
       c.aantal ? `${c.aantal}× toegevoegd` : '', c.laatst ? `laatst op ${datumNL(c.laatst.slice(0, 10), true)}` : ''].filter(Boolean).join(' · ');
     el.innerHTML = `${paneelKop(esc(c.naam), esc([v.merk, inhoudLabel(v), c.categorie, c.locatie].filter(Boolean).join(' · ')))}
       <div class="datumblok"><div>${totalen.length ? `In huis: ${esc(totalen.map((t) => hoeveelTekst(t.hoeveelheid, t.eenheid)).join(' en '))}` : 'Nu niet in huis'}
@@ -826,7 +837,8 @@ function catalogusItem(c0, vi = 0) {
       ${prijzenBlok(c.naam)}
       <ul class="acties">
         <li><button id="c-voorraad">Aan voorraad toevoegen</button></li>
-        <li><button id="c-lijst">Op boodschappenlijst</button></li>
+        <li><button id="c-lijst">Op boodschappenlijst${anderen ? ` (${esc(variantLabel(v))})` : ''}</button></li>
+        ${anderen ? '<li><button id="c-lijst-elk">Op boodschappenlijst, elk merk</button></li>' : ''}
         <li><button id="c-bewerk">Bewerken</button></li>
         <li><button id="c-variant">Ander merk of inhoud toevoegen</button></li>
         <li><button id="c-prijzen">${(c.prijzen || []).length ? 'Prijzen aanpassen' : 'Prijzen invullen'}</button></li>
@@ -838,6 +850,8 @@ function catalogusItem(c0, vi = 0) {
       locatie: c.locatie || locaties()[0] || '', datumtype: c.datumtype || 'THT', barcode: c.barcode || '',
       hoeveelheid: c.hoeveelheid > 0 ? c.hoeveelheid : 1, inhoud: v.inhoud || null, inhoud_eenheid: v.inhoud_eenheid || '', uitlekgewicht: !!v.uitlekgewicht, merk: v.merk || '' });
     $('#c-lijst', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks', inhoud: v.inhoud || null, inhoud_eenheid: v.inhoud_eenheid || '', merk: v.merk || '' }); toast(lijstMelding(c.naam, v)); };
+    // met meer merken of inhouden: om het even welk, dan kies je in de winkel
+    if (anderen) $('#c-lijst-elk', el).onclick = async () => { await api('POST', 'boodschappen', { naam: c.naam, eenheid: c.eenheid || 'stuks', merk: '' }); toast(lijstMelding(c.naam, null)); };
     $('#c-prijzen', el).onclick = () => prijzenPaneel(c.naam, c.eenheid, () => { const nu = catalogusVan(c.naam); if (nu) catalogusItem(nu, vi); else paneelSluiten(); });
     $('#c-bewerk', el).onclick = () => catalogusFormulier(c, vi);
     $('#c-variant', el).onclick = () => catalogusFormulier(null, 0, { naam: c.naam, eenheid: c.eenheid || 'stuks', categorie: c.categorie || '', locatie: c.locatie || '',
@@ -888,6 +902,8 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
         ${inVoorraad ? '<p class="stil" style="margin-top:-.4rem">Een nieuwe naam wordt ook aangepast in je voorraad en op je boodschappenlijst.</p>' : ''}
         <label class="veld"><span>Aantal${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}</span><input id="cf-hv" inputmode="decimal" value="${c.hoeveelheid > 0 ? esc(fmt(c.hoeveelheid)) : '1'}"></label>
         <p class="stil" style="margin:-.4rem 0 1rem">Wordt ingevuld als je het product vanuit de catalogus aan je voorraad toevoegt.</p>
+        ${sjabloon ? '' : `<label class="veld"><span>Minimum in huis${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}, alle merken en inhouden samen</span><input id="cf-min" inputmode="decimal" value="${c.minimum > 0 ? esc(fmt(c.minimum)) : ''}" placeholder="Geen"></label>
+        <p class="stil" style="margin:-.4rem 0 1rem">Heb je minder in huis, dan komt het tekort zonder merk en inhoud op je boodschappenlijst. Je kiest dan in de winkel welk merk het wordt.</p>`}
         <div class="rij2" id="cf-inhoud-rij">
           <label class="veld"><span id="cf-inhoud-titel">Inhoud per stuk</span><input id="cf-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
           <label class="veld"><span>Eenheid inhoud</span><select id="cf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, c.inhoud_eenheid || 'g')}</select></label>
@@ -927,11 +943,14 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
       const telbaar = TELBAAR.has(eenheid);
       const inhoud = telbaar ? num($('#cf-inhoud', el).value) : null;
       if (telbaar && $('#cf-inhoud', el).value.trim() && !(inhoud > 0)) return toast('Vul een geldige inhoud in, of laat het veld leeg.');
+      const minVeld = $('#cf-min', el), minimum = minVeld ? num(minVeld.value) : null;
+      if (minVeld && minVeld.value.trim() && !(minimum >= 0)) return toast('Vul een geldig minimum in, of laat het veld leeg.');
       cfPrijzen();
       const pz = $('#cf-prijzen', el), prijzen = prijzenLezen(pz, eenheid);
       if (!prijzen) { pz.open = true; return; }
       const data = { naam, hoeveelheid: hv, eenheid, categorie: $('#cf-cat', el).value, locatie: $('#cf-plaats', el).value, datumtype: type,
         inhoud: inhoud > 0 ? inhoud : null, inhoud_eenheid: inhoud > 0 ? $('#cf-inhoud-eenheid', el).value : '', uitlekgewicht: $('#cf-uitlek', el).checked, merk: $('#cf-merk', el).value.trim(),
+        ...(minVeld ? { minimum: minimum > 0 ? minimum : 0 } : {}),
         // alleen de prijzen van deze inhoud; niets aangepast: niets bewaren
         ...(pz.dataset.aangeraakt || nieuw ? { prijzen, prijzen_inhoud: formPrijzenInhoud(pz) } : {}) };
       if (!nieuw) { data.oudeNaam = c.naam; data.oudeVariant = oudeVariant; }
@@ -984,6 +1003,7 @@ function productFormulier(bestaand, sjabloon = {}) {
         <details class="meer"${nieuw ? '' : ' open'} style="margin-top:.8rem"><summary>Meer</summary>
           <label class="veld"><span>Categorie</span><select id="pf-cat">${opties(categorieen(), p.categorie || '', 'Geen')}</select></label>
           <label class="veld"><span>Minimumvoorraad voor deze inhoud (eronder komt het op je boodschappenlijst)</span><input id="pf-min" inputmode="decimal" value="${p.minimum ? esc(fmt(p.minimum)) : ''}" placeholder="Geen"></label>
+          ${catalogusVan(p.naam)?.minimum > 0 ? `<p class="stil" style="margin:-.4rem 0 1rem">In de catalogus staat al een ${esc(minimumTekst(catalogusVan(p.naam)))}; dat gaat voor.</p>` : ''}
           <label class="veld"><span>Gekocht op</span><input type="date" id="pf-aankoop" value="${esc(p.aankoopdatum || '')}"></label>
           <label class="veld"><span>Notitie</span><input id="pf-notitie" value="${esc(p.notitie || '')}"></label>
         </details>
@@ -1245,25 +1265,29 @@ function boodschapToevoegen() {
     const lijstTekenen = () => {
       const q = zoek.trim().toLowerCase();
       // elk merk en elke inhoud uit de catalogus als aparte keuze
-      const namen = catalogusnamen().flatMap((n) => { const c = catalogusVan(n); return c ? variantenVan(c).map((v) => ({ n, v })) : [{ n, v: null }]; })
-        .filter(({ n, v }) => !q || `${n} ${v ? v.merk || '' : merkVan(n)}`.toLowerCase().includes(q));
+      // met meer merken of inhouden ook een keuze "elk merk": je beslist pas in de winkel welk merk het wordt
+      const namen = catalogusnamen().flatMap((n) => { const c = catalogusVan(n); if (!c) return [{ n, v: null }];
+        const vs = variantenVan(c).map((v) => ({ n, v })); return vs.length > 1 ? [{ n, v: null, elk: true }, ...vs] : vs; })
+        .filter(({ n, v, elk }) => !q || `${n} ${elk ? 'elk merk' : v ? v.merk || '' : merkVan(n)}`.toLowerCase().includes(q));
       const opLijst = (n) => S.boodschappen.filter((b) => zelfde(b.naam, n) && !b.afgevinkt);
       // in huis: per merk en inhoud als het product er meer heeft
       const inHuis = (n, v) => { const c = catalogusVan(n); return S.producten.filter((p) => (c && v ? hoortBijVariant(p, c, v) : zelfde(p.naam, n)) && p.hoeveelheid > 0); };
       $('#bt-zoek-blok', el).hidden = !catalogusnamen().length;
-      $('#bt-lijst', el).innerHTML = namen.length ? `<ul class="lijst">${namen.map(({ n, v }, i) => {
+      $('#bt-lijst', el).innerHTML = namen.length ? `<ul class="lijst">${namen.map(({ n, v, elk }, i) => {
         const b = opLijst(n), h = inHuis(n, v);
-        const onder = b.length ? `Staat op je lijst${b.some((x) => x.hoeveelheid) ? ': ' + b.map((x) => boodschapTekst(x) || '?').join(' + ') : ''}` : h.length ? `In huis: ${h.map(voorraadTekst).join(' + ')}` : 'Niet in huis';
-        return `<li><button type="button" class="rij" data-kies="${i}"><span class="naam">${esc(n)}${merkTekst({ merk: v ? v.merk : merkVan(n) })}<small>${esc([v && inhoudLabel(v), onder].filter(Boolean).join(' · '))}</small></span><span class="rechts">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</span></button></li>`;
+        const onder = b.length ? `Staat op je lijst${b.some((x) => x.hoeveelheid) ? ': ' + b.map((x) => boodschapTekst(x) || '?').join(' + ') : ''}`
+          : h.length ? `In huis: ${elk ? hoeveelTekst(totaalInHuis(n), catalogusVan(n)?.eenheid || 'stuks') || fmt(totaalInHuis(n)) : h.map(voorraadTekst).join(' + ')}` : 'Niet in huis';
+        const merkDeel = elk ? '<span class="merk"> · elk merk</span>' : merkTekst({ merk: v ? v.merk : merkVan(n) });
+        return `<li><button type="button" class="rij" data-kies="${i}"><span class="naam">${esc(n)}${merkDeel}<small>${esc([elk ? 'merk en inhoud om het even' : v && inhoudLabel(v), onder].filter(Boolean).join(' · '))}</small></span><span class="rechts">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</span></button></li>`;
       }).join('')}</ul>` : q ? `<div class="leeg">Niets gevonden in je catalogus. Typ het bij Wat en tik op Toevoegen om "${esc(zoek.trim())}" op je lijst te zetten.</div>` : '';
       $$('[data-kies]', el).forEach((k) => (k.onclick = () => {
-        const { n, v } = namen[+k.dataset.kies];
-        $('#bt-naam', el).value = n; zoek = n; $('#bt-zoek', el).value = ''; $('#bt-merk', el).value = v ? v.merk || '' : merkVan(n);
+        const { n, v, elk } = namen[+k.dataset.kies];
+        $('#bt-naam', el).value = n; zoek = n; $('#bt-zoek', el).value = ''; $('#bt-merk', el).value = elk ? '' : v ? v.merk || '' : merkVan(n);
         eenheidZetten(bekendeEenheid(n));
         meerVullen(n);
-        if (v) { // de inhoud van deze variant
-          $('#bt-inhoud', el).value = v.inhoud > 0 ? fmt(v.inhoud) : '';
-          $('#bt-inhoud-eenheid', el).value = v.inhoud_eenheid || 'g';
+        if (v || elk) { // de inhoud van deze variant; bij elk merk geen inhoud
+          $('#bt-inhoud', el).value = v && v.inhoud > 0 ? fmt(v.inhoud) : '';
+          if (v) $('#bt-inhoud-eenheid', el).value = v.inhoud_eenheid || 'g';
           $('#bt-inhoud', el).dispatchEvent(new Event('input'));
         }
         lijstTekenen();
@@ -1299,7 +1323,7 @@ function boodschapToevoegen() {
         const c = (k && catalogusVan(k)) || {};
         type = c.datumtype === 'TGT' ? 'TGT' : 'THT';
         const pe = productEenheid();
-        if (k) { // de inhoud van het gekende product voorstellen; je mag ze voor deze boodschap aanpassen
+        if (k && !meerVarianten(k)) { // de inhoud van het gekende product voorstellen; je mag ze voor deze boodschap aanpassen
           $('#bt-inhoud', el).value = c.inhoud > 0 ? fmt(c.inhoud) : '';
           $('#bt-inhoud-eenheid', el).value = c.inhoud_eenheid || 'g';
         }
@@ -1344,7 +1368,7 @@ function boodschapToevoegen() {
       };
       // zoeken in de catalogus: via het zoekveld, of gewoon door te typen bij Wat
       $('#bt-zoek', el).oninput = () => { zoek = $('#bt-zoek', el).value; lijstTekenen(); };
-      naam.oninput = () => { zoek = naam.value; $('#bt-zoek', el).value = ''; const e = catalogusnamen().find((n) => zelfde(n, naam.value)); if (e) { eenheidZetten(bekendeEenheid(e)); if (!$('#bt-merk', el).value) $('#bt-merk', el).value = merkVan(e); } meerVullen(naam.value.trim()); lijstTekenen(); };
+      naam.oninput = () => { zoek = naam.value; $('#bt-zoek', el).value = ''; const e = catalogusnamen().find((n) => zelfde(n, naam.value)); if (e) { eenheidZetten(bekendeEenheid(e)); if (!$('#bt-merk', el).value && !meerVarianten(e)) $('#bt-merk', el).value = merkVan(e); } meerVullen(naam.value.trim()); lijstTekenen(); };
       const minKnopZetten = () => { $('#bt-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
       $('#bt-plus', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, 1)); minKnopZetten(); };
       $('#bt-min', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, -1)); minKnopZetten(); };
@@ -1448,7 +1472,10 @@ function boodschapBewerken(id) {
 function winkelenAfronden(ids) {
   const items = S.boodschappen.filter((b) => b.afgevinkt && (!ids || ids.includes(b.id))).map((b) => {
     const bekend = S.producten.find((p) => zelfde(p.naam, b.naam));
-    return { b, eenheid: b.eenheid || bekend?.eenheid || 'stuks', locatie: bekend?.locatie || locaties()[0] || '', type: bekend?.datumtype || 'THT', datum: '' };
+    // zonder merk en inhoud op de lijst (elk merk): bij het afronden kies je welk merk en welke inhoud je kocht
+    const c = catalogusVan(b.naam);
+    const varianten = !b.merk && !boodschapInhoudVan(b) && c && variantenVan(c).length > 1 ? variantenVan(c) : null;
+    return { b, varianten, eenheid: b.eenheid || bekend?.eenheid || 'stuks', locatie: bekend?.locatie || locaties()[0] || '', type: bekend?.datumtype || 'THT', datum: '' };
   });
   paneelOpenen((el) => {
     if (alGetekend('af')) return; // niet opnieuw tekenen terwijl je typt
@@ -1457,6 +1484,7 @@ function winkelenAfronden(ids) {
         <div class="afronden-rij" data-n="${n}">
           <div class="titel"><span>${esc(x.b.naam)}${boodschapInhoudVan(x.b) ? ` <small class="stil">à ${esc(hoeveelTekst(boodschapInhoudVan(x.b).per, boodschapInhoudVan(x.b).eenheid))}</small>` : ''}</span></div>
           <div class="velden">
+            ${x.varianten ? `<select class="af-variant" aria-label="Welk merk en welke inhoud">${['<option value="">Welk merk?</option>', ...x.varianten.map((v, i) => `<option value="${i}">${esc(variantLabel(v))}</option>`)].join('')}</select>` : ''}
             <input class="af-hv" inputmode="decimal" value="${esc(fmt(x.b.hoeveelheid ?? 1))}" aria-label="Hoeveelheid">
             <select class="af-eenheid" aria-label="Eenheid">${opties(EENHEDEN, x.eenheid)}</select>
             <select class="af-plaats" aria-label="Plaats">${opties(locaties(), x.locatie, 'Plaats')}</select>
@@ -1471,6 +1499,7 @@ function winkelenAfronden(ids) {
     $('#af-alleen', el).onclick = async () => { await api('POST', 'boodschappen/afgevinkte-wissen', { ids: items.map((x) => x.b.id) }); paneelSluiten(); };
     $('#af-ok', el).onclick = async () => {
       const regels = $$('.afronden-rij', el).map((r) => ({
+        ...(() => { const x = items[+r.dataset.n], k = $('.af-variant', r)?.value; return x.varianten && k ? { variant: x.varianten[+k] } : {}; })(),
         id: items[+r.dataset.n].b.id, hoeveelheid: num($('.af-hv', r).value) ?? 1, eenheid: $('.af-eenheid', r).value,
         locatie: $('.af-plaats', r).value, vervaldatum: $('.af-datum', r).value, datumtype: $('.af-type .aan', r)?.dataset.w || 'THT',
       }));

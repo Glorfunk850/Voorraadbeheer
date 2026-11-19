@@ -223,7 +223,7 @@ details.meer[open] summary::after { content: " ‹"; }
 .afronden-rij:last-child { border-bottom: 0; }
 .afronden-rij .titel { display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem; font-weight: 600; }
 .afronden-rij .velden { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-.afronden-rij .velden .segment { grid-column: 1 / -1; }
+.afronden-rij .velden .segment, .afronden-rij .velden .af-variant { grid-column: 1 / -1; }
 .afronden-rij input, .afronden-rij select { padding: .55rem .7rem; font-size: .92rem; }
 
 /* recepten */
