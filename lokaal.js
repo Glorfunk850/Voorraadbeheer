@@ -199,16 +199,19 @@
   // De minimumvoorraad geldt per inhoud: 2 pak à 500 g en 1 pak à 1 kg zijn aparte voorraden met elk hun eigen minimum.
   // Staat er in de catalogus een minimum voor het hele product (alle merken en inhouden samen), dan geldt dat:
   // bv. 3 blikken doperwten in huis, om het even van welk merk of welke inhoud. Het tekort komt zonder merk en inhoud op je lijst.
+  // Een automatische boodschap (minimum) komt zonder merk en inhoud op je lijst: die kies je na het winkelen.
+  // Voor welke inhoud ze dient, staat in `minimum_sleutel` (oudere boodschappen: in hun eigen inhoud).
+  const minimumSleutel = (b) => (typeof b.minimum_sleutel === 'string' ? b.minimum_sleutel : inhoudSleutel(b));
   function minimumControleren(naam) {
     const c = S.catalogus.find((x) => zelfde(x.naam, naam));
     if (c && c.minimum > 0) return minimumTotaal(naam, c);
     const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam)).map(productSleutel),
-      ...S.boodschappen.filter((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum').map(inhoudSleutel)]);
+      ...S.boodschappen.filter((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum').map(minimumSleutel)]);
     for (const sleutel of sleutels) minimumPerInhoud(naam, sleutel);
   }
   function minimumPerInhoud(naam, sleutel) {
     const regels = S.producten.filter((p) => zelfde(p.naam, naam) && productSleutel(p) === sleutel);
-    const auto = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum' && inhoudSleutel(b) === sleutel);
+    const auto = S.boodschappen.find((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum' && minimumSleutel(b) === sleutel);
     const weg = () => { if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto); };
     if (!regels.length) return weg();
     const hoofd = regels.reduce((a, b) => ((b.minimum || 0) > (a.minimum || 0) ? b : a));
@@ -217,9 +220,9 @@
     if (totaal < hoofd.minimum) {
       const tekort = Math.round((hoofd.minimum - totaal) * 100) / 100;
       if (auto) auto.hoeveelheid = tekort;
-      else if (!S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt && inhoudSleutel(b) === sleutel)) {
-        S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid, ...(hoofd.merk ? { merk: hoofd.merk } : {}),
-          ...boodschapInhoud(hoofd.eenheid, hoofd.inhoud, hoofd.inhoud_eenheid), product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
+      else if (!S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt && (inhoudSleutel(b) === sleutel || (b.bron === 'minimum' && minimumSleutel(b) === sleutel)))) {
+        S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid,
+          minimum_sleutel: sleutel, product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
       }
     } else weg();
   }
@@ -608,25 +611,23 @@
           const gekozen = item.variant && typeof item.variant === 'object' ? variantUit(item.variant) : null;
           const merk = gekozen ? gekozen.merk : String(b.merk || '').trim();
           const inh = gekozen ? boodschapInhoud(item.eenheid, gekozen.inhoud, gekozen.inhoud_eenheid) : boodschapInhoud(item.eenheid, b.inhoud, b.inhoud_eenheid);
-          // met een eigen inhoud (bv. pak à 1 kg) alleen bijtellen bij een voorraadregel met dezelfde inhoud (en hetzelfde merk)
+          // alleen bijtellen bij een voorraadregel met hetzelfde merk en dezelfde inhoud (ook: allebei zonder);
+          // nooit vanzelf een merk of inhoud overnemen die je niet koos
           const bestaand = S.producten.find((p) => zelfde(p.naam, b.naam) && omrekenen(1, item.eenheid, p.eenheid) !== null
-            && (!inh.inhoud || inhoudSleutel(boodschapInhoud(p.eenheid, p.inhoud, p.inhoud_eenheid)) === inhoudSleutel(inh))
-            && (!gekozen || zelfde(p.merk, merk))
+            && productSleutel(p) === inhoudSleutel(inh) && zelfde(p.merk, merk)
             && (!item.vervaldatum || p.vervaldatum === item.vervaldatum || !p.hoeveelheid));
           if (bestaand) {
             bestaand.hoeveelheid = Math.round((bestaand.hoeveelheid + omrekenen(h, item.eenheid, bestaand.eenheid)) * 1000) / 1000;
             if (item.vervaldatum) { bestaand.vervaldatum = item.vervaldatum; bestaand.datumtype = item.datumtype; }
             if (item.locatie) bestaand.locatie = item.locatie;
-            if (merk && !bestaand.merk) bestaand.merk = merk;
             bestaand.aankoopdatum = vandaag(); bestaand.gewijzigd = nu();
             catalogusBijwerken(bestaand);
           } else {
             const voorbeeld = S.producten.find((p) => zelfde(p.naam, b.naam));
-            const bekend = voorbeeld || S.catalogus.find((x) => zelfde(x.naam, b.naam)) || {};
-            S.producten.push({ uitlekgewicht: gekozen ? gekozen.uitlekgewicht : !!bekend.uitlekgewicht, merk: gekozen ? merk : merk || bekend.merk || '', id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
+            S.producten.push({ uitlekgewicht: gekozen ? gekozen.uitlekgewicht : false, merk, id: id(), naam: b.naam, categorie: voorbeeld?.categorie || '', hoeveelheid: h, eenheid: item.eenheid,
               locatie: item.locatie || voorbeeld?.locatie || '', aankoopdatum: vandaag(), vervaldatum: item.vervaldatum || '',
               datumtype: item.datumtype || 'THT', minimum: 0, notitie: '', barcode: voorbeeld?.barcode || '', aangemaakt: nu(), gewijzigd: nu(),
-              ...(inh.inhoud ? inh : voorbeeld?.inhoud > 0 && voorbeeld.eenheid === item.eenheid ? { inhoud: voorbeeld.inhoud, inhoud_eenheid: voorbeeld.inhoud_eenheid } : {}) });
+              ...(inh.inhoud ? inh : { inhoud: null, inhoud_eenheid: '' }) });
             catalogusBijwerken(S.producten[S.producten.length - 1]);
           }
           gebeurtenis('gekocht', b.naam);

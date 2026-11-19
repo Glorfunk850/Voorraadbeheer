@@ -223,7 +223,10 @@ details.meer[open] summary::after { content: " ‹"; }
 .afronden-rij:last-child { border-bottom: 0; }
 .afronden-rij .titel { display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem; font-weight: 600; }
 .afronden-rij .velden { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-.afronden-rij .velden .segment, .afronden-rij .velden .af-variant { grid-column: 1 / -1; }
+.afronden-rij .velden .segment, .afronden-rij .velden .af-variant, .afronden-rij .velden .af-ander { grid-column: 1 / -1; }
+.af-ander { display: grid; gap: .5rem; }
+.af-ander[hidden] { display: none; }
+.af-inhoud-rij { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .afronden-rij input, .afronden-rij select { padding: .55rem .7rem; font-size: .92rem; }
 
 /* recepten */
@@ -462,3 +465,4 @@ summary small.stil { font-weight: 400; margin-left: .3rem; }
   border: 1px solid var(--lijn); border-radius: 12px; background: var(--veld); color: inherit; font: inherit; cursor: pointer; }
 .catkeuze-knop b { font-weight: 600; }
 .catkeuze-knop small { color: var(--stil); font-size: .8rem; }
+.af-uitlek-vink { margin: 0; }

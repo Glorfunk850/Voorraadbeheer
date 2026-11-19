@@ -111,15 +111,15 @@ async function main() {
   await api('PUT', `producten/${id5}`, { minimum: 3 }); // 1 in huis: 2 tekort, ook al is er veel rijst in andere pakken
   d = await api('GET', 'alles');
   let auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum');
-  controle(auto.length === 1 && auto[0].hoeveelheid === 2 && auto[0].inhoud === 5 && auto[0].inhoud_eenheid === 'kg',
-    `tekort aan pakken à 5 kg komt met die inhoud op de lijst (${JSON.stringify(auto)})`);
+  controle(auto.length === 1 && auto[0].hoeveelheid === 2 && !auto[0].inhoud && !auto[0].merk && auto[0].minimum_sleutel === '5 kg',
+    `tekort aan pakken à 5 kg komt zonder merk en inhoud op de lijst (die kies je na het winkelen) (${JSON.stringify(auto)})`);
   await api('POST', `producten/${id500}/verbruik`, { hoeveelheid: 2 }); // nog 1 pak à 500 g, minimum 2
   d = await api('GET', 'alles');
-  auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum').map((b) => `${b.hoeveelheid}x${b.inhoud}${b.inhoud_eenheid}`).sort();
+  auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum').map((b) => `${b.hoeveelheid}x${b.minimum_sleutel.replace(' ', '')}`).sort();
   controle(JSON.stringify(auto) === '["1x500g","2x5kg"]', `elke inhoud een eigen regel (${auto.join(', ')})`);
   await api('PUT', `producten/${id5}`, { minimum: 0 });
   d = await api('GET', 'alles');
-  auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum').map((b) => `${b.hoeveelheid}x${b.inhoud}${b.inhoud_eenheid}`);
+  auto = d.boodschappen.filter((b) => b.naam === 'Rijst' && b.bron === 'minimum').map((b) => `${b.hoeveelheid}x${b.minimum_sleutel.replace(' ', '')}`);
   controle(JSON.stringify(auto) === '["1x500g"]', `minimum 5 kg weg: alleen die regel verdwijnt (${auto.join(', ')})`);
 
   // prijs per inhoud: een pak à 1 kg heeft een andere prijs per kg dan een pak à 500 g
