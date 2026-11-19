@@ -49,9 +49,9 @@ async function main() {
   // minimum 3 voor alle merken samen, via het catalogusformulier
   await page.click('[data-cat="Doperwten en wortelen"][data-var="0"]');
   await page.click('#c-bewerk');
-  controle(!(await page.isVisible('#cf-min')), 'minimumveld verborgen zolang het vinkje uit staat');
-  await page.click('label:has(#cf-min-aan)');
-  await page.fill('#cf-min', '3');
+  controle(!(await page.isVisible('#cf-alle')), 'minimumveld verborgen zolang het vinkje uit staat');
+  await page.click('label:has(#cf-alle-aan)');
+  await page.fill('#cf-alle', '3');
   await page.click('#cf button[type=submit]');
   await page.waitForTimeout(250);
   let d = await api('GET', 'alles');
@@ -105,13 +105,47 @@ async function main() {
   await page.goto(basis + '#catalogus'); await page.reload(); await page.waitForSelector('#inhoud h1');
   await page.click('[data-cat="Doperwten en wortelen"][data-var="0"]');
   await page.click('#c-bewerk');
-  controle(await page.isChecked('#cf-min-aan') && (await page.inputValue('#cf-min')) === '3', 'vinkje staat aan met minimum 3');
-  await page.click('label:has(#cf-min-aan)');
-  controle(!(await page.isVisible('#cf-min')), 'vinkje uit: minimumveld verdwijnt');
+  controle(await page.isChecked('#cf-alle-aan') && (await page.inputValue('#cf-alle')) === '3', 'vinkje staat aan met minimum 3');
+  await page.click('label:has(#cf-alle-aan)');
+  controle(!(await page.isVisible('#cf-alle')), 'vinkje uit: minimumveld verdwijnt');
   await page.click('#cf button[type=submit]');
   await page.waitForTimeout(250);
   d = await api('GET', 'alles');
   controle(!d.catalogus.find((x) => x.naam === 'Doperwten en wortelen').minimum, 'vinkje uit: minimum weg uit de catalogus');
+
+  // hetzelfde vinkje bij voorraad toevoegen
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  await page.click('[data-cat="Doperwten en wortelen"][data-var="0"]');
+  await page.click('#c-voorraad');
+  controle(!(await page.isChecked('#pf-alle-aan')) && !(await page.isVisible('#pf-alle')), 'voorraad toevoegen: vinkje staat uit');
+  await page.click('label:has(#pf-alle-aan)');
+  await page.fill('#pf-alle', '4');
+  await page.click('#pf button[type=submit]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.catalogus.find((x) => x.naam === 'Doperwten en wortelen').minimum === 4, 'voorraad toevoegen: minimum 4 voor alle merken bewaard in de catalogus');
+
+  // en bij de boodschappen: het vinkje staat aan zodra je het product kiest; uitzetten haalt het minimum weg
+  await page.goto(basis + '#boodschappen'); await page.reload(); await page.waitForSelector('#inhoud h1');
+  await page.click('#b-menu');
+  controle(!(await page.isChecked('#bt-alle-aan')), 'boodschappen: vinkje uit zolang er niets gekozen is');
+  await page.fill('#bt-zoek', 'doperwten');
+  await page.click('#bt-lijst [data-kies="0"]');
+  controle(await page.isChecked('#bt-alle-aan') && (await page.inputValue('#bt-alle')) === '4', 'boodschappen: vinkje aan met het minimum uit de catalogus');
+  await page.fill('#bt-alle', '5');
+  await page.click('#bt-ok');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.catalogus.find((x) => x.naam === 'Doperwten en wortelen').minimum === 5, 'boodschappen: minimum aangepast naar 5');
+  controle(!(await page.isChecked('#bt-alle-aan')), 'boodschappen: na toevoegen staat het vinkje weer uit voor de volgende');
+  await page.fill('#bt-zoek', 'doperwten');
+  await page.click('#bt-lijst [data-kies="0"]');
+  await page.click('label:has(#bt-alle-aan)');
+  await page.click('#bt-ok');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(!d.catalogus.find((x) => x.naam === 'Doperwten en wortelen').minimum, 'boodschappen: vinkje uit haalt het minimum weg');
+
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
