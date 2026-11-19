@@ -466,3 +466,5 @@ summary small.stil { font-weight: 400; margin-left: .3rem; }
 .catkeuze-knop b { font-weight: 600; }
 .catkeuze-knop small { color: var(--stil); font-size: .8rem; }
 .af-uitlek-vink { margin: 0; }
+.cat-sortering { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; margin: -.2rem 0 1rem; color: var(--stil); font-size: .9rem; }
+.cat-sortering select { width: auto; padding: .45rem 2rem .45rem .7rem; font-size: .9rem; }

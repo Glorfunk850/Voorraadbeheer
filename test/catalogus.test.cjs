@@ -378,6 +378,21 @@ async function main() {
   controle(d.boodschappen.find((b) => b.id === huis.id).merk === 'Douwe', 'boodschappen: merk kiezen via de prijs');
   controle(!!(await page.$(`[data-merkkies="${huis.id}"][data-merk="Douwe"].aan`)), 'boodschappen: gekozen merk aangeduid');
 
+  // sorteren op categorie: per categorie gegroepeerd, zonder categorie onderaan; de keuze blijft bewaard
+  await api('POST', 'catalogus', { naam: 'Appels', eenheid: 'stuks', categorie: 'Fruit' });
+  await api('POST', 'catalogus', { naam: 'Zalm', eenheid: 'stuks', categorie: 'Diepvries' });
+  await page.goto(basis + '#catalogus'); await page.reload(); await page.waitForSelector('#cat-sortering');
+  controle((await page.inputValue('#cat-sortering')) === 'naam', 'catalogus: standaard op naam');
+  await page.selectOption('#cat-sortering', 'categorie');
+  let titels = await page.$$eval('#inhoud .sectie-titel', (l) => l.map((x) => x.textContent.trim()));
+  controle(titels[0] === 'Diepvries' && titels[1] === 'Fruit' && titels[titels.length - 1] === 'Zonder categorie', 'catalogus: op categorie gegroepeerd: ' + titels.join(', '));
+  await page.reload(); await page.waitForSelector('#cat-sortering');
+  titels = await page.$$eval('#inhoud .sectie-titel', (l) => l.map((x) => x.textContent.trim()));
+  controle(titels[0] === 'Diepvries', 'catalogus: sortering op categorie blijft bewaard');
+  await page.selectOption('#cat-sortering', 'naam');
+  titels = await page.$$eval('#inhoud .sectie-titel', (l) => l.map((x) => x.textContent.trim()));
+  controle(titels[0] === 'A', 'catalogus: terug op naam');
+
   // voorraad toevoegen: een gekende naam typen vult geen merk of inhoud in; kiezen uit de catalogus wel
   await page.goto(basis + '#voorraad');
   await page.waitForSelector('#nieuw');
