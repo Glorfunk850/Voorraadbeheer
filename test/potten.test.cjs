@@ -1,6 +1,7 @@
 // Grote verpakking, thuis verdeeld over voorraadpotten (bv. een zak rijst van 5 kg over 4 potten).
 // Controleert: instellen in het productformulier, de grote verpakking op de lijst onder het minimum,
 // zelf op de lijst zetten, en bij het afronden de potten bijtellen (of de verpakking zelf in de voorraad zetten).
+// Ook: een doos met losse zakjes (vanillepudding), per zakje gebruikt en per doos bijgekocht.
 //
 // Uitvoeren:  node test/potten.test.cjs   (vereist Playwright; op GitHub gebeurt dit automatisch)
 const http = require('http');
@@ -139,6 +140,81 @@ async function main() {
   d = await api('GET', 'alles');
   b = d.boodschappen.filter((x) => x.naam === 'Rijst');
   controle(b.length === 1 && b[0].eenheid === 'zak' && b[0].hoeveelheid === 1 && b[0].potten_voor === rijst.id, 'weer aan: de regel wordt 1 zak');
+
+  // ---- doos met losse zakjes (bv. vanillepudding): voorraad per zakje, bijkopen per doos
+  await api('POST', 'producten', { naam: 'Vanillepudding', hoeveelheid: 4, eenheid: 'zak', inhoud: 40, inhoud_eenheid: 'g', locatie: 'Kast' });
+  d = await api('GET', 'alles');
+  const pud = d.producten.find((x) => x.naam === 'Vanillepudding');
+  const puddingOpenen = async () => {
+    await herladen('#voorraad', '#zoek-voorraad');
+    await page.fill('#zoek-voorraad', 'Vanillepudding');
+    await page.click(`[data-groep="${pud.id}"]`);
+  };
+  await puddingOpenen();
+  controle(!(await page.$('#groot-erbij')), 'zonder grote verpakking: geen knop "Doos erbij"');
+  await page.click('#bewerk');
+  await page.waitForSelector('#pf-min');
+  await page.click('label:has(#pf-groot-aan)');
+  controle((await page.textContent('#pf-groot-potten-titel')) === 'Aantal zakjes erin', `titel in zakjes (${await page.textContent('#pf-groot-potten-titel')})`);
+  await page.fill('#pf-min', '1');
+  await page.selectOption('#pf-groot-eenheid', 'doos');
+  await page.fill('#pf-groot-inhoud', '');
+  await page.fill('#pf-groot-potten', '4');
+  await page.click('#pf button[type="submit"]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  p = d.producten.find((x) => x.id === pud.id);
+  controle(JSON.stringify(p.grootverpakking) === '{"eenheid":"doos","potten":4}' && p.minimum === 1, `doos met 4 zakjes bewaard (${JSON.stringify(p.grootverpakking)})`);
+
+  // een zakje gebruikt met − in het productpaneel
+  await puddingOpenen();
+  await page.waitForSelector('#groot-erbij');
+  controle((await page.textContent('#lijst-groot')).includes('1 doos · met 4 zakjes'), `knop toont de doos (${await page.textContent('#lijst-groot')})`);
+  controle((await page.textContent('#groot-erbij')).replace(/\s+/g, ' ').includes('Doos erbij +4 zakjes'), `knop "Doos erbij" (${await page.textContent('#groot-erbij')})`);
+  await page.click('#min');
+  await page.waitForTimeout(200);
+  d = await api('GET', 'alles');
+  controle(d.producten.find((x) => x.id === pud.id).hoeveelheid === 3, '− : nog 3 zakjes');
+
+  // recept met 1 zakje vanillepudding koken
+  d = await api('POST', 'recepten', { titel: 'Pudding', personen: 2, ingredienten: [{ naam: 'vanillepudding', hoeveelheid: 1, eenheid: 'zak' }] });
+  await page.goto(basis + '#recepten'); await page.reload();
+  await page.waitForSelector(`[data-recept="${d.nieuw_id}"]`);
+  await page.click(`[data-recept="${d.nieuw_id}"]`);
+  await page.click('#gekookt');
+  await page.waitForSelector('.kook-rij input');
+  controle((await page.inputValue('.kook-rij input')) === '1', `recept stelt 1 zakje voor (${await page.inputValue('.kook-rij input')})`);
+  await page.click('#aftrekken');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(d.producten.find((x) => x.id === pud.id).hoeveelheid === 2, 'na het koken: nog 2 zakjes');
+  controle(!d.boodschappen.some((x) => x.naam === 'Vanillepudding'), 'boven het minimum: niets op de lijst');
+
+  // laatste zakjes op: 1 doos op de lijst
+  await api('POST', `producten/${pud.id}/verbruik`, { hoeveelheid: 2 });
+  d = await api('GET', 'alles');
+  b = d.boodschappen.filter((x) => x.naam === 'Vanillepudding');
+  controle(b.length === 1 && b[0].hoeveelheid === 1 && b[0].eenheid === 'doos' && b[0].potten_voor === pud.id, `1 doos op de lijst (${JSON.stringify(b)})`);
+
+  // afronden: 4 zakjes voorgesteld en bijgeteld
+  await api('PUT', `boodschappen/${b[0].id}`, { afgevinkt: 1 });
+  await herladen('#boodschappen', '#klaar');
+  await page.click('#klaar');
+  await page.waitForSelector('.af-potten');
+  controle((await page.textContent('.af-potten-veld')).includes('Hoeveel zakjes zitten erin?'), 'vraag in zakjes bij afronden');
+  controle((await page.inputValue('.af-potten')) === '4', '4 zakjes voorgesteld');
+  await page.click('#af-ok');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const pr = d.producten.filter((x) => x.naam === 'Vanillepudding');
+  controle(pr.length === 1 && pr[0].hoeveelheid === 4 && pr[0].eenheid === 'zak', `4 zakjes in huis (${pr.map((x) => x.hoeveelheid + ' ' + x.eenheid).join(', ')})`);
+
+  // zonder lijst een doos gekocht: Doos erbij
+  await puddingOpenen();
+  await page.click('#groot-erbij');
+  await page.waitForTimeout(200);
+  d = await api('GET', 'alles');
+  controle(d.producten.find((x) => x.id === pud.id).hoeveelheid === 8, 'Doos erbij: 8 zakjes');
 
   controle(!jsFouten.length, `geen JavaScript-fouten (${jsFouten.join(' | ')})`);
   await browser.close();
