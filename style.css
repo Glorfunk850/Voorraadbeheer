@@ -330,11 +330,20 @@ details.uitklap[open] { padding-bottom: .8rem; border-bottom: 1px solid var(--li
 .recept-filter { margin-bottom: .6rem; }
 .recept-filter + .recept-filter { margin-top: -.2rem; }
 .zoek + .recept-filter { margin-top: -.2rem; }
-details.filter-uitklap { margin: -.4rem 0 .6rem; }
-details.filter-uitklap > summary { padding: .6rem 0; }
-details.filter-uitklap > summary small { font-weight: 400; }
-details.filter-uitklap .chips { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0 0 .2rem; }
-details.filter-uitklap .recept-filter + .recept-filter { margin-top: 0; }
+/* filtermenu's: een duidelijk kader, anders dan de uitklapbare lijsten eronder */
+details.filter-uitklap { background: var(--veld); border-radius: 14px; padding: 0 .8rem; margin: -.2rem 0 1rem; }
+details.filter-uitklap > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .5rem; padding: .7rem 0; font-size: .95rem; font-weight: 600; }
+details.filter-uitklap > summary::-webkit-details-marker { display: none; }
+details.filter-uitklap > summary > svg { width: 18px; height: 18px; flex: none; color: var(--accent); }
+details.filter-uitklap > summary > span { flex: 1; min-width: 0; }
+details.filter-uitklap > summary small { font-weight: 500; color: var(--accent); }
+details.filter-uitklap > summary::after { content: "Tonen"; font-size: .82rem; font-weight: 500; color: var(--stil); }
+details.filter-uitklap[open] > summary::after { content: "Verbergen"; }
+details.filter-uitklap[open] { padding-bottom: .7rem; }
+details.filter-uitklap .chips { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; }
+details.filter-uitklap .chip:not(.aan) { background: var(--achtergrond); }
+details.filter-uitklap .recept-filter { margin: 0; }
+details.filter-uitklap .recept-filter + .recept-filter { margin-top: .4rem; }
 .chip svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: .3rem; }
 .ster-mini { display: inline-flex; color: var(--oranje); margin-right: .35rem; vertical-align: -1px; }
 .ster-mini svg { width: 14px; height: 14px; }
@@ -365,7 +374,6 @@ h3.pz-groep-titel { font-size: 1rem; margin: 0 0 .5rem; color: var(--tekst); }
 .prijzen-blok .pz-groep-titel { font-size: .85rem; font-weight: 600; margin-top: .7rem; }
 summary small.stil { font-weight: 400; margin-left: .3rem; }
 .goedkoopst { display: inline; color: var(--accent); font-weight: 600; font-size: .75rem; margin-left: .3rem; }
-.winkel-uitklap { margin-top: -.2rem; margin-bottom: .9rem; }
 .winkel-tabs .tab-tel { opacity: .7; font-variant-numeric: tabular-nums; margin-left: .15rem; }
 .lijst-totaal { margin-top: .2rem; }
 .prijs-link { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }

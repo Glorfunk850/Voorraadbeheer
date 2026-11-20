@@ -15,12 +15,18 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 64;
+const APP_VERSIE = 65;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
 const ui = { view: 'voorraad', week: 0, winkel: '', plaats: '', zoek: '', receptZoek: '', catZoek: '', receptFilter: { fav: false, inHuis: false, soort: '', cat: '' }, uitgeklapt: new Set() };
 
+// filtermenu's (Recepten, Boodschappen) staan standaard open; wie ze dichtklapt, vindt ze dicht terug zolang de app open is
+function filterMenuOnthouden() {
+  document.querySelectorAll('#inhoud [data-dicht]').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) ui.uitgeklapt.delete('dicht:' + d.dataset.dicht); else ui.uitgeklapt.add('dicht:' + d.dataset.dicht);
+  }));
+}
 const ICOON = {
   kast: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 12h16M9 7.5h1M9 16.5h1"/></svg>',
   mand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18l-1.6 10.2a2 2 0 0 1-2 1.8H6.6a2 2 0 0 1-2-1.8z"/><path d="M8 9l4-6 4 6"/></svg>',
@@ -28,6 +34,7 @@ const ICOON = {
   tandwiel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   lijst: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="18" r=".6"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></svg>',
   zoek: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   sluit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   ster: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
@@ -1241,8 +1248,8 @@ function tekenBoodschappen() {
       <button class="knop primair" aria-label="Toevoegen">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</button>
       <button type="button" class="knop" id="b-menu" aria-label="Kiezen uit een lijst">${ICOON.lijst.replace('<svg', '<svg width="18" height="18"')}</button>
     </form>
-    ${tabs.length ? `<details class="uitklap filter-uitklap winkel-uitklap" data-uitklap="boodschappen-winkels"${ui.uitgeklapt.has('boodschappen-winkels') ? ' open' : ''}>
-      <summary><span>Winkel<small class="stil"> · ${ui.winkel ? esc(ui.winkel) : 'Alles'}</small></span></summary>
+    ${tabs.length ? `<details class="filter-uitklap winkel-uitklap" data-dicht="boodschappen-winkels"${ui.uitgeklapt.has('dicht:boodschappen-winkels') ? '' : ' open'}>
+      <summary>${ICOON.mand}<span>Winkel<small> · ${ui.winkel ? esc(ui.winkel) : 'Alles'}</small></span></summary>
       <div class="chips winkel-tabs" role="tablist">${tabKnop('', 'Alles', S.boodschappen.filter((b) => !b.afgevinkt).length)}${tabs.map((w) => tabKnop(w, w, telPer.get(w.toLowerCase()))).join('')}</div></details>` : ''}
     ${!S.boodschappen.length ? `<div class="leeg"><b>Je lijst is leeg</b>Wat onder je minimumvoorraad zakt, komt hier vanzelf bij.</div>` : ''}
     ${S.boodschappen.length && !open.length && !af.length ? `<div class="leeg">Niets meer te halen bij ${esc(ui.winkel)}.</div>` : ''}
@@ -1270,11 +1277,9 @@ function tekenBoodschappen() {
   }));
   stappen('[data-plus]', 1);
   stappen('[data-min]', -1);
-  // winkelkeuze is uitklapbaar; na het kiezen van een winkel klapt het menu weer dicht
-  $$m('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
-    if (d.open) ui.uitgeklapt.add(d.dataset.uitklap); else ui.uitgeklapt.delete(d.dataset.uitklap);
-  }));
-  $$m('[data-winkel]').forEach((b) => (b.onclick = () => { ui.winkel = b.dataset.winkel; ui.uitgeklapt.delete('boodschappen-winkels'); tekenBoodschappen(); }));
+  // winkelkeuze staat standaard open; dichtklappen kan en blijft onthouden zolang de app open is
+  filterMenuOnthouden();
+  $$m('[data-winkel]').forEach((b) => (b.onclick = () => { ui.winkel = b.dataset.winkel; tekenBoodschappen(); }));
   $$m('[data-bewerk]').forEach((k) => (k.onclick = (e) => { e.preventDefault(); boodschapBewerken(+k.dataset.bewerk); }));
   $$m('[data-vink]').forEach((c) => (c.onchange = () => api('PUT', `boodschappen/${c.dataset.vink}`, { afgevinkt: c.checked })));
   $$m('[data-weg]').forEach((b) => (b.onclick = (e) => { e.preventDefault(); api('DELETE', `boodschappen/${b.dataset.weg}`); }));
@@ -1732,8 +1737,8 @@ function tekenRecepten() {
   const catRij = cats.length ? `<div class="chips recept-filter">${cats.map((x) => chip('data-rc', x, esc(x), zelfde(x, f.cat))).join('')}</div>` : '';
   // alle filterknoppen samen in één uitklapmenu, zodat je op een smartphone niet opzij hoeft te schuiven
   const actief = [f.fav && 'Favorieten', f.inHuis && 'Alles in huis', f.soort, f.cat].filter(Boolean);
-  const filterMenu = filterRij || catRij ? `<details class="uitklap filter-uitklap" data-uitklap="recept-filters"${ui.uitgeklapt.has('recept-filters') ? ' open' : ''}>
-      <summary><span>Filters${actief.length ? `<small class="stil"> · ${esc(actief.join(', '))}</small>` : ''}</span></summary>${filterRij}${catRij}</details>` : '';
+  const filterMenu = filterRij || catRij ? `<details class="filter-uitklap${actief.length ? ' actief' : ''}" data-dicht="recept-filters"${ui.uitgeklapt.has('dicht:recept-filters') ? '' : ' open'}>
+      <summary>${ICOON.filter}<span>Filters${actief.length ? `<small> · ${esc(actief.join(', '))}</small>` : ''}</span></summary>${filterRij}${catRij}</details>` : '';
   // zonder zoeken of filter: ingedeeld per soort gerecht
   let secties;
   if (!zoek && !gefilterd && soorten.length) {
@@ -1764,6 +1769,7 @@ function tekenRecepten() {
   $$m('[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
     if (d.open) ui.uitgeklapt.add(d.dataset.uitklap); else ui.uitgeklapt.delete(d.dataset.uitklap);
   }));
+  filterMenuOnthouden();
   $$m('[data-rs]').forEach((b) => (b.onclick = () => { f.soort = zelfde(f.soort, b.dataset.rs) ? '' : b.dataset.rs; tekenRecepten(); }));
   $$m('[data-rc]').forEach((b) => (b.onclick = () => { f.cat = zelfde(f.cat, b.dataset.rc) ? '' : b.dataset.rc; tekenRecepten(); }));
   const wis = $m('#rf-wis');
