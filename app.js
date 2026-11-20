@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 71;
+const APP_VERSIE = 72;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -797,7 +797,7 @@ function productPaneel(id) {
       <ul class="acties">
         <li><button id="erbij">Nieuwe verpakking toevoegen</button></li>
         <li><button id="lijst">Op boodschappenlijst</button></li>
-        ${p.grootverpakking?.potten && p.eenheid !== 'pot' ? `<li><button id="groot-erbij">${esc(grootNaam(p.grootverpakking))} erbij <small class="stil">+${esc(fmt(p.grootverpakking.potten))} ${esc(meervoud(p.eenheid, p.grootverpakking.potten))} in je voorraad</small></button></li>` : ''}
+        ${p.grootverpakking?.potten && p.eenheid !== 'pot' && p.eenheid !== p.grootverpakking.eenheid ? `<li><button id="groot-erbij">${esc(grootNaam(p.grootverpakking))} erbij <small class="stil">+${esc(fmt(p.grootverpakking.potten))} ${esc(meervoud(p.eenheid, p.grootverpakking.potten))} in je voorraad</small></button></li>` : ''}
         ${p.grootverpakking ? `<li><button id="lijst-groot">Grote verpakking op boodschappenlijst <small class="stil">${esc(grootTekst(p.grootverpakking, p.eenheid))}</small></button></li>` : ''}
         <li><button id="prijzen">${prijzenVan(p.naam).length ? 'Prijzen aanpassen' : 'Prijzen invullen'}</button></li>
         ${p.hoeveelheid > 0 ? '<li><button id="weggooien">Weggooien</button></li>' : ''}
@@ -896,6 +896,54 @@ function minimumVinkjeLezen(el, id, altijd = false) {
   return m;
 }
 
+// Grote verpakking (bv. zak die je over potten verdeelt, of doos met losse zakjes): dezelfde velden bij Bewerken
+// van je voorraad (`pf`) en in de catalogus (`cf`). Ze geldt voor het hele product, alle voorraadregels met die naam.
+const grootVeldenHtml = (id, g) => `<label class="vink uitlek-vink"><input type="checkbox" id="${id}-groot-aan" ${g ? 'checked' : ''}><span class="vakje"></span>
+    <span>Bijkopen in een grote verpakking <small class="stil">je koopt bv. een grote zak en verdeelt die thuis over potten, of een doos met losse zakjes (pudding, soep, gist …) die je één voor één gebruikt; onder het minimum komt de grote verpakking op je boodschappenlijst</small></span></label>
+  <div id="${id}-groot"${g ? '' : ' hidden'}>
+    <div class="rij2">
+      <label class="veld"><span>Grote verpakking</span><select id="${id}-groot-eenheid">${opties(eenheden().filter((e) => TELBAAR.has(e)), g?.eenheid || 'zak')}</select></label>
+      <label class="veld"><span id="${id}-groot-potten-titel">Vult ongeveer (potten)</span><input id="${id}-groot-potten" inputmode="decimal" value="${g?.potten ? esc(fmt(g.potten)) : ''}" placeholder="bv. 4"></label>
+    </div>
+    <div class="rij2">
+      <label class="veld"><span>Inhoud (mag leeg)</span><input id="${id}-groot-inhoud" inputmode="decimal" value="${g?.inhoud > 0 ? esc(fmt(g.inhoud)) : ''}" placeholder="bv. 5"></label>
+      <label class="veld"><span>Eenheid inhoud</span><select id="${id}-groot-inhoud-eenheid">${opties(INHOUD_EENHEDEN, g?.inhoud_eenheid || 'kg')}</select></label>
+    </div>
+  </div>`;
+/** Titel van het aantal: "Vult ongeveer (potten)" of "Aantal zakjes erin", naar de eenheid van het product. */
+const grootTitelZetten = (el, id, eenheid) => { $(`#${id}-groot-potten-titel`, el).textContent = eenheid === 'pot' ? 'Vult ongeveer (potten)' : `Aantal ${meervoud(eenheid)} erin`; };
+/** Velden invullen (bv. na het kiezen van een gekend product), zolang je het vinkje zelf niet aanraakte. */
+function grootVeldenZetten(el, id, g) {
+  const aan = $(`#${id}-groot-aan`, el);
+  if (!aan || aan.dataset.aangeraakt) return;
+  aan.checked = !!g; $(`#${id}-groot`, el).hidden = !g;
+  if (!g) return;
+  $(`#${id}-groot-eenheid`, el).innerHTML = opties(eenheden().filter((e) => TELBAAR.has(e)), g.eenheid || 'zak');
+  $(`#${id}-groot-potten`, el).value = g.potten ? fmt(g.potten) : '';
+  $(`#${id}-groot-inhoud`, el).value = g.inhoud > 0 ? fmt(g.inhoud) : '';
+  $(`#${id}-groot-inhoud-eenheid`, el).innerHTML = opties(INHOUD_EENHEDEN, g.inhoud_eenheid || 'kg');
+}
+/** Het vinkje koppelen; `aanGezet` wordt opgeroepen als je het aanzet (bv. om een minimum voor te stellen). */
+function grootVeldenKoppelen(el, id, aanGezet) {
+  const aan = $(`#${id}-groot-aan`, el);
+  aan.onchange = () => {
+    aan.dataset.aangeraakt = '1';
+    $(`#${id}-groot`, el).hidden = !aan.checked;
+    if (aan.checked) aanGezet();
+  };
+}
+/** De grote verpakking uit het formulier: null (vinkje uit), of false bij een fout (melding al getoond). */
+function grootVeldenLezen(el, id) {
+  if (!$(`#${id}-groot-aan`, el).checked) return null;
+  const gi = $(`#${id}-groot-inhoud`, el).value.trim(), gp = $(`#${id}-groot-potten`, el).value.trim();
+  if (gi && !(num(gi) > 0)) { toast('Vul een geldige inhoud in voor de grote verpakking, of laat het veld leeg.'); return false; }
+  if (gp && !(num(gp) > 0)) { toast(`Vul een geldig aantal in bij "${$(`#${id}-groot-potten-titel`, el).textContent}", of laat het veld leeg.`); return false; }
+  return { eenheid: $(`#${id}-groot-eenheid`, el).value, inhoud: num(gi) > 0 ? num(gi) : null,
+    inhoud_eenheid: num(gi) > 0 ? $(`#${id}-groot-inhoud-eenheid`, el).value : '', ...(num(gp) > 0 ? { potten: num(gp) } : {}) };
+}
+/** Gekende grote verpakking van een product (catalogus, anders een voorraadregel). */
+const grootVan = (naam) => catalogusVan(naam)?.grootverpakking || S.producten.find((p) => zelfde(p.naam, naam) && p.grootverpakking)?.grootverpakking || null;
+
 // Sortering van de catalogus (op naam of op categorie): onthouden op dit toestel.
 const ZONDER_CATEGORIE = 'Zonder categorie';
 const catSorteringLezen = () => { try { return localStorage.getItem('catalogus-sortering') === 'categorie' ? 'categorie' : 'naam'; } catch { return ui.catSortering || 'naam'; } };
@@ -983,7 +1031,9 @@ function catalogusItem(c0, vi = 0) {
     }
     const anderen = varianten.length - 1;
     const samen = anderen ? totaalInHuis(c.naam) : 0;
-    const info = [anderen && samen ? `alle merken samen: ${hoeveelTekst(samen, c.eenheid || 'stuks') || fmt(samen)}` : '', minimumTekst(c), v.uitlekgewicht ? 'gewicht = uitlekgewicht' : '', anderen ? `nog ${anderen} ${anderen === 1 ? 'ander merk of inhoud' : 'andere merken of inhouden'}` : '',
+    const groot = grootVan(c.naam);
+    const info = [anderen && samen ? `alle merken samen: ${hoeveelTekst(samen, c.eenheid || 'stuks') || fmt(samen)}` : '', minimumTekst(c),
+      groot ? `bijkopen per ${grootTekst(groot, c.eenheid || 'stuks').replace(/^1 /, '')}` : '', v.uitlekgewicht ? 'gewicht = uitlekgewicht' : '', anderen ? `nog ${anderen} ${anderen === 1 ? 'ander merk of inhoud' : 'andere merken of inhouden'}` : '',
       c.aantal ? `${c.aantal}× toegevoegd` : '', c.laatst ? `laatst op ${datumNL(c.laatst.slice(0, 10), true)}` : ''].filter(Boolean).join(' · ');
     el.innerHTML = `${paneelKop(esc(c.naam), esc([v.merk, inhoudLabel(v), c.categorie, c.locatie].filter(Boolean).join(' · ')))}
       <div class="datumblok"><div>${totalen.length ? `In huis: ${esc(totalen.map((t) => hoeveelTekst(t.hoeveelheid, t.eenheid)).join(' en '))}` : 'Nu niet in huis'}
@@ -1055,6 +1105,7 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
         <label class="veld"><span>Merk (mag leeg)</span><input id="cf-merk" value="${esc(c.merk || '')}" autocomplete="off" autocapitalize="words" placeholder="bv. Bonduelle"></label>
         ${inVoorraad ? '<p class="stil" style="margin-top:-.4rem">Een nieuwe naam wordt ook aangepast in je voorraad en op je boodschappenlijst.</p>' : ''}
         ${sjabloon ? '' : minimumVinkjeHtml('cf', c.minimum)}
+        ${sjabloon ? '' : grootVeldenHtml('cf', nieuw ? null : grootVan(c.naam))}
         <label class="veld"><span>Aantal${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}</span><input id="cf-hv" inputmode="decimal" value="${c.hoeveelheid > 0 ? esc(fmt(c.hoeveelheid)) : '1'}"></label>
         <p class="stil" style="margin:-.4rem 0 1rem">Wordt ingevuld als je het product vanuit de catalogus aan je voorraad toevoegt.</p>
         <div class="rij2" id="cf-inhoud-rij">
@@ -1080,6 +1131,18 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
     $$('#cf-type button', el).forEach((b) => (b.onclick = () => { type = b.dataset.w; typeTekenen(); }));
     $('#cf-inhoud-rij', el).hidden = !TELBAAR.has(eenheid);
     minimumVinkjeKoppelen(el, 'cf');
+    if (!sjabloon) {
+      grootTitelZetten(el, 'cf', eenheid);
+      grootVeldenKoppelen(el, 'cf', () => {
+        // zonder minimum komt de grote verpakking nooit op je lijst: het minimum voor alle merken samen aanzetten met 1
+        // (tenzij een voorraadregel al een eigen minimum heeft)
+        const alle = $('#cf-alle-aan', el);
+        if (alle.checked || S.producten.some((p) => zelfde(p.naam, c.naam) && p.minimum > 0)) return;
+        alle.checked = true; alle.dataset.aangeraakt = '1'; $('#cf-alle-veld', el).hidden = false;
+        if (!$('#cf-alle', el).value) $('#cf-alle', el).value = '1';
+        toast(`Vul bij Minimum in huis in bij hoeveel ${meervoud(eenheid)} je bijkoopt.`);
+      });
+    }
     $('#cf-inhoud-titel', el).textContent = `Inhoud per ${perTekst(eenheid)} (mag leeg)`;
     const info = () => ({ eenheid, inhoud_eenheid: $('#cf-inhoud', el).value.trim() ? $('#cf-inhoud-eenheid', el).value : '' });
     // de prijzen gelden voor de inhoud die hier staat
@@ -1100,12 +1163,15 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
       // vinkje uit: geen minimum voor alle merken samen
       const minimum = minimumVinkjeLezen(el, 'cf', true);
       if (minimum === null) return;
+      const grootverpakking = sjabloon ? undefined : grootVeldenLezen(el, 'cf');
+      if (grootverpakking === false) return;
       cfPrijzen();
       const pz = $('#cf-prijzen', el), prijzen = prijzenLezen(pz, eenheid);
       if (!prijzen) { pz.open = true; return; }
       const data = { naam, hoeveelheid: hv, eenheid, categorie: $('#cf-cat', el).value, locatie: $('#cf-plaats', el).value, datumtype: type,
         inhoud: inhoud > 0 ? inhoud : null, inhoud_eenheid: inhoud > 0 ? $('#cf-inhoud-eenheid', el).value : '', uitlekgewicht: $('#cf-uitlek', el).checked, merk: $('#cf-merk', el).value.trim(),
         ...(minimum !== undefined ? { minimum } : {}),
+        ...(grootverpakking !== undefined ? { grootverpakking } : {}),
         // alleen de prijzen van deze inhoud; niets aangepast: niets bewaren
         ...(pz.dataset.aangeraakt || nieuw ? { prijzen, prijzen_inhoud: formPrijzenInhoud(pz) } : {}) };
       if (!nieuw) { data.oudeNaam = c.naam; data.oudeVariant = oudeVariant; }
@@ -1128,6 +1194,8 @@ function productFormulier(bestaand, sjabloon = {}) {
     naam: '', hoeveelheid: 1, eenheid: 'stuks', locatie: ui.plaats || locaties()[0] || '', categorie: '',
     aankoopdatum: vandaag(), vervaldatum: '', datumtype: 'THT', minimum: 0, notitie: '', barcode: '', inhoud: null, inhoud_eenheid: '', uitlekgewicht: false, merk: '', ...sjabloon,
   };
+  // nieuwe verpakking van een gekend product: de grote verpakking van dat product staat al ingevuld
+  if (nieuw && !p.grootverpakking && p.naam) p.grootverpakking = grootVan(p.naam);
   paneelOpenen((el) => {
     if (alGetekend('formulier')) return; // niet opnieuw tekenen terwijl je typt
     el.innerHTML = `
@@ -1161,18 +1229,7 @@ function productFormulier(bestaand, sjabloon = {}) {
           <label class="veld"><span>Categorie</span><select id="pf-cat">${opties(categorieen(), p.categorie || '', 'Geen')}</select></label>
           <label class="veld"><span>Minimumvoorraad voor deze inhoud (eronder komt het op je boodschappenlijst)</span><input id="pf-min" inputmode="decimal" value="${p.minimum ? esc(fmt(p.minimum)) : ''}" placeholder="Geen"></label>
           <p class="stil" style="margin:-.4rem 0 1rem">Staat het vinkje <i>Minimum voor alle merken samen</i> aan, dan gaat dat voor.</p>
-          <label class="vink uitlek-vink"><input type="checkbox" id="pf-groot-aan" ${p.grootverpakking ? 'checked' : ''}><span class="vakje"></span>
-            <span>Bijkopen in een grote verpakking <small class="stil">je koopt bv. een grote zak en verdeelt die thuis over potten, of een doos met losse zakjes (pudding, soep, gist …) die je één voor één gebruikt; onder het minimum komt de grote verpakking op je boodschappenlijst</small></span></label>
-          <div id="pf-groot"${p.grootverpakking ? '' : ' hidden'}>
-            <div class="rij2">
-              <label class="veld"><span>Grote verpakking</span><select id="pf-groot-eenheid">${opties(eenheden().filter((e) => TELBAAR.has(e)), p.grootverpakking?.eenheid || 'zak')}</select></label>
-              <label class="veld"><span id="pf-groot-potten-titel">Vult ongeveer (potten)</span><input id="pf-groot-potten" inputmode="decimal" value="${p.grootverpakking?.potten ? esc(fmt(p.grootverpakking.potten)) : ''}" placeholder="bv. 4"></label>
-            </div>
-            <div class="rij2">
-              <label class="veld"><span>Inhoud (mag leeg)</span><input id="pf-groot-inhoud" inputmode="decimal" value="${p.grootverpakking?.inhoud > 0 ? esc(fmt(p.grootverpakking.inhoud)) : ''}" placeholder="bv. 5"></label>
-              <label class="veld"><span>Eenheid inhoud</span><select id="pf-groot-inhoud-eenheid">${opties(INHOUD_EENHEDEN, p.grootverpakking?.inhoud_eenheid || 'kg')}</select></label>
-            </div>
-          </div>
+          ${grootVeldenHtml('pf', p.grootverpakking)}
           <label class="veld"><span>Gekocht op</span><input type="date" id="pf-aankoop" value="${esc(p.aankoopdatum || '')}"></label>
           <label class="veld"><span>Notitie</span><input id="pf-notitie" value="${esc(p.notitie || '')}"></label>
         </details>
@@ -1195,12 +1252,12 @@ function productFormulier(bestaand, sjabloon = {}) {
     };
     inhoudTonen();
     // grote verpakking: het getal "vult ongeveer" telt in de eenheid van dit product (potten, stuks ...)
-    const grootTitel = () => { const e = $('#pf-eenheid', el).value; $('#pf-groot-potten-titel', el).textContent = e === 'pot' ? 'Vult ongeveer (potten)' : `Aantal ${meervoud(e)} erin`; };
+    const grootTitel = () => grootTitelZetten(el, 'pf', $('#pf-eenheid', el).value);
     grootTitel();
-    $('#pf-groot-aan', el).onchange = () => {
-      $('#pf-groot', el).hidden = !$('#pf-groot-aan', el).checked;
-      if ($('#pf-groot-aan', el).checked && !$('#pf-min', el).value.trim()) { $('#pf-min', el).value = '1'; toast(`Vul bij Minimumvoorraad in bij hoeveel ${meervoud($('#pf-eenheid', el).value)} je bijkoopt.`); }
-    };
+    grootVeldenKoppelen(el, 'pf', () => {
+      // zonder minimum komt de grote verpakking nooit op je lijst: 1 voorstellen (tenzij er een minimum voor alle merken samen is)
+      if (!$('#pf-min', el).value.trim() && !$('#pf-alle-aan', el)?.checked) { $('#pf-min', el).value = '1'; toast(`Vul bij Minimumvoorraad in bij hoeveel ${meervoud($('#pf-eenheid', el).value)} je bijkoopt.`); }
+    });
     const productInfo = () => ({ eenheid: $('#pf-eenheid', el).value, inhoud_eenheid: $('#pf-inhoud', el).value.trim() ? $('#pf-inhoud-eenheid', el).value : '' });
     // de prijzen gelden voor de inhoud die hier staat (bv. pak à 500 g)
     const pfPrijzen = () => { const e = $('#pf-eenheid', el).value; formPrijzenZetten($('#pf-prijzen', el), $('#pf-naam', el).value.trim() || p.naam, e, formInhoud(el, 'pf', e), productInfo); };
@@ -1238,6 +1295,7 @@ function productFormulier(bestaand, sjabloon = {}) {
       const b = (S.catalogus || []).find((x) => zelfde(x.naam, naam)) || S.producten.find((x) => zelfde(x.naam, naam));
       minimumVinkjeZetten(el, 'pf', naam);
       if (b) invullen({ eenheid: b.eenheid, categorie: b.categorie, locatie: b.locatie, datumtype: b.datumtype });
+      grootVeldenZetten(el, 'pf', grootVan(naam));
       // gekende prijzen overnemen (alleen als je zelf nog niets invulde)
       pfPrijzen();
       if (prijzenVan(naam).length && !$('#pf-prijzen', el).dataset.aangeraakt) $('#pf-prijzen', el).open = true;
@@ -1288,14 +1346,8 @@ function productFormulier(bestaand, sjabloon = {}) {
       if (!prijzen) { pz.open = true; return; }
       const alleMerken = minimumVinkjeLezen(el, 'pf');
       if (alleMerken === null) return;
-      let grootverpakking = null;
-      if ($('#pf-groot-aan', el).checked) {
-        const gi = $('#pf-groot-inhoud', el).value.trim(), gp = $('#pf-groot-potten', el).value.trim();
-        if (gi && !(num(gi) > 0)) return toast('Vul een geldige inhoud in voor de grote verpakking, of laat het veld leeg.');
-        if (gp && !(num(gp) > 0)) return toast('Vul een geldig aantal in bij "Vult ongeveer", of laat het veld leeg.');
-        grootverpakking = { eenheid: $('#pf-groot-eenheid', el).value, inhoud: num(gi) > 0 ? num(gi) : null,
-          inhoud_eenheid: num(gi) > 0 ? $('#pf-groot-inhoud-eenheid', el).value : '', ...(num(gp) > 0 ? { potten: num(gp) } : {}) };
-      }
+      const grootverpakking = grootVeldenLezen(el, 'pf');
+      if (grootverpakking === false) return;
       const nieuweNaam = !nieuw && !zelfde($('#pf-naam', el).value, p.naam);
       const data = {
         // alleen de prijzen van deze inhoud, en alleen als je ze aanpaste (zo blijven gekende prijzen staan)

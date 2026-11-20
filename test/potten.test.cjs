@@ -216,6 +216,57 @@ async function main() {
   d = await api('GET', 'alles');
   controle(d.producten.find((x) => x.id === pud.id).hoeveelheid === 8, 'Doos erbij: 8 zakjes');
 
+  // ---- in de catalogus bewerken: dezelfde instelling, geldt voor het hele product
+  const catOpenen = async (naam) => {
+    await herladen('#catalogus', '#zoek-catalogus');
+    await page.fill('#zoek-catalogus', naam);
+    await page.click(`[data-cat="${naam}"]`);
+    await page.click('#c-bewerk');
+    await page.waitForSelector('#cf-groot-aan', { state: 'attached' });
+  };
+  await catOpenen('Vanillepudding');
+  controle(await page.isChecked('#cf-groot-aan') && (await page.inputValue('#cf-groot-eenheid')) === 'doos' && (await page.inputValue('#cf-groot-potten')) === '4',
+    'catalogus toont de doos met 4 zakjes van de voorraad');
+  controle((await page.textContent('#cf-groot-potten-titel')) === 'Aantal zakjes erin', 'titel in zakjes in de catalogus');
+
+  await api('POST', 'producten', { naam: 'Chocoladepudding', hoeveelheid: 3, eenheid: 'zak', locatie: 'Kast' });
+  await catOpenen('Chocoladepudding');
+  controle(!(await page.isChecked('#cf-groot-aan')) && await page.isHidden('#cf-groot'), 'nog geen grote verpakking: vinkje uit');
+  await page.click('label:has(#cf-groot-aan)');
+  controle(await page.isChecked('#cf-alle-aan') && (await page.inputValue('#cf-alle')) === '1', 'vinkje aan: minimum voor alle merken samen 1 voorgesteld');
+  await page.selectOption('#cf-groot-eenheid', 'doos');
+  await page.fill('#cf-groot-inhoud', '');
+  await page.fill('#cf-groot-potten', '6');
+  await page.click('#cf button[type="submit"]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  const choc = d.producten.find((x) => x.naam === 'Chocoladepudding'), cChoc = d.catalogus.find((x) => x.naam === 'Chocoladepudding');
+  controle(JSON.stringify(cChoc.grootverpakking) === '{"eenheid":"doos","potten":6}' && cChoc.minimum === 1, `bewaard in de catalogus (${JSON.stringify(cChoc.grootverpakking)}, minimum ${cChoc.minimum})`);
+  controle(JSON.stringify(choc.grootverpakking) === '{"eenheid":"doos","potten":6}', 'ook bij de voorraad gezet');
+  controle((await page.textContent('#paneel')).includes('bijkopen per doos · met 6 zakjes'), 'catalogusproduct toont de doos');
+  await api('POST', `producten/${choc.id}/verbruik`, { hoeveelheid: 3 });
+  d = await api('GET', 'alles');
+  b = d.boodschappen.filter((x) => x.naam === 'Chocoladepudding');
+  controle(b.length === 1 && b[0].eenheid === 'doos' && b[0].hoeveelheid === 1 && b[0].potten_voor === choc.id, `op: 1 doos op de lijst (${JSON.stringify(b)})`);
+
+  // nieuwe verpakking toevoegen: de doos staat al ingevuld
+  await api('PUT', `producten/${choc.id}`, { hoeveelheid: 2 });
+  await herladen('#voorraad', '#zoek-voorraad');
+  await page.fill('#zoek-voorraad', 'Chocoladepudding');
+  await page.click(`[data-groep="${choc.id}"]`);
+  await page.click('#erbij');
+  await page.waitForSelector('#pf-groot-aan', { state: 'attached' });
+  controle(await page.isChecked('#pf-groot-aan') && (await page.inputValue('#pf-groot-potten')) === '6', 'nieuwe verpakking: grote verpakking al ingevuld');
+
+  // in de catalogus uitzetten: ook uit bij de voorraad
+  await catOpenen('Chocoladepudding');
+  await page.click('label:has(#cf-groot-aan)');
+  await page.click('#cf button[type="submit"]');
+  await page.waitForTimeout(250);
+  d = await api('GET', 'alles');
+  controle(!d.catalogus.find((x) => x.naam === 'Chocoladepudding').grootverpakking && !d.producten.find((x) => x.naam === 'Chocoladepudding').grootverpakking,
+    'uitgezet in de catalogus: ook weg bij de voorraad');
+
   controle(!jsFouten.length, `geen JavaScript-fouten (${jsFouten.join(' | ')})`);
   await browser.close();
   srv.close();

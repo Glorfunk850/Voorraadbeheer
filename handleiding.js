@@ -102,6 +102,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <li>Tik op het product en dan op <b>−</b> links van het getal: er is één zakje minder. Kook je een recept uit de planner met <i>1 zakje vanillepudding</i>, dan gaat dat zakje er vanzelf af.</li>
 </ol>
 <p>Zakt het aantal zakjes onder je minimum, dan komt <b>1 doos</b> op je boodschappenlijst (niet het aantal zakjes). Na het winkelen vink je de doos af en tik je op <b>Klaar met winkelen</b>: bij <b>Hoeveel zakjes zitten erin?</b> staat het aantal al ingevuld, en die zakjes worden bij je voorraad geteld.</p>
+<p><b>Ook in de catalogus.</b> Dezelfde instelling vind je bij <b>Catalogus</b> → het product → <b>Bewerken</b>. Ze geldt voor het hele product: wat je daar instelt, staat ook bij Bewerken in je voorraad, en omgekeerd. Zet je ze aan zonder minimum, dan wordt het vinkje <b>Minimum voor alle merken samen</b> aangezet met 1. Voeg je later een nieuwe verpakking van dat product toe, dan staat de grote verpakking al ingevuld.</p>
 <p><b>Een doos gekocht zonder je lijst?</b> Tik op het product en kies <b>Doos erbij</b>: het aantal zakjes van één doos wordt meteen bij je voorraad geteld.</p>
 
 <h3>Catalogus</h3>
