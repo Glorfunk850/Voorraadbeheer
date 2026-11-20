@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 74;
+const APP_VERSIE = 75;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -763,6 +763,15 @@ function tekenVoorraad() {
     lijst = `<div class="leeg">Niets gevonden.</div>`;
   } else {
     if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map(rij).join('')}</ul></section>`;
+    // overzicht van alles wat geopend is, het langst geopend bovenaan
+    const geopend = metH.filter((x) => x.p.geopend && x.p.hoeveelheid > 0).sort((a, b) => a.p.geopend.localeCompare(b.p.geopend) || a.p.naam.localeCompare(b.p.naam, 'nl'));
+    if (geopend.length) lijst += `<section class="sectie voorraad-geopend"><div class="sectie-titel"><span>Geopend</span><span>${geopend.length}</span></div><ul class="lijst">${geopend.map(({ p, h }) => {
+      const dagen = -dagenTot(p.geopend);
+      const onder = [geopendTekst(p) + (dagen > 1 ? ` (${dagen} dagen)` : ''), h.niveau > 0 ? h.uitleg : ''].filter(Boolean).join(' · ');
+      return `<li><button class="rij" data-product="${p.id}">${h.niveau > 0 ? `<span class="stip ${h.kleur}"></span>` : ''}
+        <span class="naam">${esc(p.naam)}${merkTekst(p)}<small class="geopend-tekst">${esc(onder)}</small></span>
+        <span class="rechts${h.niveau > 0 ? ' ' + h.kleur : ''}">${esc(h.niveau > 0 ? h.kort : voorraadTekst(p))}</span></button></li>`;
+    }).join('')}</ul></section>`;
     // elke categorie is uitklapbaar (dicht tot je erop tikt; open/dicht blijft onthouden zolang de app open is);
     // tijdens het zoeken staat alles open, zodat je meteen ziet wat je vond
     if (cats.length) lijst += `<div class="sectie-titel voorraad-alles">Alle producten</div>` + cats.map((k) => {
