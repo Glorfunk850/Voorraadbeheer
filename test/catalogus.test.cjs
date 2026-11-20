@@ -288,7 +288,7 @@ async function main() {
   await page.reload();
   await page.fill('#zoek-voorraad', 'koffie');
   const gevonden = await page.$$eval('[data-groep]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
-  controle(gevonden.length === 2 && gevonden.includes('Koffie · Douwe') && gevonden.includes('Koffie · Lavazza'), 'voorraad: merk in de zoekresultaten: ' + gevonden.join(' | '));
+  controle(gevonden.length === 2 && gevonden.some((t) => t.startsWith('Koffie · Douwe')) && gevonden.some((t) => t.startsWith('Koffie · Lavazza')), 'voorraad: merk in de zoekresultaten: ' + gevonden.join(' | '));
   await page.goto(basis + '#catalogus');
   await page.reload();
   // bewerken van één variant laat de andere staan

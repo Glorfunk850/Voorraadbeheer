@@ -19,6 +19,14 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   het product in je voorraad bewerken (of er een product van maken), of ze van de lijst halen.
   Afvinken doe je door op het rondje te tikken.
 
+## Voorraad per categorie en geopende verpakkingen
+
+- Op het tabblad **Voorraad** staan onder *Op te gebruiken* al je producten per **categorie**; tik op een categorie
+  om ze open of dicht te klappen. Met het **zoekveld** bovenaan zoek je op naam, merk, plaats, categorie of notitie.
+- Tik op een product → **Geopend** (of *1 fles geopend* als je er meer hebt). Een geopende verpakking **telt als opgebruikt**:
+  ze gaat van je voorraad af en telt niet mee voor het minimum (zakt het daaronder, dan komt het op je lijst).
+  Ze blijft wel zichtbaar met *geopend* erbij. Leeg? Tik erop → **Op**. Vergissing? **Toch niet geopend**.
+
 ## Grote verpakkingen, thuis verdeeld over potten
 
 - Zet het product in je voorraad als **potten** (eenheid *pot*) en vul bij Bewerken → Meer de **Minimumvoorraad** in.

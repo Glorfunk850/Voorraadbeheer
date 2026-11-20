@@ -37,6 +37,8 @@ jobs:
         run: node test/minimum.test.cjs
       - name: Kleine en grote verpakkingen
         run: node test/verpakking.test.cjs
+      - name: Geopende verpakkingen en voorraad per categorie
+        run: node test/geopend.test.cjs
       - name: Maaltijdplanner
         run: node test/planner.test.cjs
       - name: Bewaren in een bestand op het toestel
