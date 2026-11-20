@@ -39,3 +39,5 @@ jobs:
         run: node test/bestand.test.cjs
       - name: Synchroniseren tussen toestellen
         run: node test/sync.test.cjs
+      - name: Grote verpakking verdeeld over potten
+        run: node test/potten.test.cjs

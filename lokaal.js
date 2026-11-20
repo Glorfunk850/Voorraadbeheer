@@ -202,6 +202,18 @@
   // Een automatische boodschap (minimum) komt zonder merk en inhoud op je lijst: die kies je na het winkelen.
   // Voor welke inhoud ze dient, staat in `minimum_sleutel` (oudere boodschappen: in hun eigen inhoud).
   const minimumSleutel = (b) => (typeof b.minimum_sleutel === 'string' ? b.minimum_sleutel : inhoudSleutel(b));
+  // Grote verpakking: je koopt bv. een zak rijst van 5 kg en verdeelt die thuis over potten. Zakt het aantal potten
+  // onder het minimum, dan komt 1 grote verpakking op de lijst (niet het tekort aan potten). Bij het afronden kies je
+  // over hoeveel potten je ze verdeeld hebt; die worden bij de potten geteld (`potten_voor` = id van de voorraadregel).
+  function grootUit(g) {
+    if (!g || typeof g !== 'object') return null;
+    const eenheid = TELBARE.has(g.eenheid) ? g.eenheid : 'zak';
+    const potten = getal(g.potten);
+    return { eenheid, ...boodschapInhoud(eenheid, g.inhoud, g.inhoud_eenheid), ...(potten > 0 ? { potten } : {}) };
+  }
+  const grootBoodschap = (p, sleutel) => ({ id: id(), naam: p.naam, hoeveelheid: 1, eenheid: p.grootverpakking.eenheid,
+    ...boodschapInhoud(p.grootverpakking.eenheid, p.grootverpakking.inhoud, p.grootverpakking.inhoud_eenheid),
+    ...(typeof sleutel === 'string' ? { minimum_sleutel: sleutel } : {}), product_id: p.id, potten_voor: p.id, afgevinkt: 0, bron: 'minimum' });
   function minimumControleren(naam) {
     const c = S.catalogus.find((x) => zelfde(x.naam, naam));
     if (c && c.minimum > 0) return minimumTotaal(naam, c);
@@ -219,7 +231,17 @@
     const totaal = regels.reduce((s, r) => s + (omrekenen(r.hoeveelheid || 0, r.eenheid, hoofd.eenheid) ?? 0), 0);
     if (totaal < hoofd.minimum) {
       const tekort = Math.round((hoofd.minimum - totaal) * 100) / 100;
-      if (auto) auto.hoeveelheid = tekort;
+      const groot = regels.find((r) => r.grootverpakking);
+      if (groot) {
+        // al op de lijst als grote verpakking: laten staan (het aantal pas je zelf aan)
+        if (auto && auto.potten_voor) return;
+        if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto);
+        else if (S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt && (b.potten_voor === groot.id || inhoudSleutel(b) === sleutel))) return;
+        S.boodschappen.push(grootBoodschap(groot, sleutel));
+        return;
+      }
+      if (auto && auto.potten_voor) { auto.hoeveelheid = tekort; auto.eenheid = hoofd.eenheid; delete auto.potten_voor; delete auto.inhoud; delete auto.inhoud_eenheid; }
+      else if (auto) auto.hoeveelheid = tekort;
       else if (!S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt && (inhoudSleutel(b) === sleutel || (b.bron === 'minimum' && minimumSleutel(b) === sleutel)))) {
         S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid,
           minimum_sleutel: sleutel, product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
@@ -236,6 +258,15 @@
     if (autos.length) S.boodschappen = S.boodschappen.filter((b) => !autos.includes(b) || b === houden);
     if (totaal >= c.minimum) return;
     const tekort = Math.round((c.minimum - totaal) * 100) / 100;
+    const groot = S.producten.find((p) => zelfde(p.naam, naam) && p.grootverpakking);
+    if (groot) {
+      if (houden && houden.potten_voor) return;
+      if (houden) S.boodschappen = S.boodschappen.filter((b) => b !== houden);
+      else if (S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt)) return;
+      S.boodschappen.push(grootBoodschap(groot));
+      return;
+    }
+    if (houden && houden.potten_voor) { delete houden.potten_voor; delete houden.inhoud; delete houden.inhoud_eenheid; }
     if (houden) { houden.hoeveelheid = tekort; houden.eenheid = eenheid; return; }
     if (S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt)) return; // staat er zelf al op
     S.boodschappen.push({ id: id(), naam: c.naam, hoeveelheid: tekort, eenheid, product_id: S.producten.find((p) => zelfde(p.naam, naam))?.id || null, afgevinkt: 0, bron: 'minimum' });
@@ -563,6 +594,7 @@
         p.hoeveelheid = getal(p.hoeveelheid) || 0; p.minimum = getal(p.minimum) || 0;
         p.inhoud = getal(p.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = '';
         p.uitlekgewicht = !!p.uitlekgewicht; p.merk = String(p.merk || '').trim();
+        const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g;
         S.producten.push(p);
         catalogusBijwerken(p);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
@@ -581,6 +613,7 @@
         if ('inhoud' in data) { p.inhoud = getal(data.inhoud) || null; if (!p.inhoud) p.inhoud_eenheid = ''; }
         if ('uitlekgewicht' in data) p.uitlekgewicht = !!data.uitlekgewicht;
         if ('merk' in data) p.merk = String(data.merk || '').trim();
+        if ('grootverpakking' in data) { const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g; else delete p.grootverpakking; }
         p.gewijzigd = nu();
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
@@ -607,6 +640,18 @@
           const b = S.boodschappen.find((x) => x.id === item.id);
           if (!b) continue;
           const h = getal(item.hoeveelheid) || 0;
+          // grote verpakking die je thuis over potten verdeelde: de potten bijtellen bij die voorraadregel
+          const potten = getal(item.potten), doel = b.potten_voor != null && S.producten.find((p) => p.id === b.potten_voor);
+          if (doel && potten > 0) {
+            doel.hoeveelheid = Math.round(((doel.hoeveelheid || 0) + potten) * 1000) / 1000;
+            if (item.vervaldatum) { doel.vervaldatum = item.vervaldatum; doel.datumtype = item.datumtype; }
+            if (item.locatie) doel.locatie = item.locatie;
+            doel.aankoopdatum = vandaag(); doel.gewijzigd = nu();
+            gebeurtenis('gekocht', b.naam);
+            S.boodschappen = S.boodschappen.filter((x) => x !== b);
+            minimumControleren(b.naam);
+            continue;
+          }
           // stond er geen merk of inhoud op de lijst, dan kies je bij het afronden welk merk en welke inhoud je kocht
           const gekozen = item.variant && typeof item.variant === 'object' ? variantUit(item.variant) : null;
           const merk = gekozen ? gekozen.merk : String(b.merk || '').trim();
@@ -654,11 +699,14 @@
           const merk = String(item.merk || '').trim();
           if (bestaand) {
             if (merk && !bestaand.merk) bestaand.merk = merk;
+            if (item.potten_voor != null && bestaand.potten_voor == null && S.producten.some((p) => p.id === +item.potten_voor)) bestaand.potten_voor = +item.potten_voor;
             const erbij = omrekenen(h, item.eenheid, bestaand.eenheid);
             if (h !== null && bestaand.hoeveelheid !== null && erbij !== null) bestaand.hoeveelheid = Math.round((bestaand.hoeveelheid + erbij) * 100) / 100;
             continue;
           }
-          S.boodschappen.push({ id: id(), naam, hoeveelheid: h, eenheid: item.eenheid || '', ...inh, ...(merk ? { merk } : {}), product_id: item.product_id || null, afgevinkt: 0, bron: item.bron || 'handmatig' });
+          // grote verpakking voor een product dat je thuis over potten verdeelt
+          const voor = item.potten_voor != null && S.producten.find((p) => p.id === +item.potten_voor) ? { potten_voor: +item.potten_voor } : {};
+          S.boodschappen.push({ id: id(), naam, hoeveelheid: h, eenheid: item.eenheid || '', ...inh, ...(merk ? { merk } : {}), ...voor, product_id: item.product_id || null, afgevinkt: 0, bron: item.bron || 'handmatig' });
         }
         // minimum voor alle merken samen, aangezet bij het toevoegen van een boodschap
         for (const item of data.items || [data]) if ('catalogus_minimum' in item && (item.naam || '').trim()) {
@@ -681,6 +729,7 @@
           b.naam = String(data.naam).trim();
           b.product_id = S.producten.find((p) => zelfde(p.naam, b.naam))?.id || null;
           if (b.bron === 'minimum') b.bron = 'handmatig'; // zelf hernoemd: niet meer vanzelf weghalen
+          delete b.potten_voor;
         }
         return alles();
       }
