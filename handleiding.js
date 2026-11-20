@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 62; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 63; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -127,7 +127,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <h3>Recepten vinden</h3>
 <ul>
   <li><b>Zoeken</b> op titel, soort, categorie of ingrediënt.</li>
-  <li><b>Filterknoppen</b>: Favorieten, <b>Alles in huis</b> (recepten waarvoor je niets moet kopen), een soort gerecht of een categorie. Nog eens tikken zet een filter uit.</li>
+  <li><b>Filters</b>: tik op <b>Filters</b> om de filterknoppen open of dicht te klappen (het actieve filter staat ernaast): Favorieten, <b>Alles in huis</b> (recepten waarvoor je niets moet kopen), een soort gerecht of een categorie. Nog eens tikken zet een filter uit.</li>
   <li>Zonder zoeken of filter staan je recepten per soort gerecht; tik op een soort om ze open of dicht te klappen.</li>
   <li><b>Gebruikt wat op moet</b> toont tot drie recepten met producten die binnenkort vervallen.</li>
 </ul>

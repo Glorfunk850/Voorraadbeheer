@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 62;
+const APP_VERSIE = 63;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1724,6 +1724,10 @@ function tekenRecepten() {
   const filterRij = S.recepten.length
     ? `<div class="chips recept-filter">${S.recepten.some((r) => r.favoriet) ? chip('data-rf', '1', `${ICOON.sterVol}Favorieten`, f.fav) : ''}${chip('data-rh', '1', 'Alles in huis', f.inHuis)}${soorten.map((x) => chip('data-rs', x, esc(x), zelfde(x, f.soort))).join('')}</div>` : '';
   const catRij = cats.length ? `<div class="chips recept-filter">${cats.map((x) => chip('data-rc', x, esc(x), zelfde(x, f.cat))).join('')}</div>` : '';
+  // alle filterknoppen samen in één uitklapmenu, zodat je op een smartphone niet opzij hoeft te schuiven
+  const actief = [f.fav && 'Favorieten', f.inHuis && 'Alles in huis', f.soort, f.cat].filter(Boolean);
+  const filterMenu = filterRij || catRij ? `<details class="uitklap filter-uitklap" data-uitklap="recept-filters"${ui.uitgeklapt.has('recept-filters') ? ' open' : ''}>
+      <summary><span>Filters${actief.length ? `<small class="stil"> · ${esc(actief.join(', '))}</small>` : ''}</span></summary>${filterRij}${catRij}</details>` : '';
   // zonder zoeken of filter: ingedeeld per soort gerecht
   let secties;
   if (!zoek && !gefilterd && soorten.length) {
@@ -1743,7 +1747,7 @@ function tekenRecepten() {
     <header class="kop"><h1>Recepten</h1>
       <div class="kop-acties">${instellingenKnop}<button class="knop primair" id="r-nieuw">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}<span>Recept</span></button></div></header>
     ${S.recepten.length ? `<div class="zoek">${ICOON.zoek}<input type="search" id="zoek-recept" placeholder="Zoek op recept, categorie of ingrediënt" value="${esc(ui.receptZoek)}" autocomplete="off"></div>` : ''}
-    ${filterRij}${catRij}
+    ${filterMenu}
     ${sugg.length && !zoek && !gefilterd ? `<section class="sectie"><div class="sectie-titel">Gebruikt wat op moet</div><ul class="lijst">
       ${sugg.map(({ r, gebruikt }) => `<li><button class="rij" data-recept="${r.id}"><span class="stip ${gebruikt.some((p) => p.datumtype === 'TGT') ? 'rood' : 'oranje'}"></span>
         <span class="naam">${esc(r.titel)}<small>${esc(gebruikt.map((p) => p.naam.toLowerCase()).join(', '))}</small></span></button></li>`).join('')}</ul></section>` : ''}
