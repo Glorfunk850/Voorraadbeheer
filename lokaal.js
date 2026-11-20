@@ -78,6 +78,8 @@
       recept_categorieen: ['Vegetarisch', 'Vlees', 'Vis', 'Pasta', 'Snel', 'Feestelijk'],
       winkels: [], // waar je boodschappen doet (zelf aan te vullen); prijzen per winkel staan in de catalogus
       maaltijden: ['Ontbijt', 'Lunch', 'Avondeten'], // momenten in de maaltijdplanner
+      // eenheden voor voorraad en boodschappen (zelf aan te passen bij Instellingen)
+      eenheden: ['stuks', 'g', 'kg', 'ml', 'cl', 'dl', 'l', 'pak', 'blik', 'fles', 'pot', 'zak', 'doos'],
     },
   });
   let S = STANDAARD();
@@ -188,7 +190,11 @@
 
   // ------------------------------------------------------------------ logica
   // Inhoud per verpakking van één boodschap (bv. pak à 500 g): alleen bij telbare eenheden.
-  const TELBARE = new Set(['stuks', 'pak', 'blik', 'fles', 'pot', 'zak', 'doos']);
+  // Telbaar: stuks, verpakkingen en zelf toegevoegde eenheden (bv. bokaal); niet: gewichten, volumes en receptmaten.
+  const NIET_TELBAAR = new Set(['', 'g', 'kg', 'ml', 'cl', 'dl', 'l', 'el', 'tl', 'snuf', 'teen', 'takje', 'bos', 'kopje', 'plak', 'scheut', 'handvol', 'blad']);
+  const MAAT = new Set(['g', 'kg', 'ml', 'cl', 'dl', 'l']);
+  const TELBARE = { has: (e) => typeof e === 'string' && (!NIET_TELBAAR.has(e)
+    || (!!e && !MAAT.has(e) && Array.isArray(S.instellingen.eenheden) && S.instellingen.eenheden.includes(e))) };
   function boodschapInhoud(eenheid, inhoud, inhoudEenheid) {
     const i = getal(inhoud);
     return TELBARE.has(eenheid || 'stuks') && i > 0 && inhoudEenheid ? { inhoud: i, inhoud_eenheid: inhoudEenheid } : {};
@@ -514,6 +520,18 @@
       }
       if (data.veld === 'maaltijd') {
         for (const m of S.planning) if (zelfde(m.maaltijd, data.van)) m.maaltijd = data.naar || '';
+        return alles();
+      }
+      if (data.veld === 'eenheid') {
+        // eigen eenheid hernoemd (bv. bokaal → bokaal glas): overal mee aanpassen
+        const van = data.van, naar = data.naar;
+        if (!van || !naar) return alles();
+        for (const x of [...S.producten, ...S.boodschappen, ...S.catalogus]) {
+          if (x.eenheid === van) x.eenheid = naar;
+          if (x.grootverpakking && x.grootverpakking.eenheid === van) x.grootverpakking.eenheid = naar;
+        }
+        for (const c of S.catalogus) for (const pr of c.prijzen || []) if (pr.per === van) pr.per = naar;
+        for (const r of S.recepten) for (const i of r.ingredienten || []) if (i.eenheid === van) i.eenheid = naar;
         return alles();
       }
       if (data.veld === 'winkel') {

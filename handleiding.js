@@ -223,7 +223,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <p>Met <b>−</b> en <b>+</b> kies je hoeveel dagen voor de datum een product bij <b>Op te gebruiken</b> verschijnt: apart voor <i>Te gebruiken tot</i> en <i>Ten minste houdbaar tot</i> (0 tot 60 dagen).</p>
 
 <h3>Je lijsten</h3>
-<p>Zes lijsten klap je open door erop te tikken. Ze werken allemaal op dezelfde manier.</p>
+<p>Zeven lijsten klap je open door erop te tikken. Ze werken allemaal op dezelfde manier.</p>
 <table>
   <tr><th>Lijst</th><th>Waarvoor</th><th>Bij de start</th></tr>
   <tr><td>Plaatsen</td><td>Waar een product ligt</td><td>Koelkast, Diepvries, Voorraadkast</td></tr>
@@ -232,7 +232,9 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <tr><td>Soorten gerechten</td><td>Indeling van recepten (één per recept)</td><td>Ontbijt, Soep, Hoofdgerecht, Dessert …</td></tr>
   <tr><td>Receptcategorieën</td><td>Extra labels voor recepten</td><td>Vegetarisch, Vlees, Vis, Pasta, Snel, Feestelijk</td></tr>
   <tr><td>Maaltijden in de planner</td><td>Momenten per dag</td><td>Ontbijt, Lunch, Avondeten</td></tr>
+  <tr><td>Eenheden</td><td>Waarin je voorraad en boodschappen telt</td><td>stuks, g, kg, ml, cl, dl, l, pak, blik, fles, pot, zak, doos</td></tr>
 </table>
+<p><b>Eenheden</b>: voeg je eigen eenheid toe, bv. <i>bokaal</i>, <i>tube</i> of <i>rol</i>. Die kun je daarna overal kiezen (voorraad, boodschappen, prijs per …, recepten) en herkent de app ook als je bovenaan bij Boodschappen <code>2 bokaal augurken</code> typt. Een eigen eenheid telt als verpakking: je kunt er een inhoud per stuk bij invullen (bv. bokaal à 350 g). Een eigen eenheid kun je hernoemen; de standaardeenheden (g, kg, l …) niet, want daarmee rekent de app. Verwijder je een eenheid, dan kun je ze niet meer kiezen, maar producten die ze al hebben, houden ze. <i>stuks</i> kun je niet verwijderen.</p>
 <ul>
   <li><b>Toevoegen</b>: typ onderaan een naam en tik op <b>+</b>.</li>
   <li><b>Hernoemen</b>: tik op een naam. De nieuwe naam komt ook bij al je producten of recepten.</li>
