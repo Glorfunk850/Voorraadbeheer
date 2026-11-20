@@ -35,6 +35,21 @@ const EENHEDEN = {
 };
 const EENHEID_VAN = {};
 for (const [eenheid, vormen] of Object.entries(EENHEDEN)) for (const v of vormen) EENHEID_VAN[v] = eenheid;
+// Zelf toegevoegde eenheden (Instellingen → Eenheden), bv. bokaal of tube: ook herkennen in "2 bokaal augurken".
+let EIGEN = {};
+/** Eigen eenheden doorgeven (enkelvoud); gewone meervouden worden ook herkend: bokalen, tubes, rollen, potjes … */
+export function eigenEenhedenZetten(lijst) {
+  EIGEN = {};
+  for (const e of Array.isArray(lijst) ? lijst : []) {
+    const w = String(e || '').toLowerCase().trim();
+    if (!w || EENHEID_VAN[w]) continue;
+    const vormen = [w, w + 's', w + "'s", w + 'n', w + 'en', w + w.slice(-1) + 'en', w + 'je', w + 'jes'];
+    const kort = w.match(/^(.*)([aeou])\2([^aeiou])$/); // bokaal -> bokalen, tafereel -> taferelen
+    if (kort) vormen.push(kort[1] + kort[2] + kort[3] + 'en');
+    for (const v of vormen) if (!EENHEID_VAN[v] && !EIGEN[v]) EIGEN[v] = w;
+  }
+}
+const eenheidVan = (w) => EENHEID_VAN[w] || EIGEN[w];
 
 // Kopje: alleen het woord, eventueel gevolgd door ":", "(…)" of "voor 4 personen" — niet een zin die met "ingrediënten" begint.
 const KOP_INGREDIENTEN = /^(ingredi[eëé]nten|benodigdheden|nodig|wat heb je nodig|je hebt nodig|boodschappen(lijst)?|ingredients)\s*(?:[:(-]|voor\b|$)/i;
@@ -74,7 +89,7 @@ export function ingredientOntleden(regel) {
       resultaat.hoeveelheid = hv;
       let rest = m[3];
       const woord = (m[2] || '').toLowerCase().replace(/\.$/, '');
-      if (woord && EENHEID_VAN[woord]) resultaat.eenheid = EENHEID_VAN[woord];
+      if (woord && eenheidVan(woord)) resultaat.eenheid = eenheidVan(woord);
       else if (woord) rest = (m[2] + (rest ? ' ' + rest : '')).replace(/\s+([,;:)])/g, '$1');
       resultaat.naam = rest.replace(/^(van de|van het|van|aan)\s+/i, '').trim();
       if (!resultaat.eenheid) resultaat.eenheid = 'stuks';
@@ -87,14 +102,14 @@ export function ingredientOntleden(regel) {
   if (m && m[1] && /[a-z]/i.test(m[1])) {
     const hv = getalUit(m[2]);
     const woord = (m[3] || '').toLowerCase().replace(/\.$/, '');
-    if (hv !== null && (!woord || EENHEID_VAN[woord])) {
-      return opschonen({ hoeveelheid: hv, eenheid: EENHEID_VAN[woord] || 'stuks', naam: m[1].trim() });
+    if (hv !== null && (!woord || eenheidVan(woord))) {
+      return opschonen({ hoeveelheid: hv, eenheid: eenheidVan(woord) || 'stuks', naam: m[1].trim() });
     }
   }
   // "snufje zout", "peper en zout"
   const eerste = tekst.split(' ')[0].toLowerCase();
-  if (EENHEID_VAN[eerste] && tekst.includes(' ')) {
-    return opschonen({ hoeveelheid: 1, eenheid: EENHEID_VAN[eerste], naam: tekst.slice(eerste.length).trim() });
+  if (eenheidVan(eerste) && tekst.includes(' ')) {
+    return opschonen({ hoeveelheid: 1, eenheid: eenheidVan(eerste), naam: tekst.slice(eerste.length).trim() });
   }
   return opschonen(resultaat);
 }
