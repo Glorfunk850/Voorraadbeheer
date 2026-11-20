@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 77;
+const APP_VERSIE = 78;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -445,6 +445,18 @@ function prijzenSorteren(lijst) {
 }
 const prijzenGesorteerd = (naam, inh) => prijzenSorteren(prijzenVan(naam, inh === undefined ? null : inh));
 const goedkoopste = (naam, inh) => prijzenGesorteerd(naam, inh)[0] || null;
+/**
+ * Winkel (goedkoopste prijsregel) voor een boodschap. Is er geen prijs voor precies dit merk en deze inhoud,
+ * dan die van hetzelfde merk (andere inhoud), en anders alle prijzen van het product: zo komt een boodschap
+ * altijd op de lijst van een winkel zodra er ergens een prijs bij het product ingevuld is.
+ */
+function winkelVoor(naam, inh) {
+  const p = goedkoopste(naam, inh);
+  if (p) return p;
+  const alle = prijzenVan(naam), m = prijsMerk(inh);
+  const zelfdeMerk = m ? alle.filter((x) => prijsMerk(x) === m) : [];
+  return prijzenSorteren(zelfdeMerk.length ? zelfdeMerk : alle)[0] || null;
+}
 /** Geschatte prijs van een boodschap bij prijsregel p, of null als dat niet te berekenen is. */
 function kostprijs(b, p) {
   if (b.hoeveelheid === null || b.hoeveelheid === undefined) return TELBAAR.has(p.per) ? p.prijs : null;
@@ -470,7 +482,7 @@ function merkPrijzen(b) {
   }
   return uit.sort((x, y) => (x.kost ?? Infinity) - (y.kost ?? Infinity) || x.merk.localeCompare(y.merk, 'nl'));
 }
-const lijstMelding = (naam, inh) => { const g = goedkoopste(naam, inh); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
+const lijstMelding = (naam, inh) => { const g = winkelVoor(naam, inh); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
 const prijsRegelTekst = (p) => `${euro(p.prijs)} per ${perTekst(p.per)}`;
 
 /** Invulvelden voor de prijzen: kies de eenheid (per kg, per stuk ...), één regel per winkel uit Instellingen, plus zelf winkels toevoegen. */
@@ -1519,7 +1531,7 @@ function productFormulier(bestaand, sjabloon = {}) {
 function tekenBoodschappen() {
   // Elke boodschap staat op de algemene lijst én op de lijst van de winkel waar ze het goedkoopst is.
   // Het is telkens dezelfde boodschap: afvinken op de ene lijst vinkt ze dus ook af op de andere.
-  const metWinkel = S.boodschappen.map((b) => ({ b, p: goedkoopste(b.naam, b) }));
+  const metWinkel = S.boodschappen.map((b) => ({ b, p: winkelVoor(b.naam, b) }));
   const telPer = new Map();
   for (const x of metWinkel) if (x.p && !x.b.afgevinkt) telPer.set(x.p.winkel.toLowerCase(), (telPer.get(x.p.winkel.toLowerCase()) || 0) + 1);
   const tabs = uniek(metWinkel.filter((x) => x.p).map((x) => x.p.winkel)).sort((a, b) => winkelPlek(a) - winkelPlek(b) || a.localeCompare(b, 'nl'));

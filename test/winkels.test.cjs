@@ -173,6 +173,21 @@ async function main() {
   const koffieRegel = await page.textContent('.lijst .rij:has-text("Koffie") small');
   controle(koffieRegel.includes('Colruyt') && koffieRegel.includes('5,00'), `1 pak koffie à 500 g bij € 10 per kg = € 5,00 (${koffieRegel.trim()})`);
 
+  // prijzen alleen bij een merk en een inhoud: een boodschap zonder merk (of met een andere inhoud) komt toch op de lijst van een winkel
+  await api('POST', 'producten', { naam: 'Speculoos', hoeveelheid: 1, eenheid: 'pak' });
+  await api('POST', 'prijzen', { naam: 'Speculoos', eenheid: 'pak', prijzen: [
+    { winkel: 'Aldi', prijs: 2.1, per: 'pak', merk: 'Lotus', inhoud: 250, inhoud_eenheid: 'g' },
+    { winkel: 'Colruyt', prijs: 1.9, per: 'pak', merk: 'Lotus', inhoud: 250, inhoud_eenheid: 'g' }] });
+  await api('POST', 'boodschappen', { naam: 'Speculoos', hoeveelheid: 1, eenheid: 'pak' });
+  await api('POST', 'boodschappen', { naam: 'Speculoos', hoeveelheid: 1, eenheid: 'pak', merk: 'Lotus', inhoud: 500, inhoud_eenheid: 'g' });
+  await page.goto(basis + '#boodschappen');
+  await page.reload();
+  await page.waitForSelector('.winkel-uitklap');
+  await page.click('.winkel-tabs [data-winkel="Colruyt"]');
+  const speculoos = await page.$$eval('#inhoud .lijst .naam', (l) => l.filter((x) => x.textContent.includes('Speculoos')).length);
+  controle(speculoos === 2, `speculoos zonder merk en met een andere inhoud staat op de lijst van Colruyt (${speculoos}×)`);
+  await page.click('.winkel-tabs [data-winkel=""]');
+
   // winkel hernoemen past de prijzen mee aan
   await api('PUT', 'instellingen', { winkels: ['Colruyt', 'Lidl', 'Delhaize'] });
   d = await api('POST', 'hernoemen', { veld: 'winkel', van: 'Aldi', naar: 'Lidl' });
