@@ -761,20 +761,55 @@ const instellingenKnop = `<button class="icoon alleen-mobiel" data-actie="naar" 
 // ---------------------------------------------------------------------------
 // VOORRAAD
 // ---------------------------------------------------------------------------
+// Een geopende verpakking telt als opgebruikt: ze staat nog in je voorraad (om op te maken), maar niet in de aantallen of het minimum.
+const geopendTekst = (p) => (p && p.geopend ? `geopend ${dagenTot(p.geopend) === 0 ? 'vandaag' : dagenTot(p.geopend) === -1 ? 'gisteren' : 'op ' + datumNL(p.geopend)}` : '');
+/** Hoeveel er (ongeopend) in huis is van een groep voorraadregels, bv. "2 pak à 500 g + 1 pak à 1 kg". */
+function groepHoeveelheid(regels) {
+  const per = new Map();
+  for (const p of regels.filter((x) => !x.geopend && x.hoeveelheid > 0)) {
+    const k = `${p.eenheid}|${prijsSleutel(inhoudVan(p) ? p : {})}|${p.uitlekgewicht ? 1 : 0}`;
+    if (per.has(k)) per.get(k).hoeveelheid += p.hoeveelheid; else per.set(k, { ...p });
+  }
+  return [...per.values()].map((p) => voorraadTekst({ ...p, hoeveelheid: Math.round(p.hoeveelheid * 1000) / 1000 })).join(' + ');
+}
 function tekenVoorraad() {
   const zoek = ui.zoek.trim().toLowerCase();
-  const passend = S.producten.filter((p) => (!zoek || `${p.naam} ${p.merk || ''} ${p.locatie} ${p.categorie} ${p.notitie} ${p.barcode || ''}`.toLowerCase().includes(zoek)));
+  const passend = S.producten.filter((p) => (!zoek || `${p.naam} ${p.merk || ''} ${p.locatie} ${p.categorie} ${p.notitie} ${p.barcode || ''}${p.geopend ? ' geopend' : ''}`.toLowerCase().includes(zoek)));
   const metH = passend.map((p) => ({ p, h: houdbaarheid(p) }));
   const opTeGebruiken = metH.filter((x) => x.h.niveau > 0)
     .sort((a, b) => (b.h.niveau >= 3) - (a.h.niveau >= 3) || a.p.vervaldatum.localeCompare(b.p.vervaldatum));
-  const rest = metH.filter((x) => x.h.niveau === 0 && x.p.hoeveelheid > 0);
-  const op = metH.filter((x) => !(x.p.hoeveelheid > 0));
 
-  const rij = ({ p, h }, metStatus) => `<li><button class="rij${p.hoeveelheid > 0 ? '' : ' op'}" data-product="${p.id}">
-      ${metStatus ? `<span class="stip ${h.kleur}"></span>` : ''}
-      <span class="naam">${esc(p.naam)}${merkTekst(p)}${metStatus ? `<small>${esc(h.uitleg)}</small>` : ''}</span>
-      <span class="rechts${metStatus ? ' ' + h.kleur : ''}">${metStatus ? esc(h.kort) : p.hoeveelheid > 0 ? esc(voorraadTekst(p)) : 'op'}</span>
+  const rij = ({ p, h }) => `<li><button class="rij" data-product="${p.id}">
+      <span class="stip ${h.kleur}"></span>
+      <span class="naam">${esc(p.naam)}${merkTekst(p)}${p.geopend ? '<span class="geopend-tag">geopend</span>' : ''}<small>${esc(h.uitleg)}</small></span>
+      <span class="rechts ${h.kleur}">${esc(h.kort)}</span>
     </button></li>`;
+
+  // Alle producten per categorie (uitklapbaar), per product en merk één regel met wat er (ongeopend) in huis is.
+  // Wat op is (0), staat onderaan bij "Op", elk apart.
+  const groepen = new Map();
+  for (const { p } of metH.filter((x) => x.p.hoeveelheid > 0)) {
+    const k = `${p.naam.trim().toLowerCase()}|${String(p.merk || '').trim().toLowerCase()}|${maatVan(p)}`;
+    if (!groepen.has(k)) groepen.set(k, []);
+    groepen.get(k).push(p);
+  }
+  const perCategorie = new Map();
+  const op = metH.filter((x) => !(x.p.hoeveelheid > 0)).map((x) => x.p).sort((a, b) => a.naam.localeCompare(b.naam, 'nl') || (a.merk || '').localeCompare(b.merk || '', 'nl'));
+  for (const g of groepen.values()) {
+    const cat = (g.find((p) => (p.categorie || '').trim())?.categorie || '').trim() || ZONDER_CATEGORIE;
+    if (!perCategorie.has(cat)) perCategorie.set(cat, []);
+    perCategorie.get(cat).push(g);
+  }
+  const opNaam = (a, b) => a[0].naam.localeCompare(b[0].naam, 'nl') || (a[0].merk || '').localeCompare(b[0].merk || '', 'nl');
+  const cats = [...perCategorie.keys()].sort((a, b) => (a === ZONDER_CATEGORIE) - (b === ZONDER_CATEGORIE) || a.localeCompare(b, 'nl'));
+  const groepRij = (g) => {
+    const open = g.filter((p) => p.geopend && p.hoeveelheid > 0);
+    const hoeveel = groepHoeveelheid(g);
+    const onder = open.length ? (open.length === 1 ? geopendTekst(open[0]) : `${open.length} geopend`) : '';
+    return `<li><button class="rij${hoeveel ? '' : ' alleen-geopend'}" data-groep="${g.map((p) => p.id).join(',')}">
+      <span class="naam">${esc(g[0].naam)}${merkTekst(g[0])}${onder ? `<small class="geopend-tekst">${esc(onder)}</small>` : ''}</span>
+      <span class="rechts">${hoeveel ? esc(hoeveel) : 'geopend'}</span></button></li>`;
+  };
 
   let lijst = '';
   if (!S.producten.length) {
@@ -782,24 +817,16 @@ function tekenVoorraad() {
   } else if (!passend.length) {
     lijst = `<div class="leeg">Niets gevonden.</div>`;
   } else {
-    if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map((x) => rij(x, true)).join('')}</ul></section>`;
-    // De rest van de voorraad verschijnt alleen bij zoeken
-    if (zoek && rest.length) {
-      // Elk product maar één keer tonen per merk (meerdere partijen van hetzelfde product en merk samen), zonder aantallen
-      const groepen = new Map();
-      for (const x of rest) {
-        const k = `${x.p.naam.trim().toLowerCase()}|${String(x.p.merk || '').trim().toLowerCase()}|${maatVan(x.p)}`;
-        if (!groepen.has(k)) groepen.set(k, []);
-        groepen.get(k).push(x.p);
-      }
-      const items = [...groepen.values()].sort((a, b) => a[0].naam.localeCompare(b[0].naam, 'nl') || (a[0].merk || '').localeCompare(b[0].merk || '', 'nl'));
-      lijst += `<section class="sectie"><div class="sectie-titel">Gevonden</div><ul class="lijst">${items.map((g) =>
-        `<li><button class="rij" data-groep="${g.map((p) => p.id).join(',')}"><span class="naam">${esc(g[0].naam)}${merkTekst(g[0])}</span></button></li>`).join('')}</ul></section>`;
-    }
-    if (!zoek && !opTeGebruiken.length) {
-      lijst += `<div class="leeg"><b>Niets dat binnenkort op moet</b>Zoek een product om het te bekijken of aan te passen.</div>`;
-    }
-    if (op.length) lijst += `<section class="sectie"><div class="sectie-titel">Op</div><ul class="lijst">${op.map((x) => rij(x, false)).join('')}</ul></section>`;
+    if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map(rij).join('')}</ul></section>`;
+    // elke categorie is uitklapbaar (dicht tot je erop tikt; open/dicht blijft onthouden zolang de app open is);
+    // tijdens het zoeken staat alles open, zodat je meteen ziet wat je vond
+    if (cats.length) lijst += `<div class="sectie-titel voorraad-alles">Alle producten</div>` + cats.map((k) => {
+      const g = perCategorie.get(k).sort(opNaam), sleutel = `voorraad-categorie:${k.toLowerCase()}`;
+      return `<details class="sectie uitklap voorraad-groep" data-uitklap="${esc(sleutel)}"${zoek || ui.uitgeklapt.has(sleutel) ? ' open' : ''}>
+        <summary><span>${esc(k)}</span><span class="stil">${g.length}</span></summary><ul class="lijst">${g.map(groepRij).join('')}</ul></details>`;
+    }).join('');
+    if (op.length) lijst += `<section class="sectie"><div class="sectie-titel">Op</div><ul class="lijst">${op.map((p) =>
+      `<li><button class="rij op" data-product="${p.id}"><span class="naam">${esc(p.naam)}${merkTekst(p)}</span><span class="rechts">op</span></button></li>`).join('')}</ul></section>`;
   }
 
   inhoudZetten(`
@@ -810,7 +837,7 @@ function tekenVoorraad() {
       </div></header>
     <div class="installeer-tip" id="installeer-tip" hidden></div>
     ${S.producten.length ? `
-    <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
+    <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken in voorraad" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
     ${lijst}`);
   installTipTekenen();
   $m('#nieuw').onclick = () => productFormulier(null);
@@ -821,19 +848,22 @@ function tekenVoorraad() {
     const ids = b.dataset.groep.split(',').map(Number);
     if (ids.length === 1) productPaneel(ids[0]); else partijenPaneel(ids);
   }));
+  if (!zoek) $$m('.voorraad-groep[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) ui.uitgeklapt.add(d.dataset.uitklap); else ui.uitgeklapt.delete(d.dataset.uitklap);
+  }));
 }
 
 // Meerdere partijen van hetzelfde product: kies welke je wilt bekijken
 function partijenPaneel(ids) {
   paneelOpenen((el) => {
     const lijst = ids.map((id) => S.producten.find((p) => p.id === id)).filter(Boolean)
-      .sort((a, b) => (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
+      .sort((a, b) => !b.geopend - !a.geopend || (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
     if (!lijst.length) return paneelSluiten();
     if (lijst.length === 1) return productPaneel(lijst[0].id);
     el.innerHTML = `${paneelKop(esc(lijst[0].naam), 'Kies welke je wilt bekijken')}
       <ul class="lijst">${lijst.map((p) => `<li><button class="rij" data-partij="${p.id}"><span class="naam">${
         esc(p.vervaldatum ? `${TYPE_LANG[p.datumtype] || TYPE_LANG.THT} ${datumNL(p.vervaldatum, true)}` : 'Geen houdbaarheidsdatum')
-      }<small>${esc([p.merk, maatWoord(maatVan(p)), p.locatie, p.categorie].filter(Boolean).join(' · ') || ' ')}</small></span><span class="rechts">›</span></button></li>`).join('')}</ul>`;
+      }<small>${esc([geopendTekst(p), p.merk, maatWoord(maatVan(p)), p.locatie, p.categorie].filter(Boolean).join(' · ') || ' ')}</small></span><span class="rechts">${esc(p.hoeveelheid > 0 ? voorraadTekst(p) : 'op')}</span></button></li>`).join('')}</ul>`;
     sluitKnoppen(el);
     $$('[data-partij]', el).forEach((b) => (b.onclick = () => productPaneel(+b.dataset.partij)));
   });
@@ -857,6 +887,7 @@ function productPaneel(id) {
     const delen = !telbaar && p.hoeveelheid > 0 ? [[p.hoeveelheid / 4, '¼'], [p.hoeveelheid / 2, '½'], [null, 'Alles']] : [];
     el.innerHTML = `
       ${paneelKop(esc(p.naam), esc([p.merk, maatWoord(maatVan(p)), p.locatie, p.categorie].filter(Boolean).join(' · ')))}
+      ${p.geopend ? `<div class="geopend-blok"><span class="geopend-tag">geopend</span><div>${esc(geopendTekst(p).replace(/^./, (c) => c.toUpperCase()))}<small>Telt als opgebruikt: niet meegeteld in je voorraad en het minimum.</small></div></div>` : ''}
       <div class="hoeveelheid">
         ${telbaar ? `<button class="rond" id="min" aria-label="Eén minder" ${p.hoeveelheid >= 1 ? '' : 'disabled'}>−</button>` : ''}
         <div class="getal">${esc(fmt(p.hoeveelheid))}<span>${esc(p.eenheid === 'stuks' ? (p.hoeveelheid === 1 ? 'stuk' : 'stuks') : p.eenheid)}</span>${inh ? `<small class="inhoud-per">à ${esc(hoeveelTekst(inh.per, inh.eenheid))}${esc(uitlekTekst(p))}${p.hoeveelheid > 0 && p.hoeveelheid !== 1 ? ` · samen ${esc(samenTekst(p.hoeveelheid * inh.per, inh.eenheid))}` : ''}</small>` : uitlekTekst(p) ? '<small class="inhoud-per">uitlekgewicht</small>' : ''}</div>
@@ -866,6 +897,8 @@ function productPaneel(id) {
       ${datum}
       ${prijzenBlok(p.naam)}
       <ul class="acties">
+        ${p.geopend ? `<li><button id="leeg">Op (weggooien of opgebruikt)</button></li><li><button id="sluiten">Toch niet geopend</button></li>`
+          : p.hoeveelheid > 0 ? `<li><button id="openen">${telbaar && p.hoeveelheid > 1 ? `1 ${esc(p.eenheid === 'stuks' ? 'stuk' : meervoud(p.eenheid, 1))} geopend` : 'Geopend'} <small class="stil">telt als opgebruikt</small></button></li>` : ''}
         <li><button id="erbij">Nieuwe verpakking toevoegen</button></li>
         <li><button id="lijst">Op boodschappenlijst</button></li>
         ${p.grootverpakking?.potten && p.eenheid !== 'pot' && p.eenheid !== p.grootverpakking.eenheid ? `<li><button id="groot-erbij">${esc(grootNaam(p.grootverpakking))} erbij <small class="stil">+${esc(fmt(p.grootverpakking.potten))} ${esc(meervoud(p.eenheid, p.grootverpakking.potten))} in je voorraad</small></button></li>` : ''}
@@ -900,6 +933,9 @@ function productPaneel(id) {
     });
     knop('prijzen', () => prijzenPaneel(p.naam, p.eenheid, () => productPaneel(p.id)));
     knop('weggooien', () => verbruiken(p, null, 'weggegooid', true));
+    knop('openen', () => openen(p));
+    knop('leeg', () => verbruiken(p, null, 'verbruikt', true));
+    knop('sluiten', async () => { await api('POST', `producten/${p.id}/sluiten`, {}); paneelSluiten(); toast(`${p.naam} staat weer als ongeopend in je voorraad`); });
     knop('bewerk', () => productFormulier(p));
     knop('verwijder', async () => {
       if (!(await vraag(`${p.naam} verwijderen?`, { ja: 'Verwijderen', gevaar: true }))) return;
@@ -926,7 +962,7 @@ const variantLabel = (v) => [v.merk, inhoudLabel(v), maatVan(v) ? `(${maatWoord(
 /** Hoeveel heb je in huis van alle merken en inhouden samen (in de eenheid van het product)? Met `maat`: alleen die grootte. */
 function totaalInHuis(naam, maat) {
   const c = catalogusVan(naam), eenheid = c?.eenheid || S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || 'stuks';
-  return S.producten.filter((p) => zelfde(p.naam, naam) && (maat === undefined || maatVan(p) === maat)).reduce((s, p) => s + (omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid)
+  return S.producten.filter((p) => zelfde(p.naam, naam) && !p.geopend && (maat === undefined || maatVan(p) === maat)).reduce((s, p) => s + (omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid)
     ?? (TELBAAR.has(p.eenheid || 'stuks') && TELBAAR.has(eenheid) ? p.hoeveelheid || 0 : 0)), 0);
 }
 /** Grote verpakking van een product leesbaar, bv. "1 zak à 5 kg · vult ±4 potten". */
@@ -1151,6 +1187,14 @@ function catalogusItem(c0, vi = 0) {
       paneelSluiten();
     };
   });
+}
+
+/** Eén verpakking (of alles, bij gewicht en volume) als geopend aanduiden: telt als opgebruikt. */
+async function openen(p) {
+  const r = await api('POST', `producten/${p.id}/openen`, { hoeveelheid: 1 });
+  const nieuw = r && r.nieuw_id;
+  if (nieuw) productPaneel(nieuw); else paneelSluiten();
+  toast(`${p.naam} geopend: telt als opgebruikt`, 'Ongedaan maken', () => nieuw && api('POST', `producten/${nieuw}/sluiten`, {}));
 }
 
 async function verbruiken(p, hoeveelheid, soort, sluiten) {
@@ -1936,8 +1980,9 @@ function beschikbaarheid(ingr, factor = 1, namen = productnamen(), geleerd = gel
   if (altijdInHuis(ingr)) return { st: 'ok', partijen: [], altijd: true };
   const naam = ingr.voorraadnaam || zoekVoorraadnaam(ingr.naam, namen, geleerd);
   if (!naam) return { st: 'ontbreekt', naam: '' };
+  // geopende verpakkingen eerst opmaken
   const partijen = S.producten.filter((p) => zelfde(p.naam, naam) && p.hoeveelheid > 0 && houdbaarheid(p).niveau !== 4)
-    .sort((a, b) => (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
+    .sort((a, b) => !b.geopend - !a.geopend || (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
   if (!partijen.length) return { st: 'ontbreekt', naam };
   // eenheid om in te rekenen: die van de voorraad, of de inhoud per verpakking als het recept bv. in gram rekent
   let eenheid = partijen[0].eenheid;

@@ -17,7 +17,7 @@ export const HANDLEIDING = `
 <p>Op de telefoon staan de knoppen onderaan, op de computer links.</p>
 <table>
   <tr><th>Scherm</th><th>Waarvoor</th></tr>
-  <tr><td>Voorraad</td><td>Wat binnenkort op moet, wat op is, en zoeken in alles wat je hebt</td></tr>
+  <tr><td>Voorraad</td><td>Wat binnenkort op moet, al je producten per categorie, wat op is, en zoeken</td></tr>
   <tr><td>Boodschappen</td><td>Je boodschappenlijst, per winkel en met prijzen. Het getal op de knop is het aantal open boodschappen</td></tr>
   <tr><td>Recepten</td><td>Je recepten, met hoeveel ingrediënten je in huis hebt</td></tr>
   <tr><td>Planner</td><td>Wat je deze week eet</td></tr>
@@ -26,7 +26,8 @@ export const HANDLEIDING = `
 <p>Bijna alles opent in een paneel dat van onderen inschuift (telefoon) of rechts verschijnt (computer). Sluiten doe je met <b>×</b>, door ernaast te tikken of met Esc.</p>
 
 <h2>Voorraad</h2>
-<p>Het voorraadscherm toont alleen wat aandacht vraagt: <b>Op te gebruiken</b> (datum komt eraan of is voorbij) en <b>Op</b> (producten waarvan je niets meer hebt). Al de rest vind je door bovenaan te <b>zoeken</b> op naam, merk, plaats, categorie of notitie. Bij <b>Gevonden</b> staat elk product één keer per merk (en per grootte: <i>klein</i> of <i>groot</i>), met het merk achter de naam; tik erop om de verpakkingen van dat merk te zien.</p>
+<p>Het voorraadscherm toont bovenaan <b>Op te gebruiken</b> (datum komt eraan of is voorbij). Daaronder staan bij <b>Alle producten</b> al je producten per <b>categorie</b>. Elke categorie is <b>uitklapbaar</b>: tik erop om ze te openen of te sluiten; achter de naam staat hoeveel producten erin zitten. Producten zonder categorie staan onderaan bij <i>Zonder categorie</i>. Elk product staat er één keer per merk (en per grootte: <i>klein</i> of <i>groot</i>), met rechts hoeveel je (ongeopend) in huis hebt en eronder of er een verpakking <i>geopend</i> is; tik erop om de verpakkingen van dat merk te zien. Helemaal onderaan staat <b>Op</b> (producten waarvan je niets meer hebt).</p>
+<p>Met het <b>zoekveld</b> bovenaan zoek je op naam, merk, plaats, categorie of notitie (of op <i>geopend</i>). Tijdens het zoeken staan alleen de categorieën met iets dat past, en die staan open.</p>
 
 <h3>Een product toevoegen</h3>
 <ol>
@@ -54,11 +55,21 @@ export const HANDLEIDING = `
 <ul>
   <li><b>− en +</b> (bij stuks, pakken …): één minder of meer.</li>
   <li><b>Gebruikt: ¼, ½, Alles of Andere hoeveelheid</b> (bij gram, liter …).</li>
+  <li><b>Geopend</b> (of <b>1 fles geopend</b>, <b>1 pak geopend</b> … als je er meer hebt): zie hieronder.</li>
   <li><b>Nieuwe verpakking toevoegen</b>: zelfde product met een andere datum, bv. een tweede pak melk.</li>
   <li><b>Op boodschappenlijst</b>, <b>Prijzen invullen</b>, <b>Weggooien</b>, <b>Bewerken</b> of <b>Verwijderen</b>.</li>
 </ul>
 <p>Is het een kleine of grote verpakking, dan staat dat bovenaan in het paneel. <b>Nieuwe verpakking toevoegen</b> en <b>Op boodschappenlijst</b> nemen die grootte over: een grote fles komt dus als grote fles op je lijst.</p>
 <p>Na gebruiken, weggooien of verwijderen verschijnt onderaan <b>Ongedaan maken</b>. Heb je meerdere verpakkingen van hetzelfde product, dan kies je eerst welke je wilt bekijken.</p>
+
+<h3>Geopend</h3>
+<p>Open je een verpakking, tik dan op het product en op <b>Geopend</b>. Een geopende verpakking <b>telt als opgebruikt</b>: ze gaat van je voorraad af en telt niet mee voor de <b>minimumvoorraad</b>. Heb je bv. minimum 3 flessen melk en open je er een van de 3, dan komt er 1 fles op je boodschappenlijst.</p>
+<ul>
+  <li>Bij stuks, flessen, pakken … wordt telkens <b>één</b> verpakking geopend; de rest blijft ongeopend. Bij gram, liter … is het de hele verpakking.</li>
+  <li>De geopende verpakking blijft in je voorraad staan, met <i>geopend vandaag</i> (of de datum) erbij, zodat je weet dat je ze nog moet opmaken. Recepten gebruiken eerst wat geopend is.</li>
+  <li>Is ze leeg: tik erop en kies <b>Op</b>. Per vergissing geopend: <b>Toch niet geopend</b> (of <b>Ongedaan maken</b>), dan telt ze weer mee.</li>
+  <li>Wat je na het winkelen in je voorraad zet, wordt nooit bij een geopende verpakking geteld.</li>
+</ul>
 
 <h3>Minimumvoorraad</h3>
 <p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.
