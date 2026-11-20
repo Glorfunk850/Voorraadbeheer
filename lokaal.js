@@ -346,25 +346,6 @@
     Object.assign(c, { merk: v.merk, inhoud: v.inhoud, inhoud_eenheid: v.inhoud_eenheid, uitlekgewicht: v.uitlekgewicht });
     delete c.verpakking; Object.assign(c, maatVeld(maatVan(v)));
   }
-  /**
-   * Kleine of grote verpakking gekozen in de catalogus: ook op de voorraadregels (en open boodschappen) van die variant zetten,
-   * anders tellen ze niet mee voor het minimum van die grootte. Met maar één variant: alles met die naam. Een regel zonder
-   * grootte hoort erbij, tenzij er nog een andere variant met hetzelfde merk en dezelfde inhoud is (zonder grootte).
-   */
-  function maatDoorgeven(c, oud, maat) {
-    const varianten = variantenVan(c), oudeMaat = maatVan(oud);
-    const kern = (x) => `${String((x && x.merk) || '').trim().toLowerCase()}|${inhoudSleutel(x)}`;
-    const anderThuis = varianten.some((x) => kern(x) === kern(oud) && maatVan(x) !== oudeMaat && !maatVan(x));
-    const hoort = (x) => {
-      const m = maatVan(x);
-      if (m !== oudeMaat && !(m === '' && !anderThuis)) return false;
-      return varianten.length < 2 || kern(variantUit(x)) === kern(oud);
-    };
-    for (const p of S.producten) if (zelfde(p.naam, c.naam) && hoort({ ...p, ...boodschapInhoud(p.eenheid, p.inhoud, p.inhoud_eenheid) })) {
-      delete p.verpakking; Object.assign(p, maatVeld(maat)); p.gewijzigd = nu();
-    }
-    for (const b of S.boodschappen) if (zelfde(b.naam, c.naam) && !b.afgevinkt && b.bron !== 'minimum' && hoort(b)) { delete b.verpakking; Object.assign(b, maatVeld(maat)); }
-  }
   function catalogusBijwerken(p, teller = true, oudeNaam = null) {
     const naam = (p.naam || '').trim();
     if (!naam) return;
@@ -648,7 +629,6 @@
       // minimum voor het hele product: alle merken en inhouden samen (van de gekozen grootte: klein, groot of alle)
       if ('minimum' in data) { const m = getal(data.minimum), veld = catMinimumVeld(maatVan(data)); if (m > 0) c[veld] = m; else delete c[veld]; }
       if ('grootverpakking' in data) grootZetten(c.naam, grootUit(data.grootverpakking));
-      if ('verpakking' in data) maatDoorgeven(c, oud || v, maatVan(v));
       if ('inhoud' in data || 'merk' in data || 'verpakking' in data) variantBewaren(c, v, oud);
       else if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
       c.laatst = nu();
