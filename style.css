@@ -121,6 +121,7 @@ label.veld > span, .veld-titel { display: block; font-size: .8rem; color: var(--
 .segment { display: grid; grid-template-columns: 1fr 1fr; background: var(--veld); border-radius: 10px; padding: 3px; gap: 3px; }
 .segment button { border: 0; background: none; border-radius: 8px; padding: .5rem .4rem; font-size: .85rem; line-height: 1.25; color: var(--stil); }
 .segment button.aan { background: var(--achtergrond); color: var(--tekst); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.segment.drie { grid-template-columns: 1fr 1fr 1fr; }
 .segment-uitleg { font-size: .8rem; color: var(--stil); margin-top: .4rem; }
 
 /* ---------- lijsten ---------- */
@@ -350,6 +351,7 @@ details.filter-uitklap .recept-filter + .recept-filter { margin-top: .4rem; }
 .fav-knop { display: inline-flex; align-items: center; gap: .35rem; border: 0; background: none; padding: .2rem 0; color: var(--stil); font-size: .92rem; }
 .fav-knop svg { width: 18px; height: 18px; }
 .fav-knop.aan { color: var(--oranje); }
+.scherm-knop.aan { color: var(--accent); }
 .labels { display: flex; flex-wrap: wrap; gap: .35rem; margin: -.8rem 0 1.4rem; }
 .labels span { font-size: .8rem; color: var(--stil); border: 1px solid var(--lijn); border-radius: 999px; padding: .15rem .6rem; }
 .cat-nieuw { display: flex; gap: .5rem; margin: .6rem 0 1.2rem; }
