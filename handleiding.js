@@ -161,6 +161,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <li>Pas het aantal <b>personen</b> aan met <b>−</b> en <b>+</b>; de hoeveelheden rekenen mee.</li>
   <li>Bij elk ingrediënt zie je of het <b>niet in huis</b> is of dat je <b>te weinig</b> hebt.</li>
   <li><b>Favoriet maken</b>: de ster.</li>
+  <li><b>Scherm blijft aan</b>: zolang het recept open staat, gaat het scherm niet op stand-by, zodat je tijdens het koken niets hoeft aan te raken. Tik erop om het voor dit recept uit (of aan) te zetten. Wat standaard gebeurt, kies je bij Instellingen → <b>Scherm aan laten</b>.</li>
   <li><b>Gekookt</b>: kies hoeveel van elk ingrediënt van je voorraad afgaat en tik op <b>Aftrekken</b>. Wat het eerst vervalt, gaat eerst.</li>
   <li><b>Op boodschappenlijst…</b>: wat ontbreekt staat al aangevinkt. Pas aan, tik op <b>Alles aanvinken</b> of <b>Niets aanvinken</b> en dan op <b>… toevoegen</b>.</li>
   <li><b>Inplannen…</b>: zet het recept in de maaltijdplanner.</li>
@@ -196,6 +197,9 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 
 <h2>Instellingen</h2>
 <p>Bij <b>Instellingen</b> stel je de waarschuwingen in en beheer je je eigen lijsten. Wijzigingen worden meteen bewaard.</p>
+
+<h3>Scherm aan laten</h3>
+<p>Kies of het scherm van dit toestel niet op stand-by mag gaan: <b>Bij een recept</b> (standaard: zolang een recept open staat, handig tijdens het koken), <b>Altijd</b> (zolang de app open is; kost meer batterij) of <b>Nooit</b>. Dit geldt alleen voor het toestel waarop je het instelt. Ga je naar een andere app of vergrendel je zelf het scherm, dan gaat het gewoon uit; kom je terug in het recept, dan blijft het weer aan. Lukt het niet (oude browser, of batterijbesparing staat aan), dan staat dat bij Instellingen; stel dan op je toestel zelf in dat het scherm later uitgaat.</p>
 
 <h3>Waarschuwen, zoveel dagen vooraf</h3>
 <p>Met <b>−</b> en <b>+</b> kies je hoeveel dagen voor de datum een product bij <b>Op te gebruiken</b> verschijnt: apart voor <i>Te gebruiken tot</i> en <i>Ten minste houdbaar tot</i> (0 tot 60 dagen).</p>
@@ -307,6 +311,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <tr><td>Op mijn telefoon staan andere gegevens dan op mijn laptop</td><td>Zet synchroniseren tussen toestellen aan, of zet de gegevens over met een back-up. Synchroniseer je al: kijk bij Instellingen of er een foutmelding staat en tik op <b>Nu synchroniseren</b>.</td></tr>
   <tr><td>Melding "deze browser bewaart je gegevens niet"</td><td>Je gebruikt een privévenster. Open de app in een gewoon venster of installeer ze.</td></tr>
   <tr><td>"De app kon niet starten"</td><td>Herlaad de pagina en gebruik geen privévenster.</td></tr>
+  <tr><td>Het scherm gaat uit tijdens het koken</td><td>Kijk in het recept of <b>Scherm blijft aan</b> groen is en of bij Instellingen → <b>Scherm aan laten</b> niet op <b>Nooit</b> staat. Staat batterijbesparing aan, dan kan het toestel het scherm toch uitzetten.</td></tr>
   <tr><td>Iets per ongeluk weggegooid of verwijderd</td><td>Tik meteen op <b>Ongedaan maken</b> in de melding onderaan.</td></tr>
 </table>
 <p>Barcodes scannen en recepten van een foto inlezen staan in deze versie uit.</p>

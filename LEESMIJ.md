@@ -51,6 +51,14 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   en toont wat ontbreekt; jij kiest wat op de boodschappenlijst komt.
 - De maaltijden (ontbijt, lunch, avondeten) pas je aan bij Instellingen → **Maaltijden in de planner**.
 
+## Scherm aan laten tijdens het koken
+
+- Zolang een **recept** open staat, gaat het scherm niet op stand-by (Screen Wake Lock). Tik in het recept op
+  **Scherm blijft aan** om het voor dat recept uit of weer aan te zetten.
+- Bij Instellingen → **Scherm aan laten** kies je per toestel: **Bij een recept** (standaard), **Altijd** (zolang de app open is) of **Nooit**.
+- Werkt in recente versies van Chrome, Edge, Safari (iPhone/iPad vanaf iOS 16.4) en Firefox. Kan de browser het niet,
+  dan staat dat bij Instellingen.
+
 ## Online zetten met GitHub Pages (gratis, eenmalig ±10 minuten)
 
 1. Maak een gratis account op https://github.com (als je er nog geen hebt).

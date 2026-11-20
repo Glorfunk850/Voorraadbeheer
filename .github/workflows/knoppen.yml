@@ -41,3 +41,5 @@ jobs:
         run: node test/sync.test.cjs
       - name: Grote verpakking verdeeld over potten
         run: node test/potten.test.cjs
+      - name: Scherm aan laten tijdens het koken
+        run: node test/scherm.test.cjs

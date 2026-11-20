@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 68;
+const APP_VERSIE = 69;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -40,6 +40,7 @@ const ICOON = {
   ster: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
   label: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12.6V4.5a1 1 0 0 1 1-1h8.1a1 1 0 0 1 .7.3l7.4 7.4a1.5 1.5 0 0 1 0 2.1l-7.2 7.2a1.5 1.5 0 0 1-2.1 0l-7.6-7.6a1 1 0 0 1-.3-.7z"/><circle cx="8.2" cy="8.2" r="1.3"/></svg>',
   kalender: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/></svg>',
+  scherm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.6"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>',
   sterVol: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>',
 };
 
@@ -207,8 +208,10 @@ function paneelOpenen(teken, { breed = false } = {}) {
   document.body.style.overflow = 'hidden';
   document.body.classList.add('paneel-open');
   paneelVernieuwen = () => { teken(p); };
+  schermBijRecept = false; // receptPaneel zet dit zelf weer aan
   teken(p);
   p.scrollTop = 0;
+  schermBijwerken();
 }
 function paneelSluiten() {
   $('#paneel').hidden = true;
@@ -219,8 +222,59 @@ function paneelSluiten() {
   document.body.classList.remove('paneel-open');
   paneelVernieuwen = null;
   paneelStaat = {};
+  schermBijRecept = false;
+  schermBijwerken();
 }
 $('#sluier').onclick = paneelSluiten;
+
+// ---------------------------------------------------------------------------
+// Scherm aan laten: het scherm gaat niet op stand-by terwijl je kookt (Screen Wake Lock).
+// Per toestel bewaard (niet gesynchroniseerd: op de laptop wil je dat misschien niet):
+//   'recept' (standaard): zolang een recept open staat · 'altijd': zolang de app open is · 'uit'.
+// In een recept kun je het ook voor dat recept zelf aan- of uitzetten.
+// ---------------------------------------------------------------------------
+const SCHERM_KEUZES = ['recept', 'altijd', 'uit'];
+const schermKan = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
+let schermBijRecept = false;   // staat er nu een recept open?
+let schermEigen = null;        // { id, aan }: zelf gekozen in het open recept (anders volgt het de instelling)
+let schermSlot = null;         // het WakeLockSentinel zolang het scherm aan blijft
+let schermKet = Promise.resolve();
+function schermKeuze() {
+  try { const k = localStorage.getItem('scherm-aan'); if (SCHERM_KEUZES.includes(k)) return k; } catch { if (SCHERM_KEUZES.includes(ui.schermKeuze)) return ui.schermKeuze; }
+  return 'recept';
+}
+function schermKeuzeBewaren(k) { ui.schermKeuze = k; try { localStorage.setItem('scherm-aan', k); } catch { /* */ } schermBijwerken(); }
+/** Moet het scherm aan blijven in het recept dat nu open staat? */
+const schermInRecept = () => (schermEigen ? schermEigen.aan : schermKeuze() !== 'uit');
+const schermGewenst = () => schermKeuze() === 'altijd' || (schermBijRecept && schermInRecept());
+const schermIsAan = () => !!schermSlot && !schermSlot.released;
+function schermBijwerken() {
+  schermKet = schermKet.then(async () => {
+    const aan = schermKan && document.visibilityState === 'visible' && schermGewenst();
+    if (aan && !schermIsAan()) {
+      try {
+        schermSlot = await navigator.wakeLock.request('screen');
+        schermSlot.addEventListener('release', () => { schermKnopBijwerken(); });
+      } catch { schermSlot = null; /* bv. batterijbesparing: dan gaat het scherm gewoon uit zoals altijd */ }
+    } else if (!aan && schermSlot) {
+      const s = schermSlot; schermSlot = null;
+      try { await s.release(); } catch { /* */ }
+    }
+    schermKnopBijwerken();
+  }).catch(() => {});
+  return schermKet;
+}
+/** De knop in het recept toont of het scherm aan blijft. */
+function schermKnopBijwerken() {
+  const k = document.getElementById('r-scherm');
+  if (!k) return;
+  const aan = schermInRecept();
+  k.classList.toggle('aan', aan);
+  k.setAttribute('aria-pressed', aan ? 'true' : 'false');
+  k.lastElementChild.textContent = aan ? 'Scherm blijft aan' : 'Scherm aan laten';
+}
+// verborgen (andere app, scherm vergrendeld) laat de browser het slot los: bij terugkeer opnieuw vragen
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') schermBijwerken(); });
 
 // Toetsenbord op de smartphone: het blad boven het toetsenbord houden, anders schuift het uit beeld
 const opTelefoon = window.matchMedia('(max-width: 899px)');
@@ -1849,11 +1903,14 @@ function receptPaneel(id, personen) {
     const ontbreekt = regels.filter(({ b }) => b.st !== 'ok');
     const stappen = (r.stappen || '').split('\n').filter((s) => s.trim());
     const gepland = (S.planning || []).filter((m) => m.recept_id === r.id && !m.klaar && m.datum >= vandaag());
+    if (schermEigen && schermEigen.id !== r.id) schermEigen = null; // een ander recept: weer de instelling volgen
+    schermBijRecept = true;
     el.innerHTML = `${paneelKop(esc(r.titel))}
       <div class="meta">
         <span class="personen"><button id="p-min" aria-label="Minder personen">−</button><span>${personen} ${personen === 1 ? 'persoon' : 'personen'}</span><button id="p-plus" aria-label="Meer personen">+</button></span>
         ${r.bereidingstijd ? `<span>${esc(r.bereidingstijd)}</span>` : ''}
         <button class="fav-knop${r.favoriet ? ' aan' : ''}" id="r-fav" aria-pressed="${r.favoriet ? 'true' : 'false'}">${r.favoriet ? ICOON.sterVol : ICOON.ster}<span>${r.favoriet ? 'Favoriet' : 'Favoriet maken'}</span></button>
+        ${schermKan ? `<button class="fav-knop scherm-knop" id="r-scherm" aria-pressed="false" title="Het scherm gaat niet op stand-by zolang dit recept open staat">${ICOON.scherm}<span>Scherm aan laten</span></button>` : ''}
       </div>
       ${gepland.length ? `<p class="melding">Ingepland: ${gepland.slice(0, 3).map((m) => esc(dagNaam(m.datum).toLowerCase() + (m.maaltijd ? ` (${m.maaltijd.toLowerCase()})` : ''))).join(', ')}${gepland.length > 3 ? ' …' : ''}</p>` : ''}
       ${r.soort || (r.categorieen || []).length ? `<div class="labels">${[r.soort, ...(r.categorieen || [])].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
@@ -1876,6 +1933,13 @@ function receptPaneel(id, personen) {
     $('#p-plus', el).onclick = () => receptPaneel(id, personen + 1);
     $('#gekookt', el).onclick = () => kokenPaneel(r, regels);
     $('#r-bewerk', el).onclick = () => receptBewerken(r);
+    schermKnopBijwerken();
+    const sk = $('#r-scherm', el);
+    if (sk) sk.onclick = () => {
+      schermEigen = { id: r.id, aan: !schermInRecept() };
+      schermBijwerken();
+      toast(schermEigen.aan ? 'Het scherm blijft aan zolang dit recept open staat.' : 'Het scherm gaat weer vanzelf uit, zoals altijd.');
+    };
     $('#r-fav', el).onclick = async () => {
       try {
         await api('POST', `recepten/${r.id}/favoriet`, { favoriet: !r.favoriet });
@@ -2485,6 +2549,28 @@ function bestandBlokTekenen() {
     bestandBlokTekenen();
   });
 }
+// Scherm aan laten (per toestel)
+function schermBlokTekenen() {
+  const blok = $m('#scherm-blok');
+  if (!blok) return;
+  const k = schermKeuze();
+  const UITLEG = {
+    recept: 'Zolang een recept open staat, gaat het scherm niet op stand-by. Handig tijdens het koken. In het recept zelf kun je het ook aan- of uitzetten.',
+    altijd: 'Zolang de app open is, gaat het scherm niet op stand-by. Dat kost meer batterij.',
+    uit: 'Het scherm gaat uit zoals je toestel ingesteld is. In een recept kun je het toch aanzetten met <b>Scherm aan laten</b>.',
+  };
+  blok.innerHTML = `<div class="sectie-titel">Scherm aan laten</div>
+    ${schermKan ? `<div class="segment drie" id="scherm-keuze" role="group" aria-label="Scherm aan laten">
+      ${[['recept', 'Bij een recept'], ['altijd', 'Altijd'], ['uit', 'Nooit']].map(([w, t]) => `<button type="button" data-scherm="${w}" class="${w === k ? 'aan' : ''}" aria-pressed="${w === k}">${t}</button>`).join('')}
+    </div>
+    <p class="segment-uitleg" style="font-size:.88rem;line-height:1.5">${UITLEG[k]} Geldt alleen voor dit toestel.</p>`
+    : `<p class="stil" style="font-size:.92rem;line-height:1.55">Deze browser kan het scherm niet aan houden. Werk de browser bij, of stel op je toestel zelf in dat het scherm later uitgaat (iPhone: Instellingen → Scherm en helderheid → Automatisch slot; Android: Instellingen → Scherm → Time-out scherm).</p>`}`;
+  $$m('[data-scherm]', blok).forEach((b) => (b.onclick = () => {
+    schermKeuzeBewaren(b.dataset.scherm);
+    schermBlokTekenen();
+  }));
+}
+
 // Automatische back-up in Downloads (alle toestellen; aan/uit)
 function autoBlokTekenen() {
   const blok = $('#auto-blok');
@@ -2873,6 +2959,7 @@ async function tekenInstellingen() {
       <p class="stil" style="margin-bottom:.8rem;font-size:.92rem">Uitleg over alle schermen en knoppen, ook zonder internet.</p>
       <div class="knoppenrij"><button class="knop" id="i-handleiding">Handleiding lezen</button>
       <button class="knop" data-handleiding-pdf>Pdf downloaden</button><button class="knop" data-handleiding-afdrukken>Afdrukken</button></div></section>
+    <section class="sectie" id="scherm-blok"></section>
     <section class="sectie"><div class="sectie-titel">Waarschuwen, zoveel dagen vooraf</div>
       ${dagen('Te gebruiken tot', 'tgt_dagen')}${dagen('Ten minste houdbaar tot', 'tht_dagen')}</section>
     ${lijstBlok('Plaatsen', 'locaties', 'locatie', 'Nieuwe plaats, bv. Kelder')}
@@ -2894,6 +2981,7 @@ async function tekenInstellingen() {
   installBlokTekenen();
   bestandBlokTekenen();
   syncBlokTekenen();
+  schermBlokTekenen();
   $m('#i-handleiding').onclick = () => handleidingPaneel();
   handleidingKnoppen($('#inhoud'));
 
@@ -2986,6 +3074,7 @@ async function start() {
   const koppel = location.hash.startsWith('#koppelen=') ? new URLSearchParams(location.hash.slice(1)) : null;
   if (koppel) history.replaceState(null, '', '#instellingen'); // de code niet in de adresbalk laten staan
   ui.view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'voorraad';
+  schermBijwerken(); // "Scherm aan laten: Altijd" meteen toepassen
   try { status = await fetch('api/status').then((r) => r.json()); } catch { /* */ }
   try { await api('GET', 'alles'); } catch {
     $('#inhoud').innerHTML = '<div class="leeg"><b>De app kon niet starten</b>Herlaad de pagina. Gebruik geen privévenster.</div>';
