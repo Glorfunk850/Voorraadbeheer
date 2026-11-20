@@ -36,6 +36,7 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - Een zakje gebruikt? Tik op het product → **−**. Onder het minimum komt **1 doos** op je lijst; bij **In voorraad zetten**
   worden de zakjes van de doos bij je voorraad geteld.
 - Zonder lijst een doos gekocht: tik op het product → **Doos erbij** (+ het aantal zakjes van één doos).
+- Hetzelfde kan in de **Catalogus** → product → **Bewerken**; het geldt voor het hele product (voorraad en catalogus samen).
 
 ## Prijzen en winkels
 

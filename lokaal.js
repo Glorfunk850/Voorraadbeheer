@@ -211,6 +211,14 @@
     const potten = getal(g.potten);
     return { eenheid, ...boodschapInhoud(eenheid, g.inhoud, g.inhoud_eenheid), ...(potten > 0 ? { potten } : {}) };
   }
+  // De grote verpakking hoort bij het product: ze staat ook in de catalogus en geldt voor al je voorraadregels met die naam
+  // (in de catalogus of bij een voorraadregel bewerken komt op hetzelfde neer). g: null of leeg = uit.
+  function grootZetten(naam, g) {
+    const c = S.catalogus.find((x) => zelfde(x.naam, naam));
+    if (c) { if (g) c.grootverpakking = { ...g }; else delete c.grootverpakking; }
+    // niet bij een regel die zelf de grote verpakking is (bv. een zak rijst die je nog niet over potten verdeelde)
+    for (const p of S.producten) if (zelfde(p.naam, naam)) { if (g && p.eenheid !== g.eenheid) p.grootverpakking = { ...g }; else delete p.grootverpakking; }
+  }
   const grootBoodschap = (p, sleutel) => ({ id: id(), naam: p.naam, hoeveelheid: 1, eenheid: p.grootverpakking.eenheid,
     ...boodschapInhoud(p.grootverpakking.eenheid, p.grootverpakking.inhoud, p.grootverpakking.inhoud_eenheid),
     ...(typeof sleutel === 'string' ? { minimum_sleutel: sleutel } : {}), product_id: p.id, potten_voor: p.id, afgevinkt: 0, bron: 'minimum' });
@@ -557,6 +565,7 @@
       if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
       // minimum voor het hele product: alle merken en inhouden samen
       if ('minimum' in data) { const m = getal(data.minimum); if (m > 0) c.minimum = m; else delete c.minimum; }
+      if ('grootverpakking' in data) grootZetten(c.naam, grootUit(data.grootverpakking));
       if ('inhoud' in data || 'merk' in data) variantBewaren(c, v, oud);
       else if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
       c.laatst = nu();
@@ -597,6 +606,12 @@
         const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g;
         S.producten.push(p);
         catalogusBijwerken(p);
+        // grote verpakking: meegegeven (ook null = uit) geldt voor het hele product; anders die uit de catalogus of van een andere voorraadregel
+        if ('grootverpakking' in data) grootZetten(p.naam, g);
+        else {
+          const bekend = S.catalogus.find((x) => zelfde(x.naam, p.naam))?.grootverpakking || S.producten.find((x) => x !== p && zelfde(x.naam, p.naam) && x.grootverpakking)?.grootverpakking;
+          if (bekend) grootZetten(p.naam, bekend);
+        }
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid);
@@ -616,6 +631,7 @@
         if ('grootverpakking' in data) { const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g; else delete p.grootverpakking; }
         p.gewijzigd = nu();
         if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
+        if ('grootverpakking' in data) grootZetten(p.naam, p.grootverpakking || null);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid);
