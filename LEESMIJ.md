@@ -25,6 +25,8 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - Zet het vinkje **Bijkopen in een grote verpakking** aan: kies de verpakking (bv. zak à 5 kg) en hoeveel potten ze vult.
 - Zijn er minder potten dan het minimum, dan komt **1 grote verpakking** op je boodschappenlijst. Zelf toevoegen kan ook:
   tik op het product → **Grote verpakking op boodschappenlijst**.
+- **Een pot op?** Tik op het product en dan op **−** links van het aantal potten. Zakt het onder het minimum, dan staat de
+  grote verpakking vanzelf op je lijst.
 - Bij **In voorraad zetten** vul je in over hoeveel potten je ze verdeeld hebt; die worden bij je potten geteld.
 
 ## Prijzen en winkels
@@ -66,7 +68,8 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - **iPhone (Safari):** open het adres → deelknop → **Zet op beginscherm**.
 - **Computer (Chrome/Edge):** installeer-icoon in de adresbalk, of Instellingen in de app → **App installeren**.
 
-De volledige handleiding staat in de app zelf: Instellingen → **Handleiding lezen**. Daar kun je ze ook
+De volledige handleiding staat in de app zelf: Instellingen → **Handleiding lezen**, ingedeeld per thema
+(tik op een thema in de inhoud om het open te klappen). Daar kun je ze ook
 als pdf downloaden (**Pdf downloaden**, gemaakt op het toestel zelf) of **afdrukken**.
 
 ## Gegevens

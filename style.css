@@ -437,6 +437,26 @@ summary small.stil { font-weight: 400; margin-left: .3rem; }
 .handleiding { line-height: 1.6; font-size: .95rem; }
 .handleiding h2 { font-size: 1.25rem; margin: 2rem 0 .6rem; padding-top: 1.2rem; border-top: 1px solid var(--lijn); }
 .handleiding h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+/* indeling per hoofdthema: inhoudstafel, uitklapbare thema's en onderwerpen */
+.hl-inhoud { background: var(--veld); border-radius: 14px; padding: .7rem .8rem .8rem; margin-bottom: 1rem; scroll-margin-top: .5rem; }
+.hl-inhoud-kop { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
+.hl-inhoud-kop .veld-titel { margin: 0; }
+.hl-alles, .hl-terug { background: none; border: 0; padding: .3rem 0; font: inherit; font-size: .85rem; font-weight: 600; color: var(--accent); cursor: pointer; }
+.hl-inhoud-lijst { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .4rem; }
+.hl-inhoud-knop { text-align: left; background: var(--achtergrond); border: 1px solid var(--lijn); border-radius: 10px; padding: .55rem .7rem; font: inherit; font-size: .9rem; font-weight: 600; color: var(--tekst); cursor: pointer; line-height: 1.3; }
+@media (hover: hover) { .hl-inhoud-knop:hover { border-color: var(--accent); } }
+details.hl-thema { border-top: 1px solid var(--lijn); scroll-margin-top: .5rem; }
+details.hl-thema > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: .6rem; padding: .85rem 0; }
+details.hl-thema > summary::-webkit-details-marker { display: none; }
+details.hl-thema > summary > span { flex: 1; min-width: 0; font-size: 1.12rem; font-weight: 700; color: var(--tekst); }
+details.hl-thema > summary > small { color: var(--stil); font-size: .8rem; white-space: nowrap; }
+details.hl-thema > summary::after { content: ""; flex: none; width: .55rem; height: .55rem; border-right: 2px solid var(--stil); border-bottom: 2px solid var(--stil); transform: rotate(45deg); margin: 0 .3rem .2rem; transition: transform .15s; }
+details.hl-thema[open] > summary::after { transform: rotate(-135deg); margin-bottom: -.2rem; }
+.hl-thema-inhoud { padding-bottom: 1rem; }
+.hl-onderwerpen { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .6rem; }
+.hl-onderwerpen .chip { white-space: normal; text-align: left; }
+.handleiding h3 { scroll-margin-top: .5rem; }
+.handleiding .hl-thema-inhoud > h3:first-of-type { margin-top: .6rem; }
 .handleiding h3 { color: var(--tekst); font-size: 1.02rem; margin: 1.4rem 0 .4rem; }
 .handleiding p { margin: .5rem 0; }
 .handleiding ul, .handleiding ol { margin: .5rem 0; padding-left: 1.3rem; }
