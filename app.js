@@ -15,7 +15,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 67;
+const APP_VERSIE = 68;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -2735,14 +2735,63 @@ function bestandHerinneren() {
   });
 }
 
-/** De handleiding in een breed paneel (Instellingen → Handleiding lezen). */
-function handleidingPaneel() {
+/**
+ * De handleiding opdelen per hoofdthema (elke h2): bovenaan een inhoudstafel om naar een thema te springen,
+ * elk thema uitklapbaar, en binnen een thema de onderwerpen (h3) om naar te springen.
+ * De pdf en het afdrukken gebruiken de volledige tekst (HANDLEIDING), niet deze indeling.
+ */
+function handleidingThemas() {
+  const bron = document.createElement('div');
+  bron.innerHTML = HANDLEIDING;
+  const themas = [];
+  for (const knoop of [...bron.childNodes]) {
+    if (knoop.nodeName === 'H2') themas.push({ titel: knoop.textContent.trim(), delen: [] });
+    else if (themas.length) themas[themas.length - 1].delen.push(knoop);
+  }
+  return themas.map((t, n) => {
+    const inhoud = document.createElement('div');
+    t.delen.forEach((d) => inhoud.appendChild(d));
+    const onderwerpen = $$('h3', inhoud).map((h, i) => { h.id = `hl-${n}-${i}`; return { id: h.id, titel: h.textContent.trim() }; });
+    return { ...t, id: `hl-${n}`, onderwerpen, html: inhoud.innerHTML };
+  });
+}
+function handleidingPaneel(openThema) {
   paneelOpenen((el) => {
-    el.innerHTML = `${paneelKop('Handleiding')}<div class="handleiding">${HANDLEIDING}</div>
+    const themas = handleidingThemas();
+    el.innerHTML = `${paneelKop('Handleiding', 'Tik op een thema om het te openen.')}
+      <div class="handleiding">
+        <nav class="hl-inhoud" aria-label="Inhoud van de handleiding">
+          <div class="hl-inhoud-kop"><span class="veld-titel">Inhoud</span><button type="button" class="hl-alles" id="hl-alles">Alles openklappen</button></div>
+          <div class="hl-inhoud-lijst">${themas.map((t) => `<button type="button" class="hl-inhoud-knop" data-hl-naar="${t.id}">${esc(t.titel)}</button>`).join('')}</div>
+        </nav>
+        ${themas.map((t) => `<details class="hl-thema" id="${t.id}">
+          <summary><span>${esc(t.titel)}</span>${t.onderwerpen.length ? `<small>${t.onderwerpen.length} ${t.onderwerpen.length === 1 ? 'onderwerp' : 'onderwerpen'}</small>` : ''}</summary>
+          <div class="hl-thema-inhoud">
+            ${t.onderwerpen.length > 1 ? `<div class="hl-onderwerpen">${t.onderwerpen.map((o) => `<button type="button" class="chip" data-hl-naar="${o.id}">${esc(o.titel)}</button>`).join('')}</div>` : ''}
+            ${t.html}
+            <button type="button" class="hl-terug" data-hl-terug>↑ Naar de inhoud</button>
+          </div></details>`).join('')}
+      </div>
       <div class="paneel-voet"><button class="knop" data-handleiding-pdf>Pdf downloaden</button>
       <button class="knop" data-handleiding-afdrukken>Afdrukken</button><button class="knop" data-sluit>Sluiten</button></div>`;
     sluitKnoppen(el);
     handleidingKnoppen(el);
+    const thema = $$('.hl-thema', el);
+    const allesKnop = () => { $('#hl-alles', el).textContent = thema.every((d) => d.open) ? 'Alles dichtklappen' : 'Alles openklappen'; };
+    thema.forEach((d) => d.addEventListener('toggle', allesKnop));
+    $('#hl-alles', el).onclick = () => { const open = !thema.every((d) => d.open); thema.forEach((d) => (d.open = open)); allesKnop(); };
+    // naar een thema of onderwerp springen: het thema openklappen en ernaartoe scrollen
+    const naar = (id) => {
+      const doel = el.querySelector(`#${id}`);
+      if (!doel) return;
+      const d = doel.closest('.hl-thema');
+      if (d) d.open = true;
+      allesKnop();
+      requestAnimationFrame(() => doel.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
+    $$('[data-hl-naar]', el).forEach((b) => (b.onclick = () => naar(b.dataset.hlNaar)));
+    $$('[data-hl-terug]', el).forEach((b) => (b.onclick = () => $('.hl-inhoud', el).scrollIntoView({ behavior: 'smooth', block: 'start' })));
+    if (openThema) naar(themas.find((t) => zelfde(t.titel, openThema))?.id || '');
   }, { breed: true });
 }
 
@@ -2845,7 +2894,7 @@ async function tekenInstellingen() {
   installBlokTekenen();
   bestandBlokTekenen();
   syncBlokTekenen();
-  $m('#i-handleiding').onclick = handleidingPaneel;
+  $m('#i-handleiding').onclick = () => handleidingPaneel();
   handleidingKnoppen($('#inhoud'));
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt

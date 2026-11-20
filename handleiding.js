@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 67; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 68; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -221,8 +221,11 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <h3>Overzicht</h3>
 <p>Onder <b>Overzicht</b> zie je wat je het vaakst weggooit, koopt en kookt.</p>
 
+<h3>De handleiding lezen</h3>
+<p>Tik bij <b>Instellingen</b> op <b>Handleiding lezen</b>. Bovenaan staat de <b>inhoud</b>: tik op een thema (bv. Boodschappen) om het te openen. Je kunt ook op de titel van een thema tikken om het open of dicht te klappen. In een geopend thema staan bovenaan de onderwerpen; tik erop om er meteen naartoe te gaan. Met <b>Alles openklappen</b> zie je de hele handleiding, met <b>↑ Naar de inhoud</b> ga je terug naar boven.</p>
+
 <h3>Handleiding downloaden of afdrukken</h3>
-<p>Bij <b>Instellingen → Handleiding</b>, en onderaan de handleiding zelf, staan twee knoppen:</p>
+<p>Bij <b>Instellingen → Handleiding</b>, en onderaan de handleiding zelf, staan twee knoppen. De pdf en de afgedrukte versie bevatten altijd de volledige handleiding.</p>
 <ul>
   <li><b>Pdf downloaden</b>: bewaart deze handleiding als pdf-bestand op je toestel, bv. om door te sturen of later te lezen. De pdf wordt op je toestel zelf gemaakt, ook zonder internet.</li>
   <li><b>Afdrukken</b>: opent het afdrukvenster met alleen de handleiding, zonder de rest van de app. Daar kun je ook <b>Opslaan als pdf</b> kiezen.</li>

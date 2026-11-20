@@ -68,7 +68,8 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - **iPhone (Safari):** open het adres → deelknop → **Zet op beginscherm**.
 - **Computer (Chrome/Edge):** installeer-icoon in de adresbalk, of Instellingen in de app → **App installeren**.
 
-De volledige handleiding staat in de app zelf: Instellingen → **Handleiding lezen**. Daar kun je ze ook
+De volledige handleiding staat in de app zelf: Instellingen → **Handleiding lezen**, ingedeeld per thema
+(tik op een thema in de inhoud om het open te klappen). Daar kun je ze ook
 als pdf downloaden (**Pdf downloaden**, gemaakt op het toestel zelf) of **afdrukken**.
 
 ## Gegevens
