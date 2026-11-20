@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 73;
+const APP_VERSIE = 74;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -79,7 +79,61 @@ const fmt = (n) => (n === null || n === undefined ? '' : (Math.round(n * 100) / 
 const eenheidKort = (e) => (e === 'stuks' ? '' : e || '');
 const hoeveelTekst = (n, e) => (n === null || n === undefined ? '' : `${fmt(n)}${eenheidKort(e) ? ' ' + eenheidKort(e) : ''}`);
 // Inhoud per verpakking (bv. 2 pak à 500 g). Alleen bij telbare eenheden.
-const INHOUD_EENHEDEN = ['g', 'kg', 'ml', 'cl', 'dl', 'l'];
+const STANDAARD_INHOUD = ['g', 'kg', 'ml', 'cl', 'dl', 'l'];
+/** Eenheden voor de inhoud per stuk of verpakking (uit Instellingen; standaard g, kg, ml, cl, dl, l). */
+const inhoudEenheden = () => (Array.isArray(S.instellingen.inhoud_eenheden) && S.instellingen.inhoud_eenheden.length
+  ? S.instellingen.inhoud_eenheden : STANDAARD_INHOUD);
+/** Keuzelijst voor de eenheid van de inhoud: de bewaarde waarde, anders `standaard` (of de eerste als die verwijderd is). */
+const inhoudOpties = (waarde, standaard = 'g') => {
+  const l = inhoudEenheden();
+  return opties(l, waarde || (l.includes(standaard) ? standaard : l[0])) + NIEUWE_INHOUD;
+};
+/** Keuzelijst voor de eenheid (stuks, g, pak …), met onderaan "Andere eenheid…". */
+const eenheidOpties = (waarde) => opties(eenheden(), waarde) + NIEUWE_EENHEID;
+// laatste keuze in een eenhedenlijst: zelf een eenheid toevoegen (zie eenheidToevoegen)
+const NIEUW = { eenheden: '__nieuwe_eenheid__', inhoud_eenheden: '__nieuwe_inhoud__' };
+const NIEUWE_EENHEID = `<option value="${NIEUW.eenheden}">Andere eenheid…</option>`;
+const NIEUWE_INHOUD = `<option value="${NIEUW.inhoud_eenheden}">Andere eenheid…</option>`;
+const VASTE_INHOUD = new Set(['g', 'kg', 'mg', 'ml', 'cl', 'dl', 'l']);
+/** Naam voor een nieuwe eenheid controleren; geeft een foutmelding terug, of '' als ze goed is. */
+function eenheidFout(sleutel, naam, lijst) {
+  if (!naam) return 'Typ een eenheid.';
+  if (naam.length > 20) return 'Kies een kortere eenheid (hoogstens 20 tekens).';
+  if (naam.startsWith('__')) return 'Kies een andere naam.';
+  if (lijst.some((x) => zelfde(x, naam))) return `"${naam}" staat al in de lijst.`;
+  return '';
+}
+// Kiest iemand "Andere eenheid…" in een keuzelijst: naam vragen, bij Instellingen bewaren en meteen kiezen.
+// Dit gebeurt vóór de andere luisteraars (capture), zodat die nooit de tijdelijke waarde zien.
+const eenheidVorige = new WeakMap();
+document.addEventListener('focusin', (e) => { if (e.target.tagName === 'SELECT') eenheidVorige.set(e.target, e.target.value); }, true);
+document.addEventListener('change', async (e) => {
+  const sel = e.target;
+  if (sel.tagName !== 'SELECT') return;
+  const sleutel = Object.keys(NIEUW).find((k) => NIEUW[k] === sel.value);
+  if (!sleutel) { eenheidVorige.set(sel, sel.value); return; }
+  e.stopImmediatePropagation();
+  const vorige = eenheidVorige.get(sel) ?? sel.options[0]?.value ?? '';
+  sel.value = vorige;
+  const lijst = sleutel === 'inhoud_eenheden' ? inhoudEenheden() : eenheden();
+  const naam = ((await vraag(sleutel === 'inhoud_eenheden' ? 'Nieuwe eenheid voor de inhoud, bv. vel, rol of wasbeurt:' : 'Nieuwe eenheid, bv. bokaal, tube of rol:',
+    { invoer: true, ja: 'Toevoegen' })) || '').trim().toLowerCase();
+  if (!naam) return;
+  const fout = eenheidFout(sleutel, naam, lijst);
+  if (fout && !lijst.some((x) => zelfde(x, naam))) return toast(fout);
+  if (!fout) await api('PUT', 'instellingen', { [sleutel]: [...lijst, naam] });
+  // de keuzelijst kan intussen opnieuw getekend zijn: dezelfde (of de nieuwe) lijst opzoeken
+  const doel = sel.isConnected ? sel : (sel.id && document.getElementById(sel.id));
+  if (!doel) return;
+  if (![...doel.options].some((o) => o.value === naam)) {
+    const o = document.createElement('option'); o.value = naam; o.textContent = naam;
+    doel.insertBefore(o, [...doel.options].find((x) => x.value === NIEUW[sleutel]) || null);
+  }
+  doel.value = naam;
+  eenheidVorige.set(doel, naam);
+  doel.dispatchEvent(new Event('change', { bubbles: true }));
+  if (!fout) toast(`Eenheid "${naam}" toegevoegd. Beheren kan bij Instellingen.`);
+}, true);
 const inhoudVan = (p) => (p && TELBAAR.has(p.eenheid) && p.inhoud > 0 && p.inhoud_eenheid ? { per: p.inhoud, eenheid: p.inhoud_eenheid } : null);
 /** Inhoud per verpakking van één boodschap (bv. pak à 500 g); een boodschap zonder eenheid telt als stuks. */
 const boodschapInhoudVan = (b) => inhoudVan(b && { ...b, eenheid: b.eenheid || 'stuks' });
@@ -350,7 +404,8 @@ const winkels = () => S.instellingen.winkels || [];
 const prijsEenheid = (e) => ({ g: 'kg', ml: 'l', cl: 'l', dl: 'l', '': 'stuks' })[e || ''] || e;
 const perTekst = (e) => (e === 'stuks' ? 'stuk' : e);
 // Eenheden waarin je een prijs kunt invullen (bv. een pak à 500 g, maar de prijs per kg zoals op het prijskaartje)
-const prijsEenheden = () => ['kg', 'g', 'l', 'ml', ...eenheden().filter((e) => TELBAAR.has(e))];
+const prijsEenheden = () => ['kg', 'g', 'l', 'ml', ...eenheden().filter((e) => TELBAAR.has(e)),
+  ...inhoudEenheden().filter((e) => !VASTE_INHOUD.has(e) && !eenheden().includes(e))]; // bv. prijs per vel of per wasbeurt
 /** Eenheid van de prijzen die er al zijn, anders die die bij de eenheid van het product past. */
 const prijsPerVan = (prijzen, eenheid) => (prijzen || []).find((p) => p.per)?.per || prijsEenheid(eenheid);
 const euro = (n) => '€ ' + n.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -575,7 +630,7 @@ function prijzenPaneel(naam, eenheid, terug) {
         <details class="meer" id="pz-nieuw" style="margin-top:.8rem"><summary>+ Prijs voor een ander merk${telbaar ? ' of een andere inhoud' : ''}</summary>
           <label class="veld"><span>Merk${telbaar ? ' (mag leeg)' : ''}</span><input id="pz-nieuw-merk" placeholder="bv. Lavazza" autocomplete="off" autocapitalize="words"></label>
           ${telbaar ? `<div class="rij2"><label class="veld"><span>Inhoud per ${esc(perTekst(e))} (mag leeg)</span><input id="pz-nieuw-inhoud" inputmode="decimal" placeholder="bv. 1"></label>
-            <label class="veld"><span>Eenheid inhoud</span><select id="pz-nieuw-eenheid">${opties(INHOUD_EENHEDEN, 'kg')}</select></label></div>` : ''}
+            <label class="veld"><span>Eenheid inhoud</span><select id="pz-nieuw-eenheid">${inhoudOpties('', 'kg')}</select></label></div>` : ''}
           <button type="button" class="knop" id="pz-nieuw-ok">Toevoegen</button></details>
         <p class="stil pz-uitleg" style="margin-top:.8rem">Op je boodschappenlijst komt ${esc(naam)} bij de goedkoopste winkel voor het merk en de inhoud die je koopt.</p>
         <div class="paneel-voet"><button type="submit" class="knop primair">Bewaren</button></div></form>`;
@@ -934,7 +989,7 @@ const grootVeldenHtml = (id, g) => `<label class="vink uitlek-vink"><input type=
     </div>
     <div class="rij2">
       <label class="veld"><span>Inhoud (mag leeg)</span><input id="${id}-groot-inhoud" inputmode="decimal" value="${g?.inhoud > 0 ? esc(fmt(g.inhoud)) : ''}" placeholder="bv. 5"></label>
-      <label class="veld"><span>Eenheid inhoud</span><select id="${id}-groot-inhoud-eenheid">${opties(INHOUD_EENHEDEN, g?.inhoud_eenheid || 'kg')}</select></label>
+      <label class="veld"><span>Eenheid inhoud</span><select id="${id}-groot-inhoud-eenheid">${inhoudOpties(g?.inhoud_eenheid, 'kg')}</select></label>
     </div>
   </div>`;
 /** Titel van het aantal: "Vult ongeveer (potten)" of "Aantal zakjes erin", naar de eenheid van het product. */
@@ -948,7 +1003,7 @@ function grootVeldenZetten(el, id, g) {
   $(`#${id}-groot-eenheid`, el).innerHTML = opties(eenheden().filter((e) => TELBAAR.has(e)), g.eenheid || 'zak');
   $(`#${id}-groot-potten`, el).value = g.potten ? fmt(g.potten) : '';
   $(`#${id}-groot-inhoud`, el).value = g.inhoud > 0 ? fmt(g.inhoud) : '';
-  $(`#${id}-groot-inhoud-eenheid`, el).innerHTML = opties(INHOUD_EENHEDEN, g.inhoud_eenheid || 'kg');
+  $(`#${id}-groot-inhoud-eenheid`, el).innerHTML = inhoudOpties(g.inhoud_eenheid, 'kg');
 }
 /** Het vinkje koppelen; `aanGezet` wordt opgeroepen als je het aanzet (bv. om een minimum voor te stellen). */
 function grootVeldenKoppelen(el, id, aanGezet) {
@@ -1138,7 +1193,7 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
         <p class="stil" style="margin:-.4rem 0 1rem">Wordt ingevuld als je het product vanuit de catalogus aan je voorraad toevoegt.</p>
         <div class="rij2" id="cf-inhoud-rij">
           <label class="veld"><span id="cf-inhoud-titel">Inhoud per stuk</span><input id="cf-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
-          <label class="veld"><span>Eenheid inhoud</span><select id="cf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, c.inhoud_eenheid || 'g')}</select></label>
+          <label class="veld"><span>Eenheid inhoud</span><select id="cf-inhoud-eenheid">${inhoudOpties(c.inhoud_eenheid, 'g')}</select></label>
         </div>
         ${uitlekVinkje('cf', c.uitlekgewicht)}
         <div class="rij2">
@@ -1239,11 +1294,11 @@ function productFormulier(bestaand, sjabloon = {}) {
         ${minimumVinkjeHtml('pf', catMinimum(catalogusVan(p.naam), maatVan(p)))}
         <div class="rij2">
           <label class="veld"><span>Hoeveelheid</span><input id="pf-hv" inputmode="decimal" value="${esc(fmt(p.hoeveelheid))}" required></label>
-          <label class="veld"><span>Eenheid</span><select id="pf-eenheid">${opties(eenheden(), p.eenheid)}</select></label>
+          <label class="veld"><span>Eenheid</span><select id="pf-eenheid">${eenheidOpties(p.eenheid)}</select></label>
         </div>
         <div class="rij2" id="pf-inhoud-rij">
           <label class="veld"><span id="pf-inhoud-titel">Inhoud per stuk</span><input id="pf-inhoud" inputmode="decimal" value="${p.inhoud > 0 ? esc(fmt(p.inhoud)) : ''}" placeholder="bv. 500"></label>
-          <label class="veld"><span>Eenheid inhoud</span><select id="pf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, p.inhoud_eenheid || 'g')}</select></label>
+          <label class="veld"><span>Eenheid inhoud</span><select id="pf-inhoud-eenheid">${inhoudOpties(p.inhoud_eenheid, 'g')}</select></label>
         </div>
         ${uitlekVinkje('pf', p.uitlekgewicht)}
         <div class="veld" style="margin-bottom:1rem"><span class="veld-titel">Plaats</span>
@@ -1310,10 +1365,10 @@ function productFormulier(bestaand, sjabloon = {}) {
     const invullen = (info) => {
       if (info.naam) $('#pf-naam', el).value = info.naam;
       if (info.hoeveelheid) $('#pf-hv', el).value = fmt(info.hoeveelheid);
-      if (info.eenheid) { $('#pf-eenheid', el).innerHTML = opties(eenheden(), info.eenheid); inhoudTonen(); grootTitel(); prijsPerZetten(el, info.eenheid); }
+      if (info.eenheid) { $('#pf-eenheid', el).innerHTML = eenheidOpties(info.eenheid); inhoudTonen(); grootTitel(); prijsPerZetten(el, info.eenheid); }
       if (info.inhoud > 0 && !$('#pf-inhoud', el).value) {
         $('#pf-inhoud', el).value = fmt(info.inhoud);
-        if (info.inhoud_eenheid) $('#pf-inhoud-eenheid', el).innerHTML = opties(INHOUD_EENHEDEN, info.inhoud_eenheid);
+        if (info.inhoud_eenheid) $('#pf-inhoud-eenheid', el).innerHTML = inhoudOpties(info.inhoud_eenheid);
       }
       if (info.categorie) $('#pf-cat', el).innerHTML = opties(categorieen(), info.categorie, 'Geen');
       if (info.merk && !$('#pf-merk', el).value) $('#pf-merk', el).value = info.merk;
@@ -1343,7 +1398,7 @@ function productFormulier(bestaand, sjabloon = {}) {
       bekendeNaam();
       $('#pf-merk', el).value = v ? v.merk || '' : '';
       $('#pf-inhoud', el).value = v && v.inhoud > 0 ? fmt(v.inhoud) : '';
-      if (v && v.inhoud > 0) $('#pf-inhoud-eenheid', el).innerHTML = opties(INHOUD_EENHEDEN, v.inhoud_eenheid || 'g');
+      if (v && v.inhoud > 0) $('#pf-inhoud-eenheid', el).innerHTML = inhoudOpties(v.inhoud_eenheid, 'g');
       $('#pf-uitlek', el).checked = !!(v && v.uitlekgewicht);
       maatZetten(el, 'pf', v ? v.verpakking : ''); minimumVinkjeMaat(el, 'pf');
       pfPrijzen();
@@ -1517,7 +1572,7 @@ function hoeveelheidKiezen(id) {
         <button type="button" class="rond" id="hk-min" aria-label="Minder">−</button>
         <input id="hk-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid ?? stapVan(e0)))}" aria-label="Hoeveelheid">
         <button type="button" class="rond" id="hk-plus" aria-label="Meer">+</button>
-        <select id="hk-eenheid" aria-label="Eenheid">${opties(keuzes, e0)}</select></div></div>
+        <select id="hk-eenheid" aria-label="Eenheid">${opties(keuzes, e0)}${NIEUWE_EENHEID}</select></div></div>
       ${inhoudVeldenHtml('hk', e0, bi?.per, bi?.eenheid)}
       <div class="paneel-voet"><button class="knop" data-sluit>Annuleren</button><button class="knop primair" id="hk-ok">Bewaren</button></div>`;
     sluitKnoppen(el);
@@ -1546,7 +1601,7 @@ function inhoudVeldenHtml(id, eenheid, inhoud, inhoudEenheid) {
   const e = eenheid || 'stuks';
   return `<div class="rij2" id="${id}-inhoud-rij"${TELBAAR.has(e) ? '' : ' hidden'}>
     <label class="veld"><span id="${id}-inhoud-titel">Inhoud per ${esc(perTekst(TELBAAR.has(e) ? e : 'stuks'))} (mag leeg)</span><input id="${id}-inhoud" inputmode="decimal" value="${inhoud > 0 ? esc(fmt(inhoud)) : ''}" placeholder="bv. 500"></label>
-    <label class="veld"><span>Eenheid inhoud</span><select id="${id}-inhoud-eenheid">${opties(INHOUD_EENHEDEN, inhoudEenheid || 'g')}</select></label></div>`;
+    <label class="veld"><span>Eenheid inhoud</span><select id="${id}-inhoud-eenheid">${inhoudOpties(inhoudEenheid, 'g')}</select></label></div>`;
 }
 /** Inhoudvelden tonen of verbergen bij een andere eenheid. */
 function inhoudVeldenZetten(el, id, eenheid) {
@@ -1619,7 +1674,7 @@ function boodschapToevoegen() {
           <button type="button" class="rond" id="bt-min" aria-label="Minder">−</button>
           <input id="bt-hv" inputmode="decimal" value="1" aria-label="Hoeveelheid">
           <button type="button" class="rond" id="bt-plus" aria-label="Meer">+</button>
-          <select id="bt-eenheid" aria-label="Eenheid">${opties(eenheden(), 'stuks')}</select></div></div>
+          <select id="bt-eenheid" aria-label="Eenheid">${eenheidOpties('stuks')}</select></div></div>
         ${inhoudVeldenHtml('bt', 'stuks', null, 'g')}
         <details class="meer" id="bt-meer" style="margin-bottom:1rem"><summary>Categorie, plaats, houdbaarheid en prijzen</summary><div id="bt-meer-inhoud"></div></details>
         <div id="bt-zoek-blok"><div class="sectie-titel"><span>Kies uit je catalogus</span></div>
@@ -1749,7 +1804,7 @@ function boodschapBewerken(id) {
         <button type="button" class="rond" id="bb-min" aria-label="Minder">−</button>
         <input id="bb-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid))}" placeholder="–" aria-label="Hoeveelheid">
         <button type="button" class="rond" id="bb-plus" aria-label="Meer">+</button>
-        <select id="bb-eenheid" aria-label="Eenheid">${opties(eenheden(), b.eenheid || 'stuks')}</select></div></div>
+        <select id="bb-eenheid" aria-label="Eenheid">${eenheidOpties(b.eenheid || 'stuks')}</select></div></div>
       ${inhoudVeldenHtml('bb', b.eenheid || 'stuks', boodschapInhoudVan(b)?.per, boodschapInhoudVan(b)?.eenheid)}
       <ul class="acties">
         <li><button id="bb-prijs">Prijzen per winkel</button></li>
@@ -1818,13 +1873,13 @@ function winkelenAfronden(ids) {
             <div class="af-ander" hidden>
               <input class="af-merk" placeholder="Merk (mag leeg)" aria-label="Merk" autocomplete="off" autocapitalize="words">
               <div class="af-inhoud-rij"><input class="af-inhoud" inputmode="decimal" placeholder="Inhoud per stuk" aria-label="Inhoud per stuk">
-                <select class="af-inhoud-eenheid" aria-label="Eenheid inhoud">${opties(INHOUD_EENHEDEN, 'g')}</select></div>
+                <select class="af-inhoud-eenheid" aria-label="Eenheid inhoud">${inhoudOpties('', 'g')}</select></div>
               <label class="vink uitlek-vink af-uitlek-vink"><input type="checkbox" class="af-uitlek"><span class="vakje"></span><span>Uitlekgewicht</span></label>
             </div>` : ''}
             ${x.doel ? `<label class="veld af-potten-veld"><span>${x.doel.eenheid === 'pot' ? 'Verdeeld over hoeveel potten?' : `Hoeveel ${esc(meervoud(x.doel.eenheid))} zitten erin?`} <small class="stil">leeg: de verpakking zelf in je voorraad zetten</small></span>
               <input class="af-potten" inputmode="decimal" value="${x.potten ? esc(fmt(x.potten)) : ''}" placeholder="bv. 4" aria-label="Aantal ${esc(meervoud(x.doel.eenheid))}"></label>` : ''}
             <input class="af-hv" inputmode="decimal" value="${esc(fmt(x.b.hoeveelheid ?? 1))}" aria-label="Hoeveelheid">
-            <select class="af-eenheid" aria-label="Eenheid">${opties(eenheden(), x.eenheid)}</select>
+            <select class="af-eenheid" aria-label="Eenheid">${eenheidOpties(x.eenheid)}</select>
             <select class="af-plaats" aria-label="Plaats">${opties(locaties(), x.locatie, 'Plaats')}</select>
             <input type="date" class="af-datum" aria-label="Houdbaar tot">
             <div class="segment af-type">
@@ -3046,6 +3101,7 @@ async function tekenInstellingen() {
     : veld === 'winkel' ? (S.catalogus || []).filter((c) => (c.prijzen || []).some((p) => zelfde(p.winkel, naam))).length
     : veld === 'maaltijd' ? (S.planning || []).filter((m) => zelfde(m.maaltijd, naam)).length
     : veld === 'eenheid' ? S.producten.filter((p) => p.eenheid === naam || p.grootverpakking?.eenheid === naam).length
+    : veld === 'inhoud_eenheid' ? S.producten.filter((p) => p.inhoud_eenheid === naam || p.grootverpakking?.inhoud_eenheid === naam).length
     : S.producten.filter((p) => zelfde(p[veld], naam)).length;
   const isRecept = (veld) => veld.startsWith('recept_');
   const aantalTekst = (veld, n) => !n ? '' : veld === 'maaltijd' ? `${n} gepland` : isRecept(veld) ? `${n} ${n === 1 ? 'recept' : 'recepten'}` : `${n} ${n === 1 ? 'product' : 'producten'}`;
@@ -3064,7 +3120,7 @@ async function tekenInstellingen() {
           </span></li>`;
       }).join('')}</ul>
       <form class="toevoegen beheer-nieuw" data-nieuw="${sleutel}" autocomplete="off">
-        <input placeholder="${voorbeeld}" autocapitalize="${veld === 'eenheid' ? 'none' : 'sentences'}">
+        <input placeholder="${voorbeeld}" autocapitalize="${veld.includes('eenheid') ? 'none' : 'sentences'}">
         <button class="knop" aria-label="Toevoegen">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</button>
       </form></details>`;
   const dagen = (titel, sleutel) => `<div class="instelling"><span>${titel}</span>
@@ -3089,6 +3145,8 @@ async function tekenInstellingen() {
     ${lijstBlok('Maaltijden in de planner', 'maaltijden', 'maaltijd', 'Nieuwe maaltijd, bv. Vieruurtje')}
     ${lijstBlok('Eenheden', 'eenheden', 'eenheid', 'Nieuwe eenheid, bv. bokaal',
       'De eenheden die je kiest bij je voorraad en boodschappen. Een eigen eenheid (bv. bokaal, tube, rol) telt als verpakking: je kunt er een inhoud per stuk bij invullen. Tik op een eigen eenheid om ze te hernoemen.')}
+    ${lijstBlok('Eenheden voor de inhoud', 'inhoud_eenheden', 'inhoud_eenheid', 'Nieuwe eenheid, bv. vel',
+      'De eenheden bij <b>Eenheid inhoud</b>, bv. pak à 500 g of rol à 200 vel. Een eigen eenheid (bv. vel, wasbeurt, tablet) rekent de app niet om naar g of l, maar je kunt er wel een prijs per vel of per wasbeurt voor invullen. Tik op een eigen eenheid om ze te hernoemen.')}
     <section class="sectie"><div class="sectie-titel">Overzicht</div><div id="stats" class="stil">Laden…</div></section>
     <section class="sectie" id="sync-blok"></section>
     <section class="sectie" id="auto-blok"></section>
@@ -3115,17 +3173,18 @@ async function tekenInstellingen() {
     const k = b.dataset.dagen;
     bewaar({ [k]: Math.min(60, Math.max(0, (inst[k] ?? 0) + +b.dataset.stap)) });
   }));
-  const VELD = { locaties: 'locatie', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'recept_soort', recept_categorieen: 'recept_categorie', maaltijden: 'maaltijd', eenheden: 'eenheid' };
-  const SOORT = { locaties: 'plaats', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'soort', recept_categorieen: 'categorie', maaltijden: 'maaltijd', eenheden: 'eenheid' };
+  const VELD = { locaties: 'locatie', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'recept_soort', recept_categorieen: 'recept_categorie', maaltijden: 'maaltijd', eenheden: 'eenheid', inhoud_eenheden: 'inhoud_eenheid' };
+  const SOORT = { locaties: 'plaats', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'soort', recept_categorieen: 'categorie', maaltijden: 'maaltijd', eenheden: 'eenheid', inhoud_eenheden: 'eenheid' };
   const HOOFD = { plaats: 'Plaats', categorie: 'Categorie', soort: 'Soort', winkel: 'Winkel', maaltijd: 'Maaltijd', eenheid: 'Eenheid' };
   // eenheden altijd in kleine letters; de standaardeenheden (g, kg, l …) rekent de app om, die hernoem je niet
-  const netjes = (k, naam) => (k === 'eenheden' ? naam.toLowerCase() : naam);
-  const vastEenheid = (k, naam) => k === 'eenheden' && STANDAARD_EENHEDEN.includes(naam);
+  const isEenheid = (k) => k === 'eenheden' || k === 'inhoud_eenheden';
+  const netjes = (k, naam) => (isEenheid(k) ? naam.toLowerCase() : naam);
+  const vastEenheid = (k, naam) => (k === 'eenheden' && STANDAARD_EENHEDEN.includes(naam)) || (k === 'inhoud_eenheden' && VASTE_INHOUD.has(naam));
   $$m('[data-nieuw]').forEach((f) => (f.onsubmit = async (e) => {
     e.preventDefault();
     const k = f.dataset.nieuw, naam = netjes(k, $m('input', f).value.trim());
     if (!naam) return;
-    if (k === 'eenheden' && naam.length > 20) return toast('Kies een kortere eenheid (hoogstens 20 tekens).');
+    if (isEenheid(k) && eenheidFout(k, naam, [])) return toast(eenheidFout(k, naam, []));
     if ((inst[k] || []).some((x) => zelfde(x, naam))) return toast(`"${naam}" bestaat al.`);
     await bewaar({ [k]: [...(inst[k] || []), naam] });
     toast(`${naam} toegevoegd`);
@@ -3136,8 +3195,9 @@ async function tekenInstellingen() {
       if (vastEenheid(k, naam)) return toast(`"${naam}" is een standaardeenheid; die kun je niet hernoemen. Verwijderen of een nieuwe toevoegen kan wel.`);
       const nieuw = netjes(k, ((await vraag(`Nieuwe naam voor ${SOORT[k]} "${naam}":`, { invoer: true, standaard: naam, ja: 'Bewaren' })) || '').trim());
       if (!nieuw || nieuw === naam) return;
-      if (k === 'eenheden' && (nieuw.length > 20 || STANDAARD_EENHEDEN.includes(nieuw) || RECEPT_EENHEDEN.includes(nieuw)))
-        return toast(nieuw.length > 20 ? 'Kies een kortere eenheid (hoogstens 20 tekens).' : `"${nieuw}" is een standaardeenheid. Kies een andere naam.`);
+      if (isEenheid(k) && eenheidFout(k, nieuw, [])) return toast(eenheidFout(k, nieuw, []));
+      if ((k === 'eenheden' && (STANDAARD_EENHEDEN.includes(nieuw) || RECEPT_EENHEDEN.includes(nieuw))) || (k === 'inhoud_eenheden' && VASTE_INHOUD.has(nieuw)))
+        return toast(`"${nieuw}" is een standaardeenheid. Kies een andere naam.`);
       if (lijst.some((x, j) => j !== i && zelfde(x, nieuw))) return toast(`"${nieuw}" bestaat al.`);
       lijst[i] = nieuw;
       await bewaar({ [k]: lijst });
@@ -3146,17 +3206,18 @@ async function tekenInstellingen() {
     $m('[data-omhoog]', rij).onclick = () => { [lijst[i - 1], lijst[i]] = [lijst[i], lijst[i - 1]]; bewaar({ [k]: lijst }); };
     $m('[data-wis]', rij).onclick = async () => {
       if (k === 'eenheden' && naam === 'stuks') return toast('"stuks" kun je niet verwijderen: dat is de eenheid als je niets kiest.');
+      if (k === 'inhoud_eenheden' && lijst.length === 1) return toast('Er moet minstens één eenheid voor de inhoud overblijven.');
       const aantal = telling(VELD[k], naam);
       const wie = isRecept(VELD[k]) ? (aantal === 1 ? 'recept heeft' : 'recepten hebben') : (aantal === 1 ? 'product heeft' : 'producten hebben');
       const tekst = !aantal ? `${HOOFD[SOORT[k]]} "${naam}" verwijderen?`
         : VELD[k] === 'maaltijd' ? `Maaltijd "${naam}" verwijderen? ${aantal} ${aantal === 1 ? 'geplande maaltijd blijft' : 'geplande maaltijden blijven'} in de planner staan, zonder dit moment.`
-        : VELD[k] === 'eenheid' ? `Eenheid "${naam}" verwijderen? Je kunt ze daarna niet meer kiezen. ${aantal} ${aantal === 1 ? 'product houdt' : 'producten houden'} wel deze eenheid tot je ze aanpast.`
+        : isEenheid(k) ? `Eenheid "${naam}" verwijderen? Je kunt ze daarna niet meer kiezen. ${aantal} ${aantal === 1 ? 'product houdt' : 'producten houden'} wel deze eenheid tot je ze aanpast.`
         : VELD[k] === 'winkel' ? `Winkel "${naam}" verwijderen? De prijzen bij deze winkel (${aantal} ${aantal === 1 ? 'product' : 'producten'}) worden gewist.`
         : `${HOOFD[SOORT[k]]} "${naam}" verwijderen? ${aantal} ${wie} daarna ${VELD[k] === 'recept_categorie' ? 'deze categorie niet' : `geen ${SOORT[k]}`} meer.`;
       if (!(await vraag(tekst, { ja: 'Verwijderen', gevaar: true }))) return;
       lijst.splice(i, 1);
       await bewaar({ [k]: lijst });
-      if (aantal && VELD[k] !== 'eenheid') await api('POST', 'hernoemen', { veld: VELD[k], van: naam, naar: '' });
+      if (aantal && !isEenheid(k)) await api('POST', 'hernoemen', { veld: VELD[k], van: naam, naar: '' });
     };
   });
   $m('#i-terug').onclick = () => $('#bestand-backup').click();
