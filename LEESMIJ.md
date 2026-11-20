@@ -63,6 +63,8 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   berekend kan worden. Winkels beheer je bij Instellingen → **Winkels**.
 - Op de boodschappenlijst staat elk product op de **algemene lijst** (Alles) én op de lijst van de winkel
   waar het het goedkoopst is. Het is telkens dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere.
+- Een product komt op de lijst van een winkel zodra er bij dat product een prijs ingevuld is. Heeft het merk of de inhoud
+  van de boodschap geen eigen prijs, dan kiest de app de goedkoopste winkel van hetzelfde merk, of anders van het product.
 - Tik op de prijs (of op "Prijs invullen") onder een boodschap om de prijzen meteen aan te passen.
 
 ## Maaltijdplanner
