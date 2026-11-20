@@ -25,7 +25,7 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   om ze open of dicht te klappen. Met het **zoekveld** bovenaan zoek je op naam, merk, plaats, categorie of notitie.
 - Tik op een product → **Geopend** (of *1 fles geopend* als je er meer hebt). Een geopende verpakking **telt als opgebruikt**:
   ze gaat van je voorraad af en telt niet mee voor het minimum (zakt het daaronder, dan komt het op je lijst).
-  Ze blijft wel zichtbaar met *geopend* erbij. Leeg? Tik erop → **Op**. Vergissing? **Toch niet geopend**.
+  Ze blijft wel zichtbaar met *geopend* erbij, en bovenaan bij **Geopend** staat een overzicht van alles wat open is. Leeg? Tik erop → **Op**. Vergissing? **Toch niet geopend**.
 
 ## Grote verpakkingen, thuis verdeeld over potten
 

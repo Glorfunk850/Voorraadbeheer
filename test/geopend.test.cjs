@@ -98,6 +98,11 @@ async function main() {
   d = await api('GET', 'alles');
   controle(d.producten.filter((p) => p.naam === 'Rijst').length === 2, 'gekochte rijst komt op een aparte (ongeopende) regel');
 
+  // overzicht "Geopend" bovenaan
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  const overzicht = await page.$$eval('.voorraad-geopend [data-product]', (l) => l.map((x) => x.textContent.replace(/\s+/g, ' ').trim()));
+  controle(overzicht.length === 1 && overzicht[0].startsWith('Rijst') && overzicht[0].includes('geopend vandaag'), `overzicht Geopend (${overzicht.join(' | ')})`);
+  controle((await page.textContent('.voorraad-geopend .sectie-titel')).includes('1'), 'overzicht toont het aantal');
   // zoeken: alles open, alleen wat past
   await page.reload(); await page.waitForSelector('#zoek-voorraad');
   await page.fill('#zoek-voorraad', 'rijst');
