@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 65; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 67; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -62,7 +62,30 @@ export const HANDLEIDING = `
 <p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.
 Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, dan vul je bij elk zijn eigen minimum in. Elke inhoud wordt apart geteld. Het tekort komt <b>zonder merk en inhoud</b> op je lijst: na het winkelen kies je zelf welk merk en welke inhoud je kocht. Koop je een ander merk of een andere inhoud, dan telt dat niet mee voor dit minimum; wil je dat wel, gebruik dan het minimum voor alle merken samen.</p>
 <p><b>Minimum voor alle merken samen.</b> Maakt het niet uit welk merk of welke inhoud je in huis hebt (bv. je wilt altijd 3 blikken doperwten en wortelen, van Everyday of van Jumbo), tik dan in de <b>Catalogus</b> op het product, kies <b>Bewerken</b>, zet het vinkje <b>Minimum voor alle merken samen</b> aan (net onder Merk) en vul het minimum in. Zet je het vinkje weer uit, dan geldt het niet meer. Hetzelfde vinkje staat ook bij <b>Toevoegen</b> en <b>Bewerken</b> van je voorraad en in het boodschappenmenu (net onder Merk); het is overal hetzelfde minimum. Alles van dat product wordt dan samengeteld, om het even welk merk of welke inhoud: 1 blik à 530 g en 2 blikken à 450 g zijn samen 3. Heb je minder, dan komt het tekort <b>zonder merk en inhoud</b> op je lijst; in de winkel kies je zelf. Dit minimum gaat voor op het minimum per inhoud bij dat product.</p>
-<p><b>Grote verpakking, thuis verdeeld over potten.</b> Koop je bv. een zak rijst van 5 kg en verdeel je die thuis over voorraadpotten, zet dan de rijst in je voorraad als <b>potten</b> (eenheid <i>pot</i>) en vul bij <b>Bewerken → Meer</b> de <b>Minimumvoorraad</b> in (bv. 2 potten). Zet daaronder het vinkje <b>Bijkopen in een grote verpakking</b> aan en kies de verpakking (bv. zak), de inhoud (bv. 5 kg) en hoeveel potten ze ongeveer vult (bv. 4). Zakt het aantal potten onder het minimum, dan komt <b>1 zak à 5 kg</b> op je boodschappenlijst (niet het aantal potten). Je kunt ze ook zelf op je lijst zetten: tik op het product en kies <b>Grote verpakking op boodschappenlijst</b>. Na het winkelen vul je bij <b>In voorraad zetten</b> in over hoeveel potten je ze verdeeld hebt; die worden bij je potten geteld. Laat je dat veld leeg, dan komt de verpakking zelf in je voorraad.</p>
+
+<h3>Grote verpakking, verdeeld over voorraadpotten</h3>
+<p>Koop je bv. een grote zak rijst en verdeel je die thuis over voorraadpotten, dan kan de app de <b>grote verpakking</b> op je boodschappenlijst zetten als je potten bijna op zijn (en niet het aantal potten).</p>
+<p><b>Eenmalig instellen</b></p>
+<ol>
+  <li>Zet het product in je voorraad met als eenheid <b>pot</b>, bv. <i>Rijst – 3 pot</i>.</li>
+  <li>Tik op het product en kies <b>Bewerken</b>. Klap <b>Meer</b> open.</li>
+  <li>Vul bij <b>Minimumvoorraad</b> in bij hoeveel potten je wilt bijkopen, bv. 2.</li>
+  <li>Zet het vinkje <b>Bijkopen in een grote verpakking</b> aan en kies de verpakking (bv. zak), de inhoud (bv. 5 kg, mag leeg) en hoeveel potten één verpakking ongeveer vult (bv. 4).</li>
+  <li>Tik op <b>Bewaren</b>.</li>
+</ol>
+<p><b>Er is een pot op</b></p>
+<ol>
+  <li>Ga naar <b>Voorraad</b>, zoek het product en tik erop. Je ziet het aantal potten, bv. <i>3 pot</i>.</li>
+  <li>Tik op <b>−</b> links van het getal: er staat nu <i>2 pot</i>. Te veel weggetikt? Zet het terug met <b>+</b> of met <b>Ongedaan maken</b> onderaan.</li>
+</ol>
+<p>Zakt het aantal potten onder je minimum, dan komt de grote verpakking vanzelf op je boodschappenlijst, bv. <i>1 zak à 5 kg</i>, met de vermelding <i>Grote verpakking, onder je minimum</i>. Is je minimum 2, dan gebeurt dat pas bij 1 pot: 2 potten is nog genoeg. Gaat er nog een pot op, dan blijft het bij 1 zak. Wil je de grote verpakking eerder op je lijst, tik dan op het product en kies <b>Grote verpakking op boodschappenlijst</b>.</p>
+<p><b>Na het winkelen</b></p>
+<ol>
+  <li>Vink de zak af op je boodschappenlijst en tik op <b>Klaar met winkelen</b>.</li>
+  <li>Vul bij <b>Verdeeld over hoeveel potten?</b> in hoeveel potten je gevuld hebt (het aantal uit je instelling staat al ingevuld).</li>
+  <li>Tik op <b>In voorraad zetten</b>. De potten worden bij je potten opgeteld.</li>
+</ol>
+<p>Heb je de zak nog niet verdeeld, laat het veld dan leeg: de zak komt dan als aparte regel in je voorraad. Zet je het vinkje <b>Bijkopen in een grote verpakking</b> weer uit, dan komt het tekort aan potten op je lijst, zoals bij elk ander minimum.</p>
 
 <h3>Catalogus</h3>
 <p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, met een zoekveld. Onder het zoekveld kies je bij <b>Sorteren</b> (een uitklapmenu) hoe de lijst gesorteerd is: <b>Op naam (A–Z)</b> of <b>Op categorie</b>. Op categorie is elke categorie <b>uitklapbaar</b>: tik op een categorie om ze te openen of te sluiten; achter de naam staat hoeveel producten erin zitten. Producten zonder categorie staan onderaan bij <i>Zonder categorie</i>. Zoek je, dan staan alle categorieën open. Je keuze blijft bewaard op dit toestel. Bij wat je nu in huis hebt, staat <i>in huis</i>. Met <b>Toevoegen</b> zet je er zelf een product bij, zonder dat het in je voorraad komt. Tik op een product: van daaruit zet je het terug in je voorraad of op je lijst, <b>bewerk</b> je het (naam, aantal, categorie, plaats, inhoud, prijzen), of haal je het uit de catalogus. Geef je een product een nieuwe naam, dan verandert die ook in je voorraad en op je boodschappenlijst.</p>
