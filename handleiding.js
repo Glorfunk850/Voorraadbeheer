@@ -57,6 +57,7 @@ export const HANDLEIDING = `
   <li><b>Nieuwe verpakking toevoegen</b>: zelfde product met een andere datum, bv. een tweede pak melk.</li>
   <li><b>Op boodschappenlijst</b>, <b>Prijzen invullen</b>, <b>Weggooien</b>, <b>Bewerken</b> of <b>Verwijderen</b>.</li>
 </ul>
+<p>Is het een kleine of grote verpakking, dan staat dat bovenaan in het paneel. <b>Nieuwe verpakking toevoegen</b> en <b>Op boodschappenlijst</b> nemen die grootte over: een grote fles komt dus als grote fles op je lijst.</p>
 <p>Na gebruiken, weggooien of verwijderen verschijnt onderaan <b>Ongedaan maken</b>. Heb je meerdere verpakkingen van hetzelfde product, dan kies je eerst welke je wilt bekijken.</p>
 
 <h3>Minimumvoorraad</h3>
@@ -343,6 +344,7 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
   <tr><td>Melding "deze browser bewaart je gegevens niet"</td><td>Je gebruikt een privévenster. Open de app in een gewoon venster of installeer ze.</td></tr>
   <tr><td>"De app kon niet starten"</td><td>Herlaad de pagina en gebruik geen privévenster.</td></tr>
   <tr><td>Het scherm gaat uit tijdens het koken</td><td>Kijk in het recept of <b>Scherm blijft aan</b> groen is en of bij Instellingen → <b>Scherm aan laten</b> niet op <b>Nooit</b> staat. Staat batterijbesparing aan, dan kan het toestel het scherm toch uitzetten.</td></tr>
+  <tr><td>Mijn kleine en grote verpakkingen worden niet samengeteld, of staan twee keer op de lijst</td><td>Zo hoort het: een kleine en een grote verpakking zijn aparte voorraden, elk met een eigen minimum. Wil je ze toch samen tellen, kies dan bij <b>Bewerken</b> → <b>Verpakking</b> voor allebei <b>Niet opgegeven</b>.</td></tr>
   <tr><td>Iets per ongeluk weggegooid of verwijderd</td><td>Tik meteen op <b>Ongedaan maken</b> in de melding onderaan.</td></tr>
 </table>
 <p>Barcodes scannen en recepten van een foto inlezen staan in deze versie uit.</p>
