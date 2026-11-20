@@ -51,6 +51,13 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   en toont wat ontbreekt; jij kiest wat op de boodschappenlijst komt.
 - De maaltijden (ontbijt, lunch, avondeten) pas je aan bij Instellingen → **Maaltijden in de planner**.
 
+## Eigen eenheden
+
+- Bij Instellingen → **Eenheden** voeg je zelf eenheden toe (bv. *bokaal*, *tube*, *rol*) of verwijder je er.
+  Een eigen eenheid telt als verpakking (met eventueel een inhoud per stuk) en wordt herkend als je `2 bokaal augurken` typt.
+- De standaardeenheden (g, kg, l …) kun je niet hernoemen, wel verwijderen; *stuks* blijft altijd.
+  Producten die een verwijderde eenheid hebben, houden ze.
+
 ## Scherm aan laten tijdens het koken
 
 - Zolang een **recept** open staat, gaat het scherm niet op stand-by (Screen Wake Lock). Tik in het recept op
