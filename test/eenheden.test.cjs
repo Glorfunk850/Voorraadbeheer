@@ -61,8 +61,7 @@ async function main() {
   await page.fill('#pf-inhoud', '350');
   await page.selectOption('#pf-inhoud-eenheid', 'g');
   await page.click('#pf button[type=submit]');
-  await page.waitForTimeout(250);
-  d = await api('GET', 'alles');
+  for (let i = 0; i < 40; i++) { d = await api('GET', 'alles'); if (d.producten.some((p) => p.naam === 'Augurken')) break; await page.waitForTimeout(100); }
   const aug = d.producten.find((p) => p.naam === 'Augurken');
   controle(aug && aug.eenheid === 'bokaal' && aug.inhoud === 350, 'product bewaard als 2 bokaal à 350 g');
 

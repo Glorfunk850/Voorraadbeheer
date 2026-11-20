@@ -87,6 +87,23 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 </ol>
 <p>Heb je de zak nog niet verdeeld, laat het veld dan leeg: de zak komt dan als aparte regel in je voorraad. Zet je het vinkje <b>Bijkopen in een grote verpakking</b> weer uit, dan komt het tekort aan potten op je lijst, zoals bij elk ander minimum.</p>
 
+<h3>Doos met losse zakjes (bv. vanillepudding)</h3>
+<p>Zit er in één verpakking meer dan één portie, bv. een doos vanillepudding met 4 zakjes, soep in zakjes of gist, dan houd je je voorraad bij <b>per zakje</b> en koop je bij <b>per doos</b>. Zo gebruik je de zakjes op verschillende momenten en weet de app altijd hoeveel er nog zijn.</p>
+<p><b>Eenmalig instellen</b></p>
+<ol>
+  <li>Zet het product in je voorraad met als eenheid <b>zak</b> en als aantal het aantal zakjes, bv. <i>Vanillepudding – 4 zak</i>. Vul eventueel de inhoud per zakje in (bv. 40 g), dan kan een recept ook in gram rekenen.</li>
+  <li>Tik op het product, kies <b>Bewerken</b> en klap <b>Meer</b> open.</li>
+  <li>Vul bij <b>Minimumvoorraad</b> in vanaf hoeveel zakjes je een nieuwe doos wilt, bv. 1 (de doos komt op je lijst als het laatste zakje op is) of 2.</li>
+  <li>Zet het vinkje <b>Bijkopen in een grote verpakking</b> aan, kies bij <b>Grote verpakking</b> <i>doos</i> en vul bij <b>Aantal zakjes erin</b> in hoeveel zakjes er in één doos zitten, bv. 4.</li>
+  <li>Tik op <b>Bewaren</b>.</li>
+</ol>
+<p><b>Een zakje gebruikt</b></p>
+<ol>
+  <li>Tik op het product en dan op <b>−</b> links van het getal: er is één zakje minder. Kook je een recept uit de planner met <i>1 zakje vanillepudding</i>, dan gaat dat zakje er vanzelf af.</li>
+</ol>
+<p>Zakt het aantal zakjes onder je minimum, dan komt <b>1 doos</b> op je boodschappenlijst (niet het aantal zakjes). Na het winkelen vink je de doos af en tik je op <b>Klaar met winkelen</b>: bij <b>Hoeveel zakjes zitten erin?</b> staat het aantal al ingevuld, en die zakjes worden bij je voorraad geteld.</p>
+<p><b>Een doos gekocht zonder je lijst?</b> Tik op het product en kies <b>Doos erbij</b>: het aantal zakjes van één doos wordt meteen bij je voorraad geteld.</p>
+
 <h3>Catalogus</h3>
 <p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, met een zoekveld. Onder het zoekveld kies je bij <b>Sorteren</b> (een uitklapmenu) hoe de lijst gesorteerd is: <b>Op naam (A–Z)</b> of <b>Op categorie</b>. Op categorie is elke categorie <b>uitklapbaar</b>: tik op een categorie om ze te openen of te sluiten; achter de naam staat hoeveel producten erin zitten. Producten zonder categorie staan onderaan bij <i>Zonder categorie</i>. Zoek je, dan staan alle categorieën open. Je keuze blijft bewaard op dit toestel. Bij wat je nu in huis hebt, staat <i>in huis</i>. Met <b>Toevoegen</b> zet je er zelf een product bij, zonder dat het in je voorraad komt. Tik op een product: van daaruit zet je het terug in je voorraad of op je lijst, <b>bewerk</b> je het (naam, aantal, categorie, plaats, inhoud, prijzen), of haal je het uit de catalogus. Geef je een product een nieuwe naam, dan verandert die ook in je voorraad en op je boodschappenlijst.</p>
 <p>Hetzelfde product mag <b>meermaals</b> in de catalogus, met een <b>ander merk</b> en/of een <b>andere inhoud</b>: bv. koffie van Douwe à 250 g, van Douwe à 500 g en van Lavazza à 1 kg. Elk staat als aparte regel in de lijst. Tik op een product en kies <b>Ander merk of inhoud toevoegen</b>, of gebruik <b>Toevoegen</b> met een naam die al bestaat. Categorie, plaats, houdbaarheid en prijzen gelden voor alle merken en inhouden samen (prijzen blijven per inhoud). Precies hetzelfde merk met dezelfde inhoud kan maar één keer. Wat je aan je voorraad toevoegt met een nieuw merk of een nieuwe inhoud, komt vanzelf als extra regel in de catalogus.</p>

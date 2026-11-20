@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 70;
+const APP_VERSIE = 71;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -115,6 +115,9 @@ function vanProduct(h, p, e) {
   const i = inhoudVan(p);
   return i ? omrekenen(h * i.per, i.eenheid, e) : null;
 }
+/** Eenheid in het meervoud, voor de kleine verpakkingen in een grote (bv. 4 zakjes in een doos, 4 potten uit een zak). */
+const MEERVOUD = { stuks: 'stuks', pot: 'potten', zak: 'zakjes', pak: 'pakjes', blik: 'blikken', fles: 'flessen', doos: 'dozen' };
+const meervoud = (e, n = 2) => (n === 1 ? (e === 'stuks' ? 'stuk' : e === 'zak' ? 'zakje' : e === 'pak' ? 'pakje' : e) : MEERVOUD[e] || e);
 const zelfde = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
 
 const isoDatum = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -794,6 +797,7 @@ function productPaneel(id) {
       <ul class="acties">
         <li><button id="erbij">Nieuwe verpakking toevoegen</button></li>
         <li><button id="lijst">Op boodschappenlijst</button></li>
+        ${p.grootverpakking?.potten && p.eenheid !== 'pot' ? `<li><button id="groot-erbij">${esc(grootNaam(p.grootverpakking))} erbij <small class="stil">+${esc(fmt(p.grootverpakking.potten))} ${esc(meervoud(p.eenheid, p.grootverpakking.potten))} in je voorraad</small></button></li>` : ''}
         ${p.grootverpakking ? `<li><button id="lijst-groot">Grote verpakking op boodschappenlijst <small class="stil">${esc(grootTekst(p.grootverpakking, p.eenheid))}</small></button></li>` : ''}
         <li><button id="prijzen">${prijzenVan(p.naam).length ? 'Prijzen aanpassen' : 'Prijzen invullen'}</button></li>
         ${p.hoeveelheid > 0 ? '<li><button id="weggooien">Weggooien</button></li>' : ''}
@@ -813,10 +817,15 @@ function productPaneel(id) {
       datumtype: p.datumtype, barcode: p.barcode || '', hoeveelheid: telbaar ? 1 : p.hoeveelheid || 1,
       inhoud: p.inhoud || null, inhoud_eenheid: p.inhoud_eenheid || '', uitlekgewicht: !!p.uitlekgewicht, merk: p.merk || '' }));
     knop('lijst', async () => { await api('POST', 'boodschappen', { naam: p.naam, eenheid: p.eenheid, inhoud: p.inhoud || null, inhoud_eenheid: p.inhoud_eenheid || '', merk: p.merk || '', product_id: p.id }); toast(lijstMelding(p.naam, p)); });
+    knop('groot-erbij', async () => {
+      const n = p.grootverpakking.potten, voor = p.hoeveelheid || 0;
+      await api('PUT', `producten/${p.id}`, { hoeveelheid: Math.round((voor + n) * 1000) / 1000 });
+      toast(`+${fmt(n)} ${meervoud(p.eenheid, n)} ${p.naam}`, 'Ongedaan maken', () => api('PUT', `producten/${p.id}`, { hoeveelheid: voor }));
+    });
     knop('lijst-groot', async () => {
       const g = p.grootverpakking;
       await api('POST', 'boodschappen', { naam: p.naam, hoeveelheid: 1, eenheid: g.eenheid, inhoud: g.inhoud || null, inhoud_eenheid: g.inhoud_eenheid || '', product_id: p.id, potten_voor: p.id });
-      toast(`1 ${g.eenheid === 'stuks' ? 'stuk' : g.eenheid} ${p.naam} op je lijst`);
+      toast(`1 ${meervoud(g.eenheid, 1)} ${p.naam} op je lijst`);
     });
     knop('prijzen', () => prijzenPaneel(p.naam, p.eenheid, () => productPaneel(p.id)));
     knop('weggooien', () => verbruiken(p, null, 'weggegooid', true));
@@ -851,7 +860,9 @@ function totaalInHuis(naam) {
 }
 /** Grote verpakking van een product leesbaar, bv. "1 zak à 5 kg · vult ±4 potten". */
 const grootTekst = (g, eenheid) => [`1 ${g.eenheid === 'stuks' ? 'stuk' : g.eenheid}${g.inhoud > 0 ? ` à ${hoeveelTekst(g.inhoud, g.inhoud_eenheid)}` : ''}`,
-  g.potten ? `vult ±${fmt(g.potten)} ${eenheid === 'pot' ? (g.potten === 1 ? 'pot' : 'potten') : eenheid === 'stuks' ? 'stuks' : eenheid}` : ''].filter(Boolean).join(' · ');
+  g.potten ? (eenheid === 'pot' ? `vult ±${fmt(g.potten)} ${meervoud('pot', g.potten)}` : `met ${fmt(g.potten)} ${meervoud(eenheid, g.potten)}`) : ''].filter(Boolean).join(' · ');
+/** "Doos", "Zak" ... van een grote verpakking, met hoofdletter. */
+const grootNaam = (g) => { const t = g.eenheid === 'stuks' ? 'Verpakking' : g.eenheid; return t.charAt(0).toUpperCase() + t.slice(1); };
 const minimumTekst = (c) => (c && c.minimum > 0 ? `minimum ${hoeveelTekst(c.minimum, c.eenheid || 'stuks') || fmt(c.minimum)} in huis, alle merken samen` : '');
 // Vinkje "Minimum voor alle merken samen" (in de catalogus, bij voorraad toevoegen en bij boodschappen); het minimum hoort bij het catalogusproduct.
 const minimumVinkjeHtml = (id, minimum) => `<label class="vink uitlek-vink"><input type="checkbox" id="${id}-alle-aan" ${minimum > 0 ? 'checked' : ''}><span class="vakje"></span>
@@ -1151,7 +1162,7 @@ function productFormulier(bestaand, sjabloon = {}) {
           <label class="veld"><span>Minimumvoorraad voor deze inhoud (eronder komt het op je boodschappenlijst)</span><input id="pf-min" inputmode="decimal" value="${p.minimum ? esc(fmt(p.minimum)) : ''}" placeholder="Geen"></label>
           <p class="stil" style="margin:-.4rem 0 1rem">Staat het vinkje <i>Minimum voor alle merken samen</i> aan, dan gaat dat voor.</p>
           <label class="vink uitlek-vink"><input type="checkbox" id="pf-groot-aan" ${p.grootverpakking ? 'checked' : ''}><span class="vakje"></span>
-            <span>Bijkopen in een grote verpakking <small class="stil">je koopt bv. een grote zak en verdeelt die thuis over potten; onder het minimum komt de grote verpakking op je boodschappenlijst</small></span></label>
+            <span>Bijkopen in een grote verpakking <small class="stil">je koopt bv. een grote zak en verdeelt die thuis over potten, of een doos met losse zakjes (pudding, soep, gist …) die je één voor één gebruikt; onder het minimum komt de grote verpakking op je boodschappenlijst</small></span></label>
           <div id="pf-groot"${p.grootverpakking ? '' : ' hidden'}>
             <div class="rij2">
               <label class="veld"><span>Grote verpakking</span><select id="pf-groot-eenheid">${opties(eenheden().filter((e) => TELBAAR.has(e)), p.grootverpakking?.eenheid || 'zak')}</select></label>
@@ -1184,11 +1195,11 @@ function productFormulier(bestaand, sjabloon = {}) {
     };
     inhoudTonen();
     // grote verpakking: het getal "vult ongeveer" telt in de eenheid van dit product (potten, stuks ...)
-    const grootTitel = () => { const e = $('#pf-eenheid', el).value; $('#pf-groot-potten-titel', el).textContent = `Vult ongeveer (${e === 'pot' ? 'potten' : e})`; };
+    const grootTitel = () => { const e = $('#pf-eenheid', el).value; $('#pf-groot-potten-titel', el).textContent = e === 'pot' ? 'Vult ongeveer (potten)' : `Aantal ${meervoud(e)} erin`; };
     grootTitel();
     $('#pf-groot-aan', el).onchange = () => {
       $('#pf-groot', el).hidden = !$('#pf-groot-aan', el).checked;
-      if ($('#pf-groot-aan', el).checked && !$('#pf-min', el).value.trim()) { $('#pf-min', el).value = '1'; toast('Vul bij Minimumvoorraad in bij hoeveel potten je bijkoopt.'); }
+      if ($('#pf-groot-aan', el).checked && !$('#pf-min', el).value.trim()) { $('#pf-min', el).value = '1'; toast(`Vul bij Minimumvoorraad in bij hoeveel ${meervoud($('#pf-eenheid', el).value)} je bijkoopt.`); }
     };
     const productInfo = () => ({ eenheid: $('#pf-eenheid', el).value, inhoud_eenheid: $('#pf-inhoud', el).value.trim() ? $('#pf-inhoud-eenheid', el).value : '' });
     // de prijzen gelden voor de inhoud die hier staat (bv. pak à 500 g)
@@ -1208,7 +1219,7 @@ function productFormulier(bestaand, sjabloon = {}) {
     const invullen = (info) => {
       if (info.naam) $('#pf-naam', el).value = info.naam;
       if (info.hoeveelheid) $('#pf-hv', el).value = fmt(info.hoeveelheid);
-      if (info.eenheid) { $('#pf-eenheid', el).innerHTML = opties(eenheden(), info.eenheid); inhoudTonen(); prijsPerZetten(el, info.eenheid); }
+      if (info.eenheid) { $('#pf-eenheid', el).innerHTML = opties(eenheden(), info.eenheid); inhoudTonen(); grootTitel(); prijsPerZetten(el, info.eenheid); }
       if (info.inhoud > 0 && !$('#pf-inhoud', el).value) {
         $('#pf-inhoud', el).value = fmt(info.inhoud);
         if (info.inhoud_eenheid) $('#pf-inhoud-eenheid', el).innerHTML = opties(INHOUD_EENHEDEN, info.inhoud_eenheid);
@@ -1716,8 +1727,8 @@ function winkelenAfronden(ids) {
                 <select class="af-inhoud-eenheid" aria-label="Eenheid inhoud">${opties(INHOUD_EENHEDEN, 'g')}</select></div>
               <label class="vink uitlek-vink af-uitlek-vink"><input type="checkbox" class="af-uitlek"><span class="vakje"></span><span>Uitlekgewicht</span></label>
             </div>` : ''}
-            ${x.doel ? `<label class="veld af-potten-veld"><span>Verdeeld over hoeveel ${esc(x.doel.eenheid === 'pot' ? 'potten' : x.doel.eenheid)}? <small class="stil">leeg: de verpakking zelf in je voorraad zetten</small></span>
-              <input class="af-potten" inputmode="decimal" value="${x.potten ? esc(fmt(x.potten)) : ''}" placeholder="bv. 4" aria-label="Aantal ${esc(x.doel.eenheid === 'pot' ? 'potten' : x.doel.eenheid)}"></label>` : ''}
+            ${x.doel ? `<label class="veld af-potten-veld"><span>${x.doel.eenheid === 'pot' ? 'Verdeeld over hoeveel potten?' : `Hoeveel ${esc(meervoud(x.doel.eenheid))} zitten erin?`} <small class="stil">leeg: de verpakking zelf in je voorraad zetten</small></span>
+              <input class="af-potten" inputmode="decimal" value="${x.potten ? esc(fmt(x.potten)) : ''}" placeholder="bv. 4" aria-label="Aantal ${esc(meervoud(x.doel.eenheid))}"></label>` : ''}
             <input class="af-hv" inputmode="decimal" value="${esc(fmt(x.b.hoeveelheid ?? 1))}" aria-label="Hoeveelheid">
             <select class="af-eenheid" aria-label="Eenheid">${opties(eenheden(), x.eenheid)}</select>
             <select class="af-plaats" aria-label="Plaats">${opties(locaties(), x.locatie, 'Plaats')}</select>
