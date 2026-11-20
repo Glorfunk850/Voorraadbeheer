@@ -35,6 +35,8 @@ jobs:
         run: node test/catalogus.test.cjs
       - name: Minimum voor alle merken samen en boodschappen met elk merk
         run: node test/minimum.test.cjs
+      - name: Kleine en grote verpakkingen
+        run: node test/verpakking.test.cjs
       - name: Maaltijdplanner
         run: node test/planner.test.cjs
       - name: Bewaren in een bestand op het toestel

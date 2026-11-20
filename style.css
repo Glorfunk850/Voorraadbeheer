@@ -503,3 +503,6 @@ details.hl-thema[open] > summary::after { transform: rotate(-135deg); margin-bot
 .af-uitlek-vink { margin: 0; }
 .cat-sortering { display: flex; align-items: center; justify-content: flex-end; gap: .6rem; margin: -.2rem 0 1rem; color: var(--stil); font-size: .9rem; }
 .cat-sortering select { width: auto; padding: .45rem 2rem .45rem .7rem; font-size: .9rem; }
+/* kleine of grote verpakking achter de naam */
+.maat { display: inline-block; margin-left: .4rem; padding: 0 .4rem; border-radius: 6px; font-size: .72rem; font-weight: 600; line-height: 1.5; vertical-align: .1em; background: var(--veld); color: var(--stil); }
+.maat-groot { color: var(--tekst); }

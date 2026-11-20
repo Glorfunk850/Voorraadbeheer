@@ -29,6 +29,15 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   grote verpakking vanzelf op je lijst.
 - Bij **In voorraad zetten** vul je in over hoeveel potten je ze verdeeld hebt; die worden bij je potten geteld.
 
+## Kleine en grote verpakkingen
+
+- Kies bij **Verpakking** (net onder Merk) **Klein** of **Groot**: bij Toevoegen en Bewerken van je voorraad, in de
+  **Catalogus** (elke grootte is een aparte regel) en bij een boodschap. Achter de naam staat dan *klein* of *groot*.
+- Grote verpakkingen worden alleen met grote samengeteld, kleine alleen met kleine (in je voorraad én op de lijst).
+- Het minimum geldt alleen voor die grootte, ook het vinkje **Minimum voor alle merken samen** (kies eerst Klein of Groot).
+- Zakt een grootte onder het minimum, dan komt het tekort op je lijst in **dezelfde grootte**.
+- **Niet opgegeven** werkt zoals vroeger. Dit staat los van *Bijkopen in een grote verpakking* (potten, doos met zakjes).
+
 ## Doos met losse zakjes (bv. vanillepudding)
 
 - Zet het product in je voorraad **per zakje** (eenheid *zak*, bv. *4 zak*) en vul bij Bewerken → Meer de **Minimumvoorraad** in (bv. 1).
