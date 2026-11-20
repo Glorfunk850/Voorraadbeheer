@@ -19,6 +19,14 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   het product in je voorraad bewerken (of er een product van maken), of ze van de lijst halen.
   Afvinken doe je door op het rondje te tikken.
 
+## Grote verpakkingen, thuis verdeeld over potten
+
+- Zet het product in je voorraad als **potten** (eenheid *pot*) en vul bij Bewerken → Meer de **Minimumvoorraad** in.
+- Zet het vinkje **Bijkopen in een grote verpakking** aan: kies de verpakking (bv. zak à 5 kg) en hoeveel potten ze vult.
+- Zijn er minder potten dan het minimum, dan komt **1 grote verpakking** op je boodschappenlijst. Zelf toevoegen kan ook:
+  tik op het product → **Grote verpakking op boodschappenlijst**.
+- Bij **In voorraad zetten** vul je in over hoeveel potten je ze verdeeld hebt; die worden bij je potten geteld.
+
 ## Prijzen en winkels
 
 - Vul bij een product (Bewerken → **Prijs per winkel**) de prijs in bij één of meer winkels.

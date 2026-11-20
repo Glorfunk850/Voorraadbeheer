@@ -223,7 +223,7 @@ details.meer[open] summary::after { content: " ‹"; }
 .afronden-rij:last-child { border-bottom: 0; }
 .afronden-rij .titel { display: flex; justify-content: space-between; align-items: center; margin-bottom: .6rem; font-weight: 600; }
 .afronden-rij .velden { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-.afronden-rij .velden .segment, .afronden-rij .velden .af-variant, .afronden-rij .velden .af-ander { grid-column: 1 / -1; }
+.afronden-rij .velden .segment, .afronden-rij .velden .af-variant, .afronden-rij .velden .af-ander, .afronden-rij .velden .af-potten-veld { grid-column: 1 / -1; }
 .af-ander { display: grid; gap: .5rem; }
 .af-ander[hidden] { display: none; }
 .af-inhoud-rij { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
