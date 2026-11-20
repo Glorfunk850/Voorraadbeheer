@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 64; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 65; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -93,7 +93,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <li>De prijs geldt <b>per inhoud</b>: een pak à 500 g kan per kg duurder zijn dan een pak à 1 kg. In het venster <b>Prijzen</b> staat elke inhoud apart; met <b>+ Prijs voor een andere inhoud</b> voeg je er een toe. In een formulier gelden de prijzen voor de inhoud die erboven staat. Heeft een inhoud geen eigen prijs, dan gebruikt de app de prijs zonder inhoud (als die er is).</li>
   <li>Je kunt ook een prijs <b>per merk</b> invullen: koffie van Lavazza is vaak duurder dan die van het huismerk. In het venster <b>Prijzen</b> staat elk merk (en elke inhoud) apart; met <b>+ Prijs voor een ander merk of een andere inhoud</b> voeg je er een toe. In een formulier gelden de prijzen voor het merk en de inhoud die erboven staan. Heeft een merk geen eigen prijs, dan gebruikt de app de prijs zonder merk. Op de <b>boodschappenlijst</b> staan onder een boodschap de prijzen van de merken (goedkoopste winkel per merk, voor dezelfde hoeveelheid); tik op een merk om het voor die boodschap te kiezen. Ook in de <b>catalogus</b> staat bij elk merk en elke inhoud de goedkoopste prijs en winkel; tik erop voor alle prijzen per merk.</li>
 </ol>
-<p>Daarna verschijnt bovenaan het uitklapmenu <b>Winkel</b> (ernaast staat welke winkel gekozen is). Tik erop om een winkel te kiezen: <b>Alles</b> of één per winkel; na het kiezen klapt het menu weer dicht. Elk product staat op Alles én bij de winkel waar het het goedkoopst is. Het blijft dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere. Boven de lijst staat de geschatte totaalprijs.</p>
+<p>Daarna verschijnt bovenaan een grijs kader <b>Winkel</b> met knoppen: <b>Alles</b> en één per winkel. Het staat standaard open; met <b>Verbergen</b> klap je het dicht (de gekozen winkel blijft ernaast staan), met <b>Tonen</b> weer open. Elk product staat op Alles én bij de winkel waar het het goedkoopst is. Het blijft dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere. Boven de lijst staat de geschatte totaalprijs.</p>
 
 <h3>Winkelen</h3>
 <ol>
@@ -127,7 +127,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <h3>Recepten vinden</h3>
 <ul>
   <li><b>Zoeken</b> op titel, soort, categorie of ingrediënt.</li>
-  <li><b>Filters</b>: tik op <b>Filters</b> om de filterknoppen open of dicht te klappen (het actieve filter staat ernaast): Favorieten, <b>Alles in huis</b> (recepten waarvoor je niets moet kopen), een soort gerecht of een categorie. Nog eens tikken zet een filter uit.</li>
+  <li><b>Filters</b>: de filterknoppen staan in een grijs kader bovenaan, standaard open. Met <b>Verbergen</b> klap je ze dicht (het actieve filter blijft ernaast staan), met <b>Tonen</b> weer open: Favorieten, <b>Alles in huis</b> (recepten waarvoor je niets moet kopen), een soort gerecht of een categorie. Nog eens tikken zet een filter uit.</li>
   <li>Zonder zoeken of filter staan je recepten per soort gerecht; tik op een soort om ze open of dicht te klappen.</li>
   <li><b>Gebruikt wat op moet</b> toont tot drie recepten met producten die binnenkort vervallen.</li>
 </ul>

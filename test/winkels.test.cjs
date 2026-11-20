@@ -89,14 +89,20 @@ async function main() {
   const kaasRegel = await page.textContent('.lijst .rij:has-text("Kaas") small');
   controle(kaasRegel.includes('Aldi') && kaasRegel.includes('2,70'), `kaas bij Aldi, ± € 2,70 (${kaasRegel.trim()})`);
 
-  // winkels staan in een uitklapmenu: eerst openklappen, na het kiezen klapt het weer dicht
+  // winkels staan in een uitklapmenu (standaard open); dichtgeklapt: eerst openklappen
   const kiesWinkel = async (w) => {
     if (!(await page.$('.winkel-uitklap[open]'))) await page.click('.winkel-uitklap summary');
     await page.click(`.winkel-tabs [data-winkel="${w}"]`);
   };
-  controle(!(await page.isVisible('.winkel-tabs')), 'winkelmenu staat standaard dicht');
+  controle(await page.isVisible('.winkel-tabs'), 'winkelmenu staat standaard open');
   await kiesWinkel('Aldi');
-  controle(!(await page.isVisible('.winkel-tabs')) && (await page.textContent('.winkel-uitklap summary')).includes('Aldi'), 'na kiezen: menu dicht, gekozen winkel zichtbaar');
+  controle((await page.isVisible('.winkel-tabs')) && (await page.textContent('.winkel-uitklap summary')).includes('Aldi'), 'na kiezen: menu blijft open, gekozen winkel zichtbaar');
+  await page.click('.winkel-uitklap summary');
+  await page.goto(basis + '#recepten');
+  await page.goto(basis + '#boodschappen');
+  await page.waitForSelector('.winkel-uitklap');
+  controle(!(await page.isVisible('.winkel-tabs')), 'dichtgeklapt menu blijft dicht bij terugkeren');
+  await page.click('.winkel-uitklap summary');
   controle(JSON.stringify(await namen()) === '["Kaas"]', 'lijst van Aldi toont alleen kaas');
   await kiesWinkel('Colruyt');
   controle(JSON.stringify(await namen()) === '["Melk"]', 'lijst van Colruyt toont alleen melk');
