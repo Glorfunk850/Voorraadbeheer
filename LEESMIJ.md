@@ -83,6 +83,10 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   Een eigen eenheid telt als verpakking (met eventueel een inhoud per stuk) en wordt herkend als je `2 bokaal augurken` typt.
 - De standaardeenheden (g, kg, l …) kun je niet hernoemen, wel verwijderen; *stuks* blijft altijd.
   Producten die een verwijderde eenheid hebben, houden ze.
+- Bij Instellingen → **Eenheden voor de inhoud** doe je hetzelfde voor de eenheid van de inhoud (bv. rol à 200 *vel*,
+  doos à 40 *wasbeurten*). Zo'n eenheid wordt niet omgerekend, maar een prijs per vel of per wasbeurt kan wel.
+- In elke keuzelijst voor een eenheid staat onderaan **Andere eenheid…**: zo voeg je meteen een eenheid toe terwijl je
+  een product in je voorraad zet; ze wordt ook bij Instellingen bewaard.
 
 ## Scherm aan laten tijdens het koken
 

@@ -80,6 +80,8 @@
       maaltijden: ['Ontbijt', 'Lunch', 'Avondeten'], // momenten in de maaltijdplanner
       // eenheden voor voorraad en boodschappen (zelf aan te passen bij Instellingen)
       eenheden: ['stuks', 'g', 'kg', 'ml', 'cl', 'dl', 'l', 'pak', 'blik', 'fles', 'pot', 'zak', 'doos'],
+      // eenheden voor de inhoud per stuk of verpakking (bv. pak à 500 g); zelf aan te vullen, bv. vel of wasbeurt
+      inhoud_eenheden: ['g', 'kg', 'ml', 'cl', 'dl', 'l'],
     },
   });
   let S = STANDAARD();
@@ -563,6 +565,18 @@
         }
         for (const c of S.catalogus) for (const pr of c.prijzen || []) if (pr.per === van) pr.per = naar;
         for (const r of S.recepten) for (const i of r.ingredienten || []) if (i.eenheid === van) i.eenheid = naar;
+        return alles();
+      }
+      if (data.veld === 'inhoud_eenheid') {
+        // eigen eenheid voor de inhoud hernoemd (bv. vel → vellen): overal mee aanpassen
+        const van = data.van, naar = data.naar;
+        if (!van || !naar) return alles();
+        const pas = (x) => { if (x && x.inhoud_eenheid === van) x.inhoud_eenheid = naar; };
+        for (const x of [...S.producten, ...S.boodschappen, ...S.catalogus]) {
+          pas(x); pas(x.grootverpakking);
+          for (const v of Array.isArray(x.varianten) ? x.varianten : []) pas(v);
+        }
+        for (const c of S.catalogus) for (const pr of c.prijzen || []) { pas(pr); if (pr.per === van) pr.per = naar; }
         return alles();
       }
       if (data.veld === 'winkel') {
