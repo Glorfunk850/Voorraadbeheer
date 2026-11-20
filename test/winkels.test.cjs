@@ -81,7 +81,7 @@ async function main() {
 
   await page.goto(basis + '#boodschappen');
   await page.reload();
-  await page.waitForSelector('.winkel-tabs');
+  await page.waitForSelector('.winkel-uitklap');
   const tabs = await page.$$eval('.winkel-tabs .chip', (l) => l.map((b) => b.dataset.winkel));
   controle(JSON.stringify(tabs) === '["","Colruyt","Aldi"]', `tabbladen Alles, Colruyt, Aldi (${tabs.join(', ')})`);
   const namen = async () => page.$$eval('#inhoud .lijst:not(.sectie .lijst) .naam', (l) => l.map((x) => x.firstChild.textContent.trim()));
@@ -89,33 +89,40 @@ async function main() {
   const kaasRegel = await page.textContent('.lijst .rij:has-text("Kaas") small');
   controle(kaasRegel.includes('Aldi') && kaasRegel.includes('2,70'), `kaas bij Aldi, ± € 2,70 (${kaasRegel.trim()})`);
 
-  await page.click('[data-winkel="Aldi"]');
+  // winkels staan in een uitklapmenu: eerst openklappen, na het kiezen klapt het weer dicht
+  const kiesWinkel = async (w) => {
+    if (!(await page.$('.winkel-uitklap[open]'))) await page.click('.winkel-uitklap summary');
+    await page.click(`.winkel-tabs [data-winkel="${w}"]`);
+  };
+  controle(!(await page.isVisible('.winkel-tabs')), 'winkelmenu staat standaard dicht');
+  await kiesWinkel('Aldi');
+  controle(!(await page.isVisible('.winkel-tabs')) && (await page.textContent('.winkel-uitklap summary')).includes('Aldi'), 'na kiezen: menu dicht, gekozen winkel zichtbaar');
   controle(JSON.stringify(await namen()) === '["Kaas"]', 'lijst van Aldi toont alleen kaas');
-  await page.click('[data-winkel="Colruyt"]');
+  await kiesWinkel('Colruyt');
   controle(JSON.stringify(await namen()) === '["Melk"]', 'lijst van Colruyt toont alleen melk');
 
   // afvinken bij de winkel → weg van de algemene lijst
   await page.click('.rij:has-text("Melk") .vakje');
   await page.waitForTimeout(200);
-  await page.click('[data-winkel=""]');
+  await kiesWinkel('');
   let open = await namen();
   controle(!open.includes('Melk') && open.length === 2, 'melk afgevinkt bij Colruyt is weg van de algemene lijst');
 
   // afvinken op de algemene lijst → weg van de lijst van de winkel
   await page.click('.rij:has-text("Kaas") .vakje');
   await page.waitForTimeout(200);
-  await page.click('[data-winkel="Aldi"]');
+  await kiesWinkel('Aldi');
   controle((await namen()).length === 0, 'kaas afgevinkt op de algemene lijst is weg van de lijst van Aldi');
   controle(await page.isVisible('.sectie:has-text("In je mandje bij Aldi") .rij:has-text("Kaas")'), 'kaas staat in het mandje bij Aldi');
 
   // terug aanvinken werkt ook op beide lijsten
   await page.click('.rij:has-text("Kaas") .vakje');
   await page.waitForTimeout(200);
-  await page.click('[data-winkel=""]');
+  await kiesWinkel('');
   controle((await namen()).includes('Kaas'), 'kaas terug op de algemene lijst na het uitvinken bij Aldi');
 
   // klaar met winkelen bij Colruyt: alleen de melk gaat in de voorraad
-  await page.click('[data-winkel="Colruyt"]');
+  await kiesWinkel('Colruyt');
   await page.click('#klaar');
   await page.click('#af-ok');
   await page.waitForTimeout(250);
@@ -123,7 +130,7 @@ async function main() {
   controle(!d.boodschappen.some((b) => b.naam === 'Melk') && d.boodschappen.some((b) => b.naam === 'Kaas'), 'klaar bij Colruyt: melk weg, kaas blijft op de lijst');
 
   // prijs invullen vanaf de boodschappenlijst (Brood had nog geen prijs)
-  await page.click('[data-winkel=""]').catch(() => {});
+  await kiesWinkel('').catch(() => {});
   await page.click('.rij:has-text("Brood") [data-prijs]');
   await page.fill('#paneel [data-winkel="Delhaize"] .pz-prijs', '2,40');
   await page.click('#pz-form button[type=submit]');
@@ -156,7 +163,7 @@ async function main() {
   await api('POST', 'boodschappen', { naam: 'Koffie', hoeveelheid: 1, eenheid: 'pak' });
   await page.goto(basis + '#boodschappen');
   await page.reload();
-  await page.waitForSelector('.winkel-tabs');
+  await page.waitForSelector('.winkel-uitklap');
   const koffieRegel = await page.textContent('.lijst .rij:has-text("Koffie") small');
   controle(koffieRegel.includes('Colruyt') && koffieRegel.includes('5,00'), `1 pak koffie à 500 g bij € 10 per kg = € 5,00 (${koffieRegel.trim()})`);
 
