@@ -250,12 +250,14 @@
     S.boodschappen = S.boodschappen.filter((b) => !(zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum'
       && typeof b.minimum_maat === 'string' && !actief.has(b.minimum_maat)));
     if (!vrij.size) return;
-    const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam) && vrij.has(maatVan(p))).map(productSleutel),
+    const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam) && vrij.has(maatVan(p)) && telt(p)).map(productSleutel),
       ...autoBoodschappen(naam).filter((b) => typeof b.minimum_maat !== 'string' && vrij.has(maatVan(b))).map(minimumSleutel)]);
     for (const sleutel of sleutels) minimumPerInhoud(naam, sleutel);
   }
+  // Een geopende verpakking telt als opgebruikt: ze staat nog in je voorraad (om op te maken), maar telt niet mee voor het minimum.
+  const telt = (p) => !p.geopend;
   function minimumPerInhoud(naam, sleutel) {
-    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && productSleutel(p) === sleutel);
+    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && productSleutel(p) === sleutel && telt(p));
     const auto = autoBoodschappen(naam).find((b) => typeof b.minimum_maat !== 'string' && minimumSleutel(b) === sleutel);
     const weg = () => { if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto); };
     if (!regels.length) return weg();
@@ -288,7 +290,7 @@
     const eenheid = c.eenheid || S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || 'stuks';
     // verpakkingen tellen per stuk (blik, pot, pak ... samen); gewicht en volume worden omgerekend
     const tel = (p) => omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid) ?? (TELBARE.has(p.eenheid || 'stuks') && TELBARE.has(eenheid) ? p.hoeveelheid || 0 : 0);
-    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && groep.includes(maatVan(p)));
+    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && groep.includes(maatVan(p)) && telt(p));
     const totaal = regels.reduce((s, p) => s + tel(p), 0);
     // de automatische boodschappen van dit minimum (oudere: alles van deze groottes)
     const autos = autoBoodschappen(naam).filter((b) => (typeof b.minimum_maat === 'string' ? b.minimum_maat === m : groep.includes(maatVan(b))));
@@ -652,6 +654,7 @@
         p.uitlekgewicht = !!p.uitlekgewicht; p.merk = String(p.merk || '').trim();
         delete p.verpakking; Object.assign(p, maatVeld(maatVan(data)));
         const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g;
+        if (data.geopend && /^\d{4}-\d{2}-\d{2}$/.test(data.geopend)) p.geopend = data.geopend; // ongedaan maken van een geopende verpakking
         S.producten.push(p);
         catalogusBijwerken(p);
         // grote verpakking: meegegeven (ook null = uit) geldt voor het hele product; anders die uit de catalogus of van een andere voorraadregel
@@ -685,6 +688,34 @@
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid, maatVan(p));
         minimumControleren(oudeNaam); minimumControleren(p.naam);
+        return alles();
+      }
+      // Geopend: `hoeveelheid` verpakkingen (telbaar, standaard 1) of alles (gewicht, volume) gaan naar een aparte regel
+      // met `geopend` = datum. Die telt als opgebruikt: ze gaat van je voorraad af en telt niet mee voor het minimum.
+      // De oorspronkelijke regel blijft (ook op 0) als ze een minimum heeft; anders verdwijnt ze als ze leeg is.
+      if (methode === 'POST' && actie === 'openen') {
+        if (p.geopend) fout(400, 'Dit is al geopend.');
+        if (!(p.hoeveelheid > 0)) fout(400, 'Hiervan is niets meer in huis.');
+        const n = TELBARE.has(p.eenheid) ? Math.min(p.hoeveelheid, getal(data.hoeveelheid) > 0 ? getal(data.hoeveelheid) : 1) : p.hoeveelheid;
+        const open = { ...JSON.parse(JSON.stringify(p)), id: id(), hoeveelheid: n, minimum: 0, geopend: vandaag(), gesloten_id: p.id, aangemaakt: nu(), gewijzigd: nu() };
+        p.hoeveelheid = Math.max(0, Math.round((p.hoeveelheid - n) * 1000) / 1000); p.gewijzigd = nu();
+        S.producten.push(open);
+        if (p.hoeveelheid === 0 && !p.minimum) S.producten = S.producten.filter((x) => x !== p);
+        gebeurtenis('geopend', p.naam);
+        minimumControleren(p.naam);
+        return { ...alles(), nieuw_id: open.id };
+      }
+      // Toch niet geopend: terug bij de ongeopende regel (dezelfde, of een met hetzelfde merk, dezelfde inhoud, grootte en datum)
+      if (methode === 'POST' && actie === 'sluiten') {
+        if (!p.geopend) return alles();
+        const doel = S.producten.find((x) => x.id === p.gesloten_id && !x.geopend)
+          || S.producten.find((x) => x !== p && !x.geopend && zelfde(x.naam, p.naam) && zelfde(x.merk, p.merk) && x.eenheid === p.eenheid
+            && productSleutel(x) === productSleutel(p) && (x.vervaldatum || '') === (p.vervaldatum || ''));
+        if (doel) {
+          doel.hoeveelheid = Math.round(((doel.hoeveelheid || 0) + (p.hoeveelheid || 0)) * 1000) / 1000; doel.gewijzigd = nu();
+          S.producten = S.producten.filter((x) => x !== p);
+        } else { delete p.geopend; delete p.gesloten_id; p.gewijzigd = nu(); }
+        minimumControleren(p.naam);
         return alles();
       }
       if (methode === 'POST' && actie === 'verbruik') {
@@ -725,7 +756,7 @@
           const maat = 'verpakking' in item ? maatVan(item) : gekozen && maatVan(gekozen) ? maatVan(gekozen) : maatVan(b);
           // alleen bijtellen bij een voorraadregel met hetzelfde merk, dezelfde inhoud en dezelfde grootte (ook: allebei zonder);
           // nooit vanzelf een merk of inhoud overnemen die je niet koos
-          const bestaand = S.producten.find((p) => zelfde(p.naam, b.naam) && omrekenen(1, item.eenheid, p.eenheid) !== null
+          const bestaand = S.producten.find((p) => zelfde(p.naam, b.naam) && !p.geopend && omrekenen(1, item.eenheid, p.eenheid) !== null
             && productSleutel(p) === metMaat(maat, inhoudSleutel(inh)) && zelfde(p.merk, merk)
             && (!item.vervaldatum || p.vervaldatum === item.vervaldatum || !p.hoeveelheid));
           if (bestaand) {
