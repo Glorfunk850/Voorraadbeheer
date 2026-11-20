@@ -29,6 +29,14 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   grote verpakking vanzelf op je lijst.
 - Bij **In voorraad zetten** vul je in over hoeveel potten je ze verdeeld hebt; die worden bij je potten geteld.
 
+## Doos met losse zakjes (bv. vanillepudding)
+
+- Zet het product in je voorraad **per zakje** (eenheid *zak*, bv. *4 zak*) en vul bij Bewerken → Meer de **Minimumvoorraad** in (bv. 1).
+- Zet **Bijkopen in een grote verpakking** aan: kies *doos* en vul bij **Aantal zakjes erin** in hoeveel zakjes er in één doos zitten.
+- Een zakje gebruikt? Tik op het product → **−**. Onder het minimum komt **1 doos** op je lijst; bij **In voorraad zetten**
+  worden de zakjes van de doos bij je voorraad geteld.
+- Zonder lijst een doos gekocht: tik op het product → **Doos erbij** (+ het aantal zakjes van één doos).
+
 ## Prijzen en winkels
 
 - Vul bij een product (Bewerken → **Prijs per winkel**) de prijs in bij één of meer winkels.
