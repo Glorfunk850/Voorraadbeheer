@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 68; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 73; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -62,6 +62,15 @@ export const HANDLEIDING = `
 <p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.
 Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, dan vul je bij elk zijn eigen minimum in. Elke inhoud wordt apart geteld. Het tekort komt <b>zonder merk en inhoud</b> op je lijst: na het winkelen kies je zelf welk merk en welke inhoud je kocht. Koop je een ander merk of een andere inhoud, dan telt dat niet mee voor dit minimum; wil je dat wel, gebruik dan het minimum voor alle merken samen.</p>
 <p><b>Minimum voor alle merken samen.</b> Maakt het niet uit welk merk of welke inhoud je in huis hebt (bv. je wilt altijd 3 blikken doperwten en wortelen, van Everyday of van Jumbo), tik dan in de <b>Catalogus</b> op het product, kies <b>Bewerken</b>, zet het vinkje <b>Minimum voor alle merken samen</b> aan (net onder Merk) en vul het minimum in. Zet je het vinkje weer uit, dan geldt het niet meer. Hetzelfde vinkje staat ook bij <b>Toevoegen</b> en <b>Bewerken</b> van je voorraad en in het boodschappenmenu (net onder Merk); het is overal hetzelfde minimum. Alles van dat product wordt dan samengeteld, om het even welk merk of welke inhoud: 1 blik à 530 g en 2 blikken à 450 g zijn samen 3. Heb je minder, dan komt het tekort <b>zonder merk en inhoud</b> op je lijst; in de winkel kies je zelf. Dit minimum gaat voor op het minimum per inhoud bij dat product.</p>
+
+<h3>Kleine en grote verpakkingen</h3>
+<p>Koop je hetzelfde product soms in een kleine en soms in een grote verpakking (bv. een klein en een groot flesje shampoo, of een kleine en een grote pot choco), kies dan bij <b>Verpakking</b> (net onder Merk) <b>Klein</b> of <b>Groot</b>. Dat kan bij <b>Toevoegen</b> en <b>Bewerken</b> van je voorraad, in de <b>Catalogus</b> (elke grootte staat er als aparte regel) en bij een boodschap. In de lijsten staat dan <i>klein</i> of <i>groot</i> achter de naam. Laat je <b>Niet opgegeven</b> staan, dan werkt alles zoals vroeger.</p>
+<ul>
+  <li><b>Nooit samen.</b> Grote verpakkingen worden alleen met grote samengeteld, kleine alleen met kleine. Ook op de boodschappenlijst blijven ze aparte regels, en na het winkelen gaat een grote verpakking bij je grote verpakkingen.</li>
+  <li><b>Elk een eigen minimum.</b> Het minimum dat je invult bij een grote verpakking geldt alleen voor de grote verpakkingen; dat bij een kleine alleen voor de kleine. Dat geldt voor het minimum bij <b>Meer → Minimumvoorraad</b> én voor het vinkje <b>Minimum voor alle merken samen</b>: kies eerst Klein of Groot, dan staat er bv. <i>Minimum voor alle merken samen, grote verpakkingen</i>.</li>
+  <li><b>Terug in dezelfde grootte.</b> Zakken je grote verpakkingen onder hun minimum, dan komt het tekort op je boodschappenlijst als <b>grote verpakking</b>; bij kleine verpakkingen als <b>kleine verpakking</b>.</li>
+</ul>
+<p>Dit staat los van <b>Bijkopen in een grote verpakking</b> hieronder (een grote zak die je thuis over potten verdeelt).</p>
 
 <h3>Grote verpakking, verdeeld over voorraadpotten</h3>
 <p>Koop je bv. een grote zak rijst en verdeel je die thuis over voorraadpotten, dan kan de app de <b>grote verpakking</b> op je boodschappenlijst zetten als je potten bijna op zijn (en niet het aantal potten).</p>
