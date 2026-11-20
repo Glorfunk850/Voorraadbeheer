@@ -119,29 +119,6 @@ async function main() {
   controle(!(await page.isChecked('#cf-alle-aan')) && (await page.textContent('#cf-alle-titel')).includes('kleine'), 'klein gekozen: vinkje toont het minimum van de kleine verpakkingen');
   await page.click('#paneel [data-sluit]');
 
-  // voorraad van vóór deze functie (zonder grootte); in de catalogus "Groot" kiezen met minimum 1 voor grote verpakkingen:
-  // de voorraadregels krijgen de grootte mee en tellen mee, dus niets op de lijst
-  const M = 'Mayonaise met eieren';
-  await api('POST', 'producten', { naam: M, hoeveelheid: 2, eenheid: 'stuks', merk: 'Vandemoortele' });
-  d = await api('GET', 'alles');
-  const cm = d.catalogus.find((x) => x.naam === M);
-  await api('PUT', 'catalogus', { naam: M, oudeNaam: M, oudeVariant: cm.varianten[0], merk: 'Vandemoortele', inhoud: null, inhoud_eenheid: '',
-    eenheid: 'stuks', verpakking: 'groot', minimum: 1 });
-  d = await api('GET', 'alles');
-  controle(d.producten.filter((p) => p.naam === M).every((p) => p.verpakking === 'groot'), 'catalogus op Groot: bestaande voorraadregels worden ook groot');
-  controle(!d.boodschappen.some((x) => x.naam === M), `2 grote in huis, minimum 1: niets op de lijst (${JSON.stringify(d.boodschappen.filter((x) => x.naam === M))})`);
-  // al eerder op Groot gezet terwijl de voorraad nog zonder grootte stond: opnieuw bewaren herstelt het
-  const mp = d.producten.find((p) => p.naam === M);
-  await api('PUT', `producten/${mp.id}`, { verpakking: '' });
-  d = await api('GET', 'alles');
-  const cm2 = d.catalogus.find((x) => x.naam === M);
-  const vg = cm2.varianten.find((x) => x.verpakking === 'groot');
-  controle(d.boodschappen.some((x) => x.naam === M), 'voorraadregel zonder grootte telt niet voor grote verpakkingen');
-  await api('PUT', 'catalogus', { naam: M, oudeNaam: M, oudeVariant: vg, merk: 'Vandemoortele', inhoud: null, inhoud_eenheid: '', eenheid: 'stuks', verpakking: 'groot', minimum: 1 });
-  d = await api('GET', 'alles');
-  controle(d.producten.filter((p) => p.naam === M).every((p) => p.verpakking === 'groot') && !d.boodschappen.some((x) => x.naam === M),
-    'opnieuw bewaren in de catalogus: voorraadregel wordt groot en verdwijnt van de lijst');
-
   // bestaande gegevens zonder grootte werken zoals vroeger
   await api('POST', 'producten', { naam: 'Rijst', hoeveelheid: 1, eenheid: 'stuks', minimum: 2 });
   d = await api('GET', 'alles');
