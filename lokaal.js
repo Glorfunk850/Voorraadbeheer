@@ -95,18 +95,21 @@
 
   // ------------------------------------------------------------------ opslag
   // Op een gsm kan de browser de verbinding met de opslag stil sluiten of laten hangen (bv. als de app een tijd op de
-  // achtergrond stond). Dan wachtte alles daarna eindeloos: de app "blokkeerde" tot je ze herstartte.
-  // Daarom: een verbinding die gesloten wordt, vergeten; en een opdracht die te lang duurt (of mislukt) nog één keer
-  // proberen met een nieuwe verbinding.
-  const DB_WACHT = 6000;
-  let dbBelofte = null;
+  // achtergrond stond; op iPhone soms tot je de app herstart). Dan wachtte alles daarna: de app "blokkeerde".
+  // Daarom: een verbinding die gesloten wordt, vergeten; een opdracht die te lang duurt (of mislukt) nog één keer
+  // proberen met een nieuwe verbinding. Lukt dat ook niet, dan geldt de opslag als "stuk": de app wacht er niet meer
+  // op en bewaart meteen in een noodopslag (localStorage). Op de achtergrond (en bij het terugkomen in de app) wordt
+  // nagekeken of de gewone opslag weer werkt; dan gaat alles daar terug naartoe.
+  const DB_WACHT = 4000, NOOD_SLEUTEL = 'voorraad-noodopslag';
+  let dbBelofte = null, opslagStuk = false;
   const dbVergeten = (d) => {
     const oud = dbBelofte; dbBelofte = null;
     try { if (d) d.close(); } catch { /* al dicht */ }
     if (oud && !d) oud.then((x) => { try { x.close(); } catch { /* */ } }, () => {});
   };
   const db = () => dbBelofte || (dbBelofte = new Promise((ok, nee) => {
-    const r = indexedDB.open(DB_NAAM, 1);
+    let r;
+    try { r = indexedDB.open(DB_NAAM, 1); } catch (f) { dbBelofte = null; return nee(f); }
     const klok = setTimeout(() => { dbBelofte = null; nee(new Error('De opslag op dit toestel reageert niet.')); }, DB_WACHT);
     r.onupgradeneeded = () => r.result.createObjectStore(DB_TABEL);
     r.onsuccess = () => {
@@ -119,39 +122,101 @@
     r.onerror = () => { clearTimeout(klok); dbBelofte = null; nee(r.error); };
     r.onblocked = () => console.warn('Opslag geblokkeerd door een ander venster van de app');
   }));
-  /** Eén opdracht op de opslag: werk(store) geeft een IDBRequest (of niets); de belofte geeft het resultaat ervan.
-   *  Duurt het te lang of mislukt het, dan nog één keer met een nieuwe verbinding. */
+  /** Eén poging: werk(store) geeft een IDBRequest (of niets); de belofte geeft het resultaat ervan. */
+  async function opslagKeer(modus, werk) {
+    const d = await db();
+    return new Promise((ok, nee) => {
+      let t, r;
+      try { t = d.transaction(DB_TABEL, modus); r = werk(t.objectStore(DB_TABEL)); } catch (f) { dbVergeten(d); return nee(f); } // verbinding was dicht
+      const klok = setTimeout(() => { try { t.abort(); } catch { /* */ } dbVergeten(d); nee(new Error('De opslag op dit toestel reageert niet.')); }, DB_WACHT);
+      t.oncomplete = () => { clearTimeout(klok); ok(r && r.result); };
+      t.onerror = () => { clearTimeout(klok); nee(t.error); };
+      t.onabort = () => { clearTimeout(klok); nee(t.error || new Error('afgebroken')); };
+    });
+  }
+  /** Eén opdracht op de opslag; mislukt ze, nog één keer met een nieuwe verbinding. Is de opslag stuk: meteen een fout. */
   async function opslag(modus, werk) {
-    const keer = async () => {
-      const d = await db();
-      return new Promise((ok, nee) => {
-        let t;
-        try { t = d.transaction(DB_TABEL, modus); } catch (f) { dbVergeten(d); return nee(f); } // verbinding was dicht
-        const klok = setTimeout(() => { try { t.abort(); } catch { /* */ } dbVergeten(d); nee(new Error('De opslag op dit toestel reageert niet.')); }, DB_WACHT);
-        const r = werk(t.objectStore(DB_TABEL));
-        t.oncomplete = () => { clearTimeout(klok); ok(r && r.result); };
-        t.onerror = () => { clearTimeout(klok); nee(t.error); };
-        t.onabort = () => { clearTimeout(klok); nee(t.error || new Error('afgebroken')); };
-      });
-    };
-    try { return await keer(); } catch (f) {
+    if (opslagStuk) { herstelPlannen(); throw new Error('De opslag op dit toestel werkt even niet.'); }
+    try { return await opslagKeer(modus, werk); } catch (f) {
       console.warn('Opslag: opnieuw proberen', f);
       dbVergeten();
-      return keer();
+      try { return await opslagKeer(modus, werk); } catch (f2) {
+        opslagStuk = true; herstelPlannen();
+        throw f2;
+      }
     }
   }
-  async function laden() {
+  // noodopslag: alleen zolang de gewone opslag niet werkt; verdwijnt zodra alles weer in de gewone opslag staat
+  const noodLezen = () => { try { const t = localStorage.getItem(NOOD_SLEUTEL); return t ? JSON.parse(t) : null; } catch { return null; } };
+  const noodSchrijven = (tekst) => { localStorage.setItem(NOOD_SLEUTEL, tekst); };
+  const noodWissen = () => { try { localStorage.removeItem(NOOD_SLEUTEL); } catch { /* */ } };
+  let herstelTimer = null, herstelBezig = false;
+  function herstelPlannen(wacht = 15000) {
+    if (!opslagStuk || herstelBezig) return;
+    clearTimeout(herstelTimer);
+    herstelTimer = setTimeout(herstellen, wacht);
+  }
+  /** Kijken of de gewone opslag weer werkt (zonder de app op te houden); zo ja: wat in de noodopslag staat erin zetten. */
+  async function herstellen() {
+    if (!opslagStuk || herstelBezig) return;
+    herstelBezig = true; herstelTimer = null;
+    dbVergeten();
     try {
-      const waarde = await opslag('readonly', (st) => st.get(SLEUTEL));
-      if (waarde) { S = normaliseren(waarde); minimumBoodschappenNakijken(); }
-    } catch (f) { console.error('Laden mislukt', f); opslagWerkt = false; }
+      await opslagKeer('readonly', (st) => st.count());
+      opslagStuk = false;
+      console.info('Opslag werkt weer');
+      if (ladenMislukt) {
+        // bij het openen kon niets gelezen worden: nu de echte gegevens lezen, samen met wat je intussen invoerde
+        await inWachtrij(async () => {
+          await schrijfKetting;
+          await laden();
+        });
+        if (kanaal) kanaal.postMessage('gewijzigd');
+        document.dispatchEvent(new Event('syncgewijzigd'));
+      } else if (noodLezen()) bewaren().catch(() => {});
+    } catch { /* nog niet */ }
+    herstelBezig = false;
+    if (opslagStuk) herstelPlannen(30000);
+  }
+  // terug in de app: meteen nakijken (dan wacht de volgende tik niet)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && opslagStuk) herstelPlannen(0); });
+  // Kon de app bij het openen niets lezen (opslag stuk), dan start ze leeg. Wat je dan invoert, mag je echte gegevens
+  // later niet overschrijven: zodra de opslag weer werkt, worden ze samengevoegd (zie herstellen).
+  let ladenMislukt = false;
+  async function laden() {
+    let waarde, gelezen = false;
+    try { waarde = await opslag('readonly', (st) => st.get(SLEUTEL)); gelezen = true; } catch (f) { console.error('Laden mislukt', f); }
+    if (gelezen) ladenMislukt = false; else if (!ladenMislukt) ladenMislukt = S.producten.length === 0 && S.recepten.length === 0 && S.boodschappen.length === 0;
+    // wat in de noodopslag staat, is nieuwer dan de gewone opslag (bij het eerstvolgende goede bewaren wordt ze gewist)
+    const nood = noodLezen();
+    const metNood = !!(nood && nood.gegevens);
+    if (metNood) waarde = nood.leegBegonnen && gelezen && waarde ? metEcht(nood.gegevens, waarde) : nood.gegevens;
+    if (waarde) { S = normaliseren(waarde); minimumBoodschappenNakijken(); }
+    if (metNood && gelezen) bewaren().catch(() => {}); // terug naar de gewone opslag (de noodopslag wordt dan gewist)
+  }
+  /** Ingevoerd op een lege app (opslag was stuk bij het openen) samenvoegen met de echte gegevens: alles blijft. */
+  function metEcht(ingevoerd, echt) {
+    let n = Math.max(+echt.volgendId || 1, Date.now() * 1000);
+    const eigen = M.nieuweIds(syncDeel(ingevoerd), () => n++);
+    // basis: de lege app zoals ze begon; zo winnen je echte instellingen, behalve wat je intussen zelf veranderde
+    const uit = M.samenvoegen(syncDeel(STANDAARD()), eigen, syncDeel(echt));
+    uit.volgendId = n;
+    if (echt.laatste_backup) uit.laatste_backup = echt.laatste_backup;
+    return uit;
   }
   let opslagWerkt = true, schrijfKetting = Promise.resolve();
-  /** Bewaart S. De belofte faalt als het bewaren mislukt, zodat de app dat kan melden (niet stil verloren gaan). */
+  /** Bewaart S. De belofte faalt alleen als ook de noodopslag mislukt, zodat de app dat kan melden (niet stil verloren gaan). */
   function bewaren() {
-    const kopie = JSON.parse(JSON.stringify(S));
+    const tekst = JSON.stringify(S), kopie = JSON.parse(tekst);
     const schrijf = schrijfKetting.then(async () => {
-      await opslag('readwrite', (st) => { st.put(kopie, SLEUTEL); });
+      try {
+        if (ladenMislukt) throw new Error('eerst de echte gegevens lezen');
+        await opslag('readwrite', (st) => { st.put(kopie, SLEUTEL); });
+        noodWissen();
+      } catch (f) {
+        console.warn('Gewone opslag werkt niet; bewaard in de noodopslag', f);
+        noodSchrijven(JSON.stringify({ tijd: nu(), ...(ladenMislukt ? { leegBegonnen: true } : {}), gegevens: kopie })); // gooit een fout als ook dit niet lukt
+      }
       opslagWerkt = true;
       bestandPlannen();
     });
@@ -1419,6 +1484,9 @@
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').then((reg) => {
+        // een geïnstalleerde app op de gsm wordt vaak alleen uit de achtergrond teruggehaald (niet opnieuw geopend):
+        // dan ook nakijken of er een nieuwe versie is
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
         reg.addEventListener('updatefound', () => {
           const nieuw = reg.installing;
           nieuw && nieuw.addEventListener('statechange', () => {

@@ -34,11 +34,13 @@ async function main() {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   // Haakje om de opslag te saboteren: 'dicht' = de volgende transactie gooit InvalidStateError (verbinding gesloten),
-  // 'hangt' = de volgende transactie krijgt nooit antwoord.
+  // 'hangt' = de volgende transactie krijgt nooit antwoord. sessionStorage 'kapot': elke transactie mislukt (zoals op iPhone
+// na een tijd op de achtergrond), ook al bij het openen van de app.
   await ctx.addInitScript(() => {
     window.__sabotage = null;
     const echt = IDBDatabase.prototype.transaction;
     IDBDatabase.prototype.transaction = function (...a) {
+      if (sessionStorage.getItem('kapot')) throw new DOMException('Connection to Indexed Database server lost. Refresh the page to try again', 'UnknownError');
       const s = window.__sabotage; window.__sabotage = null;
       if (s === 'dicht') throw new DOMException('The database connection is closing.', 'InvalidStateError');
       const t = echt.apply(this, a);
@@ -74,6 +76,44 @@ async function main() {
   const d = await page.evaluate(() => fetch('api/alles').then((r) => r.json()));
   controle(['Melk', 'Kaas'].every((n) => d.producten.some((p) => p.naam === n)), 'na herladen: producten staan er nog');
   controle(d.instellingen.locaties.includes('Kelder'), 'na herladen: nieuwe plaats staat er nog');
+
+
+  // opslag helemaal stuk (blijft mislukken): na de eerste keer wacht de app er niet meer op (noodopslag)
+  const tijd = async (f) => { const t = Date.now(); const r = await f(); return [r, Date.now() - t]; };
+  await page.evaluate(() => sessionStorage.setItem('kapot', '1'));
+  let [st1, t1] = await tijd(() => api('POST', 'producten', { naam: 'Brood', hoeveelheid: 1, eenheid: 'stuks' }));
+  let [st2, t2] = await tijd(() => api('PUT', 'instellingen', { locaties: ['Koelkast', 'Diepvries', 'Voorraadkast', 'Kelder', 'Garage'] }));
+  let [st3, t3] = await tijd(() => api('POST', 'producten', { naam: 'Boter', hoeveelheid: 1, eenheid: 'stuks' }));
+  controle(st1 === 200 && st2 === 200 && st3 === 200, 'opslag stuk: toevoegen lukt toch');
+  controle(t2 < 1000 && t3 < 1000, `opslag stuk: daarna geen wachten meer (${t2} ms, ${t3} ms)`);
+  controle(await page.evaluate(() => !!localStorage.getItem('voorraad-noodopslag')), 'bewaard in de noodopslag');
+  // app herstarten terwijl de opslag nog stuk is: wat je invoerde staat er (uit de noodopslag)
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  let d2 = await page.evaluate(() => fetch('api/alles').then((r) => r.json()));
+  controle(['Melk', 'Kaas', 'Brood', 'Boter'].every((n) => d2.producten.some((p) => p.naam === n)) && d2.instellingen.locaties.includes('Garage'),
+    'herstart met opslag stuk: alles staat er nog');
+  // opslag werkt weer: alles gaat terug naar de gewone opslag en de noodopslag verdwijnt
+  await page.evaluate(() => { sessionStorage.removeItem('kapot'); document.dispatchEvent(new Event('visibilitychange')); });
+  await page.waitForFunction(() => !localStorage.getItem('voorraad-noodopslag'), null, { timeout: 8000 }).catch(() => {});
+  controle(await page.evaluate(() => !localStorage.getItem('voorraad-noodopslag')), 'opslag werkt weer: noodopslag gewist');
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  d2 = await page.evaluate(() => fetch('api/alles').then((r) => r.json()));
+  controle(['Melk', 'Kaas', 'Brood', 'Boter'].every((n) => d2.producten.some((p) => p.naam === n)) && d2.instellingen.locaties.includes('Garage'),
+    'daarna: alles in de gewone opslag');
+
+  // opslag al stuk bij het openen: de app start leeg; wat je dan invoert, overschrijft je echte gegevens niet
+  await page.evaluate(() => sessionStorage.setItem('kapot', '1'));
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  controle((await api('POST', 'producten', { naam: 'Eieren', hoeveelheid: 6, eenheid: 'stuks' })) === 200, 'opslag stuk bij het openen: toevoegen lukt');
+  await page.evaluate(() => { sessionStorage.removeItem('kapot'); document.dispatchEvent(new Event('visibilitychange')); });
+  await page.waitForFunction(() => !localStorage.getItem('voorraad-noodopslag'), null, { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(500);
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  d2 = await page.evaluate(() => fetch('api/alles').then((r) => r.json()));
+  const namen = d2.producten.map((p) => p.naam);
+  controle(['Melk', 'Kaas', 'Brood', 'Boter', 'Eieren'].every((n) => namen.includes(n)), `samengevoegd: echte gegevens én het nieuwe product (${namen.join(', ')})`);
+  controle(d2.instellingen.locaties.includes('Garage'), 'samengevoegd: je eigen plaatsen blijven');
+  controle(new Set(d2.producten.map((p) => p.id)).size === d2.producten.length, 'geen dubbele nummers');
 
   // gegevens van een ander toestel komen binnen terwijl een paneel open staat: getoond zodra het paneel dicht is
   await page.evaluate(() => { document.querySelector('#paneel').hidden = false; document.querySelector('#sluier').hidden = false; }); // "bezig"
