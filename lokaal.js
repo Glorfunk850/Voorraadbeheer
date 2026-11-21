@@ -108,7 +108,7 @@
         const r = d.transaction(DB_TABEL).objectStore(DB_TABEL).get(SLEUTEL);
         r.onsuccess = () => ok(r.result); r.onerror = () => nee(r.error);
       });
-      if (waarde) S = normaliseren(waarde);
+      if (waarde) { S = normaliseren(waarde); minimumBoodschappenNakijken(); }
     } catch (f) { console.error('Laden mislukt', f); opslagWerkt = false; }
   }
   let opslagWerkt = true, schrijfKetting = Promise.resolve();
@@ -247,7 +247,15 @@
     // Wat daar niet onder valt, volgt het minimum van de voorraadregels zelf (per inhoud en grootte).
     const vrij = new Set(MATEN), actief = new Set();
     for (const m of ['klein', 'groot']) if (c && c[catMinimumVeld(m)] > 0) { vrij.delete(m); actief.add(m); minimumTotaal(naam, c, m, [m]); }
-    if (c && c.minimum > 0) { const rest = [...vrij]; vrij.clear(); actief.add(''); minimumTotaal(naam, c, '', rest); }
+    // Het algemene minimum geldt voor de groottes zonder eigen minimum. Heeft het product daarvan niets (geen voorraadregel
+    // en geen variant in de catalogus, bv. alles is klein en klein heeft een eigen minimum), dan is het een overblijfsel
+    // van vroeger: niet tellen, anders staat het product altijd op de lijst (0 in huis van een grootte die je nooit koopt).
+    if (c && c.minimum > 0) {
+      const rest = [...vrij];
+      const heeftRest = rest.length === MATEN.length || S.producten.some((p) => zelfde(p.naam, naam) && rest.includes(maatVan(p)))
+        || variantenVan(c).some((v) => rest.includes(maatVan(v)));
+      if (heeftRest) { vrij.clear(); actief.add(''); minimumTotaal(naam, c, '', rest); }
+    }
     // automatische boodschap van een catalogusminimum dat er niet meer is: weg (het minimum per inhoud neemt het over)
     S.boodschappen = S.boodschappen.filter((b) => !(zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum'
       && typeof b.minimum_maat === 'string' && !actief.has(b.minimum_maat)));
@@ -346,7 +354,7 @@
     Object.assign(c, { merk: v.merk, inhoud: v.inhoud, inhoud_eenheid: v.inhoud_eenheid, uitlekgewicht: v.uitlekgewicht });
     delete c.verpakking; Object.assign(c, maatVeld(maatVan(v)));
   }
-  function catalogusBijwerken(p, teller = true, oudeNaam = null) {
+  function catalogusBijwerken(p, teller = true, oudeNaam = null, oudeVariant = null) {
     const naam = (p.naam || '').trim();
     if (!naam) return;
     let c = S.catalogus.find((x) => zelfde(x.naam, naam));
@@ -363,7 +371,13 @@
       const v = variantUit({ merk: 'merk' in p ? p.merk : c.merk, inhoud: 'inhoud' in p ? p.inhoud : c.inhoud,
         inhoud_eenheid: 'inhoud' in p ? p.inhoud_eenheid : c.inhoud_eenheid, uitlekgewicht: 'uitlekgewicht' in p ? p.uitlekgewicht : c.uitlekgewicht,
         verpakking: 'verpakking' in p ? p.verpakking : c.verpakking });
-      variantBewaren(c, v);
+      // Alleen de grootte van een voorraadregel veranderd (bv. van "niet opgegeven" naar klein): dat is een verbetering,
+      // geen ander product. De oude variant vervangen als geen andere voorraadregel ze nog heeft; anders blijft er een
+      // variant zonder grootte staan die je niet (meer) koopt, en blijft een oud minimum daarvoor gelden.
+      const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
+      const vervang = oudeVariant && variantSleutel(oudeVariant) !== variantSleutel(v) && zonderMaat(oudeVariant) === zonderMaat(v)
+        && !S.producten.some((x) => x !== p && zelfde(x.naam, naam) && variantSleutel(variantUit(x)) === variantSleutel(oudeVariant));
+      variantBewaren(c, v, vervang ? oudeVariant : null);
     } else if ('uitlekgewicht' in p) c.uitlekgewicht = !!p.uitlekgewicht;
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
@@ -537,6 +551,7 @@
       const d = data && (Array.isArray(data.producten) || Array.isArray(data.recepten) ? data : data.gegevens || data.data);
       if (!d || (!Array.isArray(d.producten) && !Array.isArray(d.recepten))) fout(400, 'Dit is geen geldig back-upbestand.');
       S = normaliseren(d);
+      minimumBoodschappenNakijken(); // back-up van een oudere versie: verkeerde minimum-boodschappen weg
       return alles();
     }
     if (bron === 'hernoemen') {
@@ -686,7 +701,7 @@
       const p = S.producten.find((x) => x.id === ident);
       if (!p) fout(404, 'Dit product bestaat niet (meer).');
       if (methode === 'PUT') {
-        const oudeNaam = p.naam;
+        const oudeNaam = p.naam, oudeVariant = variantUit(p);
         for (const k of VELDEN) if (k in data) p[k] = data[k];
         if ('hoeveelheid' in data) p.hoeveelheid = getal(data.hoeveelheid) || 0;
         if ('minimum' in data) p.minimum = getal(data.minimum) || 0;
@@ -696,7 +711,7 @@
         if ('verpakking' in data) { delete p.verpakking; Object.assign(p, maatVeld(maatVan(data))); }
         if ('grootverpakking' in data) { const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g; else delete p.grootverpakking; }
         p.gewijzigd = nu();
-        if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
+        if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam, zelfde(oudeNaam, p.naam) ? oudeVariant : null);
         if ('grootverpakking' in data) grootZetten(p.naam, p.grootverpakking || null);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
@@ -1144,6 +1159,19 @@
       gezien.add(k); return true;
     });
     for (const n of new Set([...S.producten.filter((p) => p.minimum > 0).map((p) => p.naam), ...S.catalogus.filter((c) => MATEN.some((m) => c[catMinimumVeld(m)] > 0)).map((c) => c.naam)])) minimumControleren(n);
+  }
+  /** Na het laden: de automatische boodschappen (minimum) opnieuw nakijken, zodat een verkeerde van een oudere versie
+   *  vanzelf verdwijnt. Alleen producten die al zo'n boodschap hebben: wat je zelf van de lijst haalde, komt niet terug. */
+  function minimumBoodschappenNakijken() {
+    // overblijfsel van een oudere versie: een variant zonder grootte naast dezelfde (merk en inhoud) mét grootte,
+    // terwijl geen enkele voorraadregel nog zonder grootte is: dat was een verbetering van de grootte, geen ander product
+    for (const c of S.catalogus) {
+      if (!Array.isArray(c.varianten) || c.varianten.length < 2) continue;
+      const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
+      c.varianten = c.varianten.filter((v) => maatVan(v) || !c.varianten.some((w) => maatVan(w) && zonderMaat(w) === zonderMaat(v))
+        || S.producten.some((x) => zelfde(x.naam, c.naam) && variantSleutel(variantUit(x)) === variantSleutel(v)));
+    }
+    for (const n of new Set(S.boodschappen.filter((b) => b.bron === 'minimum' && !b.afgevinkt).map((b) => b.naam))) minimumControleren(n);
   }
   const syncMeld = (melding) => document.dispatchEvent(new CustomEvent('syncstatus', { detail: { melding } }));
   const zBewaren = () => idb(SYNC_SLEUTEL, Z ? JSON.parse(JSON.stringify(Z)) : undefined, !Z).catch((f) => console.warn('Synchronisatie niet bewaard', f));
