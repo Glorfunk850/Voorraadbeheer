@@ -94,10 +94,12 @@ async function main() {
   const fouten = [];
   let gemeten = 0;
 
-  async function vers(view) {
+  async function vers(view, venster = false) {
     const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: BREEDTE, height: 700 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
     await ctx.addInitScript(nepBestand);
     await ctx.addInitScript(() => { window.print = () => {}; });
+    // het venster "Op te gebruiken" bij het openen niet over de knoppen leggen (het wordt apart gemeten)
+    if (!venster) await ctx.addInitScript(() => { try { localStorage.setItem('op-te-gebruiken-venster', 'uit'); } catch { /* */ } });
     const page = await ctx.newPage();
     await page.goto(basis + '#' + view);
     await page.waitForFunction(() => document.querySelector('#inhoud').children.length > 0);
@@ -118,6 +120,14 @@ async function main() {
     if (!k) return null;
     const naam = await k.evaluate((e) => (e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40));
     try { await k.click({ timeout: 3000 }); return naam; } catch { return null; }
+  }
+
+  // venster "Op te gebruiken" dat verschijnt bij het openen van de app
+  {
+    const page = await vers('voorraad', true);
+    if (await page.isVisible('#otg-lijst')) await meet(page, '[venster Op te gebruiken]');
+    else fouten.push('venster "Op te gebruiken" verscheen niet bij het openen');
+    await page.context().close();
   }
 
   // alle schermen tegelijk (elk in hun eigen, losse browsercontext): veel sneller

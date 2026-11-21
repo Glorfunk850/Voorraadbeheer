@@ -51,5 +51,7 @@ jobs:
         run: node test/potten.test.cjs
       - name: Scherm aan laten tijdens het koken
         run: node test/scherm.test.cjs
+      - name: Melding als een product op moet
+        run: node test/melding.test.cjs
       - name: Niets steekt buiten een smal telefoonscherm uit
         run: node test/breedte.test.cjs

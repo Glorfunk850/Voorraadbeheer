@@ -27,6 +27,14 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   ze gaat van je voorraad af en telt niet mee voor het minimum (zakt het daaronder, dan komt het op je lijst).
   Ze blijft wel zichtbaar met *geopend* erbij, en bovenaan bij **Geopend** staat een overzicht van alles wat open is. Leeg? Tik erop → **Op**. Vergissing? **Toch niet geopend**.
 
+## Melding als een product op moet
+
+- Moet er iets op (de datum komt eraan of is voorbij), dan verschijnt bij het openen van de app een venster
+  **Op te gebruiken** (hoogstens één keer per dag). Uitzetten kan bij Instellingen → **Meldingen**.
+- Daar zet je ook een **melding op dit toestel** aan. Ook als de app dicht is, kijkt ze dan ongeveer twee keer per dag na
+  wat op moet (hoogstens één melding per dag). Dat lukt alleen in Chrome of Edge met de app geïnstalleerd; op iPhone/iPad
+  en in Firefox zie je het in het venster bij het openen.
+
 ## Grote verpakkingen, thuis verdeeld over potten
 
 - Zet het product in je voorraad als **potten** (eenheid *pot*) en vul bij Bewerken → Meer de **Minimumvoorraad** in.
