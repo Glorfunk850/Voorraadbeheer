@@ -118,8 +118,8 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 2. Klik rechtsboven op **+** → **New repository**. Naam bv. `voorraad`, kies **Public**, klik **Create repository**.
 3. Klik op **uploading an existing file**. Pak de zip uit en sleep **de inhoud** van de map
    (index.html, app.js, de map vendor, …) in het venster. Klik **Commit changes**.
-   (Belangrijk: index.html moet bovenaan staan, niet in een submap. Sleep ook de map **vendor** mee:
-   via "choose your files" kun je geen mappen kiezen, via slepen wel.)
+   (Belangrijk: index.html moet bovenaan staan, niet in een submap. Sleep ook de mappen **vendor** en
+   **handleiding** (de afbeeldingen in de handleiding) mee: via "choose your files" kun je geen mappen kiezen, via slepen wel.)
 4. Ga naar **Settings** → **Pages**. Kies bij *Branch* `main` en map `/ (root)`, klik **Save**.
 5. Na een minuut staat er bovenaan: *Your site is live at* `https://<jouwnaam>.github.io/voorraad/`.
 
@@ -244,6 +244,14 @@ je een week niet geopend hebt; een app op het beginscherm niet.
 Upload de gewijzigde bestanden opnieuw naar dezelfde repository. Verhoog in `sw.js` het
 nummer in `VERSIE` (bv. `voorraad-v33`) en in `app.js` hetzelfde nummer in `APP_VERSIE`. Toestellen met internet krijgen
 de nieuwe versie dan meteen bij het volgende openen.
+
+## Afbeeldingen in de handleiding
+
+De handleiding toont schermafbeeldingen van de app (map `handleiding/`). Verandert het uiterlijk van de app, maak ze dan
+opnieuw met `node scripts/handleiding-afbeeldingen.cjs` (vereist Playwright). Het script vult de app met voorbeeldgegevens
+en fotografeert de schermen uit `scripts/handleiding-stappen.cjs`. Een nieuwe afbeelding zet je ook in de lijst in `sw.js`,
+zodat ze zonder internet werkt. `test/handleiding.test.cjs` controleert dat elke afbeelding bestaat, in de app getoond
+wordt en in de pdf komt.
 
 ## Automatische knoppentest
 

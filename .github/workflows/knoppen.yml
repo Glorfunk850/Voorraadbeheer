@@ -57,3 +57,5 @@ jobs:
         run: node test/breedte.test.cjs
       - name: Niet vastlopen als de opslag op de gsm stilvalt
         run: node test/opslag.test.cjs
+      - name: Afbeeldingen in de handleiding (app en pdf)
+        run: node test/handleiding.test.cjs
