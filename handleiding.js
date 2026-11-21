@@ -50,6 +50,10 @@ export const HANDLEIDING = `
 </table>
 <p>Hoeveel dagen vooraf de app waarschuwt, stel je in bij Instellingen (standaard 2 dagen voor TGT, 3 voor THT). TGT-producten staan altijd bovenaan.</p>
 
+<h3>Een melding als een product op moet</h3>
+<p>Moet er iets op (de datum komt eraan of is voorbij), dan verschijnt bij het openen van de app een venster <b>Op te gebruiken</b> met die producten, <i>Te gebruiken tot</i> bovenaan. Tik op een product om het te openen, of op <b>Naar voorraad</b>. Het venster komt hoogstens één keer per dag.</p>
+<p>Je kunt ook een <b>melding op je toestel</b> krijgen, zoals een bericht van een andere app, bv. <i>2 producten op te gebruiken – Melk: morgen · Yoghurt: datum voorbij</i>. Zet dat aan bij Instellingen → <b>Meldingen</b> → <b>Aanzetten</b> en geef toestemming. Tik op de melding om de app op het tabblad Voorraad te openen. Ook als de app dicht is, kijkt ze ongeveer twee keer per dag na wat op moet, maar dat lukt alleen in <b>Chrome of Edge</b> (Android of computer) met de app <b>geïnstalleerd</b>. Op een iPhone of iPad (en in Firefox) kan een webapp zonder eigen server niet nakijken terwijl ze dicht is: daar zie je het in het venster bij het openen. Je krijgt hoogstens één melding per dag, en geen meer als je de app die dag al opende.</p>
+
 <h3>Een product gebruiken of aanpassen</h3>
 <p>Tik op een product om het paneel te openen:</p>
 <ul>
@@ -244,6 +248,9 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
 
 <h3>Waarschuwen, zoveel dagen vooraf</h3>
 <p>Met <b>−</b> en <b>+</b> kies je hoeveel dagen voor de datum een product bij <b>Op te gebruiken</b> verschijnt: apart voor <i>Te gebruiken tot</i> en <i>Ten minste houdbaar tot</i> (0 tot 60 dagen).</p>
+
+<h3>Meldingen</h3>
+<p>Bij <b>Venster bij het openen van de app</b> kies je <b>Aan</b> (standaard) of <b>Uit</b>. Bij <b>Melding op dit toestel</b> tik je op <b>Aanzetten</b> om een melding te krijgen als een product op moet (zie <i>Een melding als een product op moet</i>), en met <b>Proefmelding</b> zie je meteen hoe ze eruitziet. Daaronder staat of dit toestel ook kan nakijken als de app dicht is. Beide gelden alleen voor het toestel waarop je ze instelt. Staat er dat meldingen <i>geblokkeerd</i> zijn, sta ze dan toe in de instellingen van je browser of toestel (bij de site of de app Voorraad).</p>
 
 <h3>Je lijsten</h3>
 <p>Acht lijsten klap je open door erop te tikken. Ze werken allemaal op dezelfde manier.</p>

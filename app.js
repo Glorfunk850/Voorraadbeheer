@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 82;
+const APP_VERSIE = 83;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -222,6 +222,10 @@ function houdbaarheid(p) {
   if (d <= (inst.tht_dagen ?? 3)) return { niveau: 1, kleur: 'oranje', kort: wanneer(d), uitleg: 'Ten minste houdbaar tot' };
   return { niveau: 0, kleur: '' };
 }
+
+/** Wat op moet (bijna of al voorbij de datum): eerst "te gebruiken tot", dan de vroegste datum. [{ p, h }] */
+const opTeGebruikenVan = (producten) => producten.map((p) => ({ p, h: houdbaarheid(p) })).filter((x) => x.h.niveau > 0)
+  .sort((a, b) => (b.h.niveau >= 3) - (a.h.niveau >= 3) || a.p.vervaldatum.localeCompare(b.p.vervaldatum));
 
 // ---------------------------------------------------------------------------
 // Server
@@ -784,18 +788,17 @@ function groepHoeveelheid(regels) {
   }
   return [...per.values()].map((p) => voorraadTekst({ ...p, hoeveelheid: Math.round(p.hoeveelheid * 1000) / 1000 })).join(' + ');
 }
-function tekenVoorraad() {
-  const zoek = ui.zoek.trim().toLowerCase();
-  const passend = S.producten.filter((p) => (!zoek || `${p.naam} ${p.merk || ''} ${p.locatie} ${p.categorie} ${p.notitie} ${p.barcode || ''}${p.geopend ? ' geopend' : ''}`.toLowerCase().includes(zoek)));
-  const metH = passend.map((p) => ({ p, h: houdbaarheid(p) }));
-  const opTeGebruiken = metH.filter((x) => x.h.niveau > 0)
-    .sort((a, b) => (b.h.niveau >= 3) - (a.h.niveau >= 3) || a.p.vervaldatum.localeCompare(b.p.vervaldatum));
-
-  const rij = ({ p, h }) => `<li><button class="rij" data-product="${p.id}">
+const opTeGebruikenRij = ({ p, h }) => `<li><button class="rij" data-product="${p.id}">
       <span class="stip ${h.kleur}"></span>
       <span class="naam">${esc(p.naam)}${merkTekst(p)}${p.geopend ? '<span class="geopend-tag">geopend</span>' : ''}<small>${esc(h.uitleg)}</small></span>
       <span class="rechts ${h.kleur}">${esc(h.kort)}</span>
     </button></li>`;
+function tekenVoorraad() {
+  const zoek = ui.zoek.trim().toLowerCase();
+  const passend = S.producten.filter((p) => (!zoek || `${p.naam} ${p.merk || ''} ${p.locatie} ${p.categorie} ${p.notitie} ${p.barcode || ''}${p.geopend ? ' geopend' : ''}`.toLowerCase().includes(zoek)));
+  const metH = passend.map((p) => ({ p, h: houdbaarheid(p) }));
+  const opTeGebruiken = opTeGebruikenVan(passend);
+
 
   // Alle producten per categorie (uitklapbaar), per product en merk één regel met wat er (ongeopend) in huis is.
   // Wat op is (0), staat onderaan bij "Op", elk apart.
@@ -829,7 +832,7 @@ function tekenVoorraad() {
   } else if (!passend.length) {
     lijst = `<div class="leeg">Niets gevonden.</div>`;
   } else {
-    if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map(rij).join('')}</ul></section>`;
+    if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map(opTeGebruikenRij).join('')}</ul></section>`;
     // overzicht van alles wat geopend is, het langst geopend bovenaan
     const geopend = metH.filter((x) => x.p.geopend && x.p.hoeveelheid > 0).sort((a, b) => a.p.geopend.localeCompare(b.p.geopend) || a.p.naam.localeCompare(b.p.naam, 'nl'));
     if (geopend.length) lijst += `<section class="sectie voorraad-geopend"><div class="sectie-titel"><span>Geopend</span><span>${geopend.length}</span></div><ul class="lijst">${geopend.map(({ p, h }) => {
@@ -2810,6 +2813,161 @@ function schermBlokTekenen() {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// Op te gebruiken melden (per toestel):
+//  - een venster bij het openen van de app (hoogstens één keer per dag) met wat bijna of al voorbij de datum is;
+//  - als je dat aanzet: een melding op het toestel, ook als de app dicht is. Dat doet de service worker (sw.js)
+//    met "periodic background sync" (Chrome en Edge, als de app geïnstalleerd is). Hij leest de keuze en de dag van
+//    de laatste melding uit IndexedDB (sleutel 'melding', niet gesynchroniseerd), en de voorraad uit 'gegevens'.
+// ---------------------------------------------------------------------------
+const MELDING_TAG = 'op-te-gebruiken';
+const meldingKan = typeof Notification !== 'undefined' && 'serviceWorker' in navigator;
+const lsLezen = (k) => { try { return localStorage.getItem(k); } catch { return ui['ls:' + k] ?? null; } };
+const lsZetten = (k, w) => { ui['ls:' + k] = w; try { localStorage.setItem(k, w); } catch { /* */ } };
+const vensterBijOpenen = () => lsLezen('op-te-gebruiken-venster') !== 'uit';
+let meldingInfo = null; // { aan, laatst } uit IndexedDB, null zolang niet gelezen
+
+/** { aan, laatst } in IndexedDB lezen en eventueel aanvullen met `wijzig`. Geeft null als het niet lukt. */
+function meldingStaat(wijzig) {
+  return new Promise((ok) => {
+    let r;
+    try { r = indexedDB.open('voorraadbeheer', 1); } catch { return ok(null); }
+    r.onupgradeneeded = () => r.result.createObjectStore('staat');
+    r.onerror = () => ok(null);
+    r.onsuccess = () => {
+      const db = r.result;
+      try {
+        const t = db.transaction('staat', wijzig ? 'readwrite' : 'readonly'), st = t.objectStore('staat');
+        let uit = null;
+        const g = st.get('melding');
+        g.onsuccess = () => { uit = { ...(g.result || {}), ...(wijzig || {}) }; if (wijzig) st.put(uit, 'melding'); };
+        t.oncomplete = () => { db.close(); meldingInfo = uit; ok(uit); };
+        t.onerror = t.onabort = () => { db.close(); ok(null); };
+      } catch { db.close(); ok(null); }
+    };
+  });
+}
+
+/** Titel en tekst van een melding, bv. "2 producten op te gebruiken" en "Melk: vandaag · Kaas: morgen". */
+function meldingTekst(lijst) {
+  const titel = lijst.length === 1 ? `${lijst[0].p.naam} op te gebruiken` : `${lijst.length} producten op te gebruiken`;
+  const delen = lijst.slice(0, 4).map(({ p, h }) => `${p.naam}: ${h.kort}`);
+  return { titel, tekst: delen.join(' · ') + (lijst.length > 4 ? ` · en nog ${lijst.length - 4}` : '') };
+}
+
+async function swRegistratie() {
+  if (!('serviceWorker' in navigator)) return null;
+  try { return (await navigator.serviceWorker.getRegistration()) || null; } catch { return null; }
+}
+/** Kan de app nakijken terwijl ze dicht is? true / false (bv. iPhone, Firefox, niet geïnstalleerd). */
+async function achtergrondKan() {
+  const reg = await swRegistratie();
+  if (!reg || !reg.periodicSync) return false;
+  try { return (await navigator.permissions.query({ name: 'periodic-background-sync' })).state === 'granted'; } catch { return false; }
+}
+/** Nakijken in de achtergrond aan- of afmelden (ongeveer twee keer per dag; de browser kiest het moment). */
+async function achtergrondZetten(aan) {
+  const reg = await swRegistratie();
+  if (!reg || !reg.periodicSync) return false;
+  try {
+    if (!aan) { await reg.periodicSync.unregister(MELDING_TAG); return false; }
+    if (!(await achtergrondKan())) return false;
+    await reg.periodicSync.register(MELDING_TAG, { minInterval: 12 * 60 * 60 * 1000 });
+    return true;
+  } catch { return false; }
+}
+async function meldingTonen(titel, tekst) {
+  const opties = { body: tekst, icon: 'icoon-192.png', badge: 'icoon-192.png', tag: MELDING_TAG, data: { view: 'voorraad' } };
+  const reg = await swRegistratie();
+  try {
+    if (reg && reg.showNotification) await reg.showNotification(titel, opties);
+    else new Notification(titel, opties);
+    return true;
+  } catch { return false; }
+}
+
+/** Venster met alles wat op moet; tik op een product om het te openen. */
+function opTeGebruikenVenster() {
+  paneelOpenen((el) => {
+    const lijst = opTeGebruikenVan(S.producten);
+    if (!lijst.length) return paneelSluiten();
+    el.innerHTML = `${paneelKop('Op te gebruiken', lijst.length === 1 ? '1 product is bijna of al voorbij de datum' : `${lijst.length} producten zijn bijna of al voorbij de datum`)}
+      <ul class="lijst" id="otg-lijst">${lijst.map(opTeGebruikenRij).join('')}</ul>
+      <div class="knoppenrij" style="margin-top:1rem"><button class="knop primair" id="otg-voorraad">Naar voorraad</button><button class="knop" data-sluit>Sluiten</button></div>
+      <p class="stil" style="font-size:.85rem;line-height:1.5;margin-top:.8rem">Dit venster verschijnt hoogstens één keer per dag als je de app opent. Uitzetten kan bij Instellingen → Meldingen.</p>`;
+    sluitKnoppen(el);
+    $$('[data-product]', el).forEach((b) => (b.onclick = () => productPaneel(+b.dataset.product)));
+    $('#otg-voorraad', el).onclick = () => { paneelSluiten(); naar('voorraad'); };
+  });
+}
+/** Bij het openen (en terugkeren naar) de app: het venster tonen, hoogstens één keer per dag. */
+function opTeGebruikenNakijken() {
+  if (!vensterBijOpenen() || bezig()) return false;
+  const d = vandaag();
+  if (lsLezen('op-te-gebruiken-getoond') === d || !opTeGebruikenVan(S.producten).length) return false;
+  lsZetten('op-te-gebruiken-getoond', d);
+  meldingStaat({ laatst: d }); // je zag het al: vandaag geen melding meer op het toestel
+  opTeGebruikenVenster();
+  return true;
+}
+
+function meldingBlokTekenen() {
+  const blok = $m('#melding-blok');
+  if (!blok) return;
+  const venster = vensterBijOpenen();
+  const toestemming = meldingKan ? Notification.permission : 'nee';
+  const aan = !!meldingInfo?.aan && toestemming === 'granted';
+  blok.innerHTML = `<div class="sectie-titel">Meldingen</div>
+    <p class="stil" style="margin-bottom:.6rem;font-size:.92rem;line-height:1.55">Als een product op moet (zoveel dagen vooraf als hierboven ingesteld).</p>
+    <div class="instelling"><span>Venster bij het openen van de app</span>
+      <div class="segment" id="m-venster" role="group" aria-label="Venster bij het openen" style="min-width:8rem">
+        <button type="button" data-venster="aan" class="${venster ? 'aan' : ''}" aria-pressed="${venster}">Aan</button>
+        <button type="button" data-venster="uit" class="${venster ? '' : 'aan'}" aria-pressed="${!venster}">Uit</button></div></div>
+    <div class="instelling" style="border-bottom:0;flex-wrap:wrap"><span>Melding op dit toestel<small class="stil" id="m-uitleg" style="display:block;font-size:.85rem;line-height:1.5;margin-top:.2rem">${
+      !meldingKan ? 'Deze browser kan geen meldingen tonen. Op een iPhone of iPad lukt het alleen als je de app op het beginscherm zet (iOS 16.4 of nieuwer).'
+      : toestemming === 'denied' ? 'Meldingen zijn geblokkeerd voor deze app. Sta ze toe in de instellingen van je browser of toestel, en tik dan op Aanzetten.'
+      : aan ? 'Aan. Hoogstens één melding per dag.' : 'Uit.'}</small></span>
+      <span class="knoppenrij" style="margin:0">${meldingKan ? `${aan ? '<button class="knop" id="m-proef">Proefmelding</button>' : ''}<button class="knop${aan ? '' : ' primair'}" id="m-toestel">${aan ? 'Uitzetten' : 'Aanzetten'}</button>` : ''}</span></div>
+    <p class="stil" id="m-achtergrond" style="font-size:.85rem;line-height:1.5" hidden></p>`;
+  $$m('[data-venster]', blok).forEach((b) => (b.onclick = () => {
+    lsZetten('op-te-gebruiken-venster', b.dataset.venster);
+    meldingBlokTekenen();
+  }));
+  if (aan) achtergrondKan().then((kan) => {
+    const p = $('#m-achtergrond', blok);
+    if (!p) return;
+    p.hidden = false;
+    p.textContent = kan ? 'Ook als de app dicht is, kijkt ze ongeveer twee keer per dag na wat op moet (je toestel kiest het juiste moment).'
+      : 'Deze browser kan niet nakijken terwijl de app dicht is. Dat lukt alleen in Chrome of Edge (Android of computer) met de app geïnstalleerd. Anders zie je wat op moet in het venster bij het openen.';
+  });
+  const proef = $('#m-proef', blok);
+  if (proef) proef.onclick = async () => {
+    const lijst = opTeGebruikenVan(S.producten);
+    const m = lijst.length ? meldingTekst(lijst) : { titel: 'Op te gebruiken', tekst: 'Er moet nu niets op. Zo ziet een melding eruit.' };
+    if (!(await meldingTonen(m.titel, m.tekst))) toast('De melding kon niet getoond worden.');
+  };
+  const knop = $('#m-toestel', blok);
+  if (knop) knop.onclick = async () => {
+    if (aan) {
+      await meldingStaat({ aan: false });
+      await achtergrondZetten(false);
+      toast('Geen meldingen meer op dit toestel.');
+      return meldingBlokTekenen();
+    }
+    let t = Notification.permission;
+    if (t === 'default') { try { t = await Notification.requestPermission(); } catch { t = Notification.permission; } }
+    if (t !== 'granted') { toast('Geen toestemming voor meldingen gekregen.'); return meldingBlokTekenen(); }
+    await meldingStaat({ aan: true });
+    const achter = await achtergrondZetten(true);
+    toast(achter ? 'Je krijgt een melding als een product op moet.' : 'Meldingen staan aan. Deze browser kijkt alleen na als de app open is.');
+    meldingBlokTekenen();
+  };
+}
+// tik op een melding: de service worker vraagt de open app om naar de voorraad te gaan
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => {
+  if (e.data && e.data.naar && VIEWS.includes(e.data.naar)) { if (!$('#paneel').hidden) paneelSluiten(); naar(e.data.naar); }
+});
+
 // Automatische back-up in Downloads (alle toestellen; aan/uit)
 function autoBlokTekenen() {
   const blok = $('#auto-blok');
@@ -3203,6 +3361,7 @@ async function tekenInstellingen() {
     <section class="sectie" id="scherm-blok"></section>
     <section class="sectie"><div class="sectie-titel">Waarschuwen, zoveel dagen vooraf</div>
       ${dagen('Te gebruiken tot', 'tgt_dagen')}${dagen('Ten minste houdbaar tot', 'tht_dagen')}</section>
+    <section class="sectie" id="melding-blok"></section>
     ${lijstBlok('Plaatsen', 'locaties', 'locatie', 'Nieuwe plaats, bv. Kelder')}
     ${lijstBlok('Productcategorieën', 'categorieen', 'categorie', 'Nieuwe categorie, bv. Babyvoeding')}
     ${lijstBlok('Winkels', 'winkels', 'winkel', 'Nieuwe winkel, bv. Colruyt')}
@@ -3227,6 +3386,8 @@ async function tekenInstellingen() {
   bestandBlokTekenen();
   syncBlokTekenen();
   schermBlokTekenen();
+  meldingBlokTekenen();
+  if (!meldingInfo) meldingStaat().then(() => meldingBlokTekenen());
   $m('#i-handleiding').onclick = () => handleidingPaneel();
   handleidingKnoppen($('#inhoud'));
 
@@ -3342,10 +3503,15 @@ async function start() {
     else await syncKoppelen(koppel.get('koppelen') || '', koppel.get('server') || '');
     return;
   }
+  opTeGebruikenNakijken();
   bestandHerinneren();
+  // meldingen staan aan: opnieuw aanmelden om na te kijken (bv. nadat de app intussen geïnstalleerd werd)
+  meldingStaat().then((m) => { if (m?.aan && meldingKan && Notification.permission === 'granted') achtergrondZetten(true); });
 }
 const bezig = () => !$('#paneel').hidden || $('#vraag').open || document.activeElement?.matches('input, textarea');
 document.addEventListener('installeerbaar', () => { installBlokTekenen(); installTipTekenen(); });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !bezig()) api('GET', 'alles', undefined, true).catch(() => {}); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !bezig()) api('GET', 'alles', undefined, true).then(() => opTeGebruikenNakijken()).catch(() => {});
+});
 window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== ui.view) naar(v); });
 start();
