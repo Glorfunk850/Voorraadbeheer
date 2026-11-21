@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 83;
+const APP_VERSIE = 84;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -280,6 +280,7 @@ function vraag(tekst, { invoer = false, standaard = '', ja = 'OK', gevaar = fals
 }
 
 let paneelVernieuwen = null;
+let vernieuwenNodig = false, vrijTimer = null; // zie vernieuwenAlsVrij
 // Toestand van het open paneel (bv. "formulier staat er al"). Bewust GEEN data-attributen op #paneel:
 // die kunnen botsen met selectors als [data-recept] en dan knoppen kapen.
 let paneelStaat = {};
@@ -311,6 +312,7 @@ function paneelSluiten() {
   paneelStaat = {};
   schermBijRecept = false;
   schermBijwerken();
+  vrijNakijken();
 }
 $('#sluier').onclick = paneelSluiten;
 
@@ -3181,7 +3183,7 @@ document.addEventListener('syncstatus', (e) => {
   if (e.detail?.melding) toast(e.detail.melding, null, null, true);
 });
 // gegevens kwamen binnen van een ander toestel: scherm bijwerken (niet midden in het invullen van iets)
-document.addEventListener('syncgewijzigd', () => { if (!bezig()) api('GET', 'alles', undefined, true).catch(() => {}); });
+document.addEventListener('syncgewijzigd', () => vernieuwenAlsVrij());
 
 // De app kon niet zelf om toestemming vragen (of kreeg nee): één keer per sessie een melding met een knop
 let toestemmingGemeld = false;
@@ -3510,8 +3512,16 @@ async function start() {
 }
 const bezig = () => !$('#paneel').hidden || $('#vraag').open || document.activeElement?.matches('input, textarea');
 document.addEventListener('installeerbaar', () => { installBlokTekenen(); installTipTekenen(); });
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !bezig()) api('GET', 'alles', undefined, true).then(() => opTeGebruikenNakijken()).catch(() => {});
-});
+// Nieuwe gegevens (van een ander toestel, of na het terugkomen in de app): scherm bijwerken. Ben je net iets aan het
+// invullen, dan pas zodra je klaar bent (paneel of venster dicht), anders moest je zelf vernieuwen.
+function vernieuwenAlsVrij(nakijken = false) {
+  if (bezig()) { vernieuwenNodig = true; return; }
+  vernieuwenNodig = false;
+  api('GET', 'alles', undefined, true).then(() => { if (nakijken) opTeGebruikenNakijken(); }).catch(() => {});
+}
+function vrijNakijken() { if (!vernieuwenNodig) return; clearTimeout(vrijTimer); vrijTimer = setTimeout(() => { if (vernieuwenNodig) vernieuwenAlsVrij(); }, 400); }
+document.addEventListener('focusout', vrijNakijken);
+$('#vraag').addEventListener('close', vrijNakijken);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') vernieuwenAlsVrij(true); });
 window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== ui.view) naar(v); });
 start();

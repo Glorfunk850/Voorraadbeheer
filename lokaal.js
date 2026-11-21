@@ -94,20 +94,55 @@
   };
 
   // ------------------------------------------------------------------ opslag
+  // Op een gsm kan de browser de verbinding met de opslag stil sluiten of laten hangen (bv. als de app een tijd op de
+  // achtergrond stond). Dan wachtte alles daarna eindeloos: de app "blokkeerde" tot je ze herstartte.
+  // Daarom: een verbinding die gesloten wordt, vergeten; en een opdracht die te lang duurt (of mislukt) nog één keer
+  // proberen met een nieuwe verbinding.
+  const DB_WACHT = 6000;
   let dbBelofte = null;
+  const dbVergeten = (d) => {
+    const oud = dbBelofte; dbBelofte = null;
+    try { if (d) d.close(); } catch { /* al dicht */ }
+    if (oud && !d) oud.then((x) => { try { x.close(); } catch { /* */ } }, () => {});
+  };
   const db = () => dbBelofte || (dbBelofte = new Promise((ok, nee) => {
     const r = indexedDB.open(DB_NAAM, 1);
+    const klok = setTimeout(() => { dbBelofte = null; nee(new Error('De opslag op dit toestel reageert niet.')); }, DB_WACHT);
     r.onupgradeneeded = () => r.result.createObjectStore(DB_TABEL);
-    r.onsuccess = () => ok(r.result);
-    r.onerror = () => nee(r.error);
+    r.onsuccess = () => {
+      clearTimeout(klok);
+      const d = r.result;
+      d.onclose = () => { if (dbBelofte) dbBelofte = null; };
+      d.onversionchange = () => dbVergeten(d);
+      ok(d);
+    };
+    r.onerror = () => { clearTimeout(klok); dbBelofte = null; nee(r.error); };
+    r.onblocked = () => console.warn('Opslag geblokkeerd door een ander venster van de app');
   }));
+  /** Eén opdracht op de opslag: werk(store) geeft een IDBRequest (of niets); de belofte geeft het resultaat ervan.
+   *  Duurt het te lang of mislukt het, dan nog één keer met een nieuwe verbinding. */
+  async function opslag(modus, werk) {
+    const keer = async () => {
+      const d = await db();
+      return new Promise((ok, nee) => {
+        let t;
+        try { t = d.transaction(DB_TABEL, modus); } catch (f) { dbVergeten(d); return nee(f); } // verbinding was dicht
+        const klok = setTimeout(() => { try { t.abort(); } catch { /* */ } dbVergeten(d); nee(new Error('De opslag op dit toestel reageert niet.')); }, DB_WACHT);
+        const r = werk(t.objectStore(DB_TABEL));
+        t.oncomplete = () => { clearTimeout(klok); ok(r && r.result); };
+        t.onerror = () => { clearTimeout(klok); nee(t.error); };
+        t.onabort = () => { clearTimeout(klok); nee(t.error || new Error('afgebroken')); };
+      });
+    };
+    try { return await keer(); } catch (f) {
+      console.warn('Opslag: opnieuw proberen', f);
+      dbVergeten();
+      return keer();
+    }
+  }
   async function laden() {
     try {
-      const d = await db();
-      const waarde = await new Promise((ok, nee) => {
-        const r = d.transaction(DB_TABEL).objectStore(DB_TABEL).get(SLEUTEL);
-        r.onsuccess = () => ok(r.result); r.onerror = () => nee(r.error);
-      });
+      const waarde = await opslag('readonly', (st) => st.get(SLEUTEL));
       if (waarde) { S = normaliseren(waarde); minimumBoodschappenNakijken(); }
     } catch (f) { console.error('Laden mislukt', f); opslagWerkt = false; }
   }
@@ -116,12 +151,7 @@
   function bewaren() {
     const kopie = JSON.parse(JSON.stringify(S));
     const schrijf = schrijfKetting.then(async () => {
-      const d = await db();
-      await new Promise((ok, nee) => {
-        const t = d.transaction(DB_TABEL, 'readwrite');
-        t.objectStore(DB_TABEL).put(kopie, SLEUTEL);
-        t.oncomplete = ok; t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
-      });
+      await opslag('readwrite', (st) => { st.put(kopie, SLEUTEL); });
       opslagWerkt = true;
       bestandPlannen();
     });
@@ -925,15 +955,8 @@
   let bestandTimer = null, bestandKetting = Promise.resolve(), gekozen = null;
   const JSON_TYPE = [{ description: 'Voorraad-gegevens', accept: { 'application/json': ['.json'] } }];
   const backupTekst = () => JSON.stringify({ app: 'Voorraadbeheer', versie: 2, gemaakt: nu(), ...S }, null, 1);
-  const idb = async (sleutel, waarde, wissen) => {
-    const d = await db();
-    return new Promise((ok, nee) => {
-      const t = d.transaction(DB_TABEL, waarde === undefined && !wissen ? 'readonly' : 'readwrite');
-      const st = t.objectStore(DB_TABEL);
-      const r = wissen ? st.delete(sleutel) : waarde === undefined ? st.get(sleutel) : st.put(waarde, sleutel);
-      t.oncomplete = () => ok(r.result); t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
-    });
-  };
+  const idb = (sleutel, waarde, wissen) => opslag(waarde === undefined && !wissen ? 'readonly' : 'readwrite',
+    (st) => (wissen ? st.delete(sleutel) : waarde === undefined ? st.get(sleutel) : st.put(waarde, sleutel)));
   /** nodig: de app kon niet zelf om toestemming vragen (of kreeg nee) — de gebruiker moet op een knop tikken */
   const meldBestand = (nodig = false) => document.dispatchEvent(new CustomEvent('bestandstatus', { detail: { nodig } }));
   const toestemming = async (handle, vragen) => {
@@ -1130,9 +1153,13 @@
     if (methode === 'GET' && versie) h['If-None-Match'] = `"${versie}"`;
     if (methode === 'PUT') { h['Content-Type'] = 'application/octet-stream'; if (nieuw) h['If-None-Match'] = '*'; else h['If-Match'] = `"${versie}"`; }
     let r;
-    try { r = await echteFetch(`${adres}/r/${k.ruimte}`, { method: methode, headers: h, body, cache: 'no-store' }); } catch {
+    // zonder antwoord binnen 30 s opgeven (op een gsm met slecht bereik hing de synchronisatie anders lang vast)
+    const stop = new AbortController(), klok = setTimeout(() => stop.abort(), 30000);
+    try { r = await echteFetch(`${adres}/r/${k.ruimte}`, { method: methode, headers: h, body, cache: 'no-store', signal: stop.signal }); } catch {
+      clearTimeout(klok);
       throw Object.assign(new Error(navigator.onLine ? 'De synchronisatieserver is niet bereikbaar.' : 'Geen internet.'), { netwerk: true });
     }
+    clearTimeout(klok);
     const et = r.headers.get('ETag');
     return { status: r.status, versie: et ? +et.replace(/\D/g, '') : 0, r };
   }
