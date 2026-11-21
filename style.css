@@ -134,10 +134,11 @@ label.veld > span, .veld-titel { display: block; font-size: .8rem; color: var(--
 }
 .lijst > :last-child > .rij, .lijst > .rij:last-child { border-bottom: 0; }
 button.rij:hover .naam { color: var(--accent); }
-.rij .naam { flex: 1; min-width: 0; }
+.rij .naam { flex: 1; min-width: 0; overflow-wrap: break-word; }
 .rij .naam small { display: block; color: var(--stil); margin-top: 1px; }
 .rij .naam .merk, .naam-knop .merk { color: var(--stil); font-weight: 400; }
-.rij .rechts { color: var(--stil); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .95rem; }
+/* rechterkolom mag nooit breder worden dan het scherm: lange tekst (bv. "1 blik à 140 g uitlekgewicht") loopt door op een volgende regel */
+.rij .rechts { color: var(--stil); font-variant-numeric: tabular-nums; font-size: .95rem; flex: 0 1 auto; min-width: 0; max-width: 40%; text-align: right; overflow-wrap: break-word; }
 .rij .rechts.rood { color: var(--rood); }
 .rij .rechts.oranje { color: var(--oranje); }
 .rij.op .naam { color: var(--stil); }
@@ -250,8 +251,8 @@ h3 { font-size: .82rem; font-weight: 600; color: var(--stil); margin: 1.6rem 0 .
 .ingr-bewerk { border-bottom: 1px solid var(--lijn); padding: .6rem 0; }
 .ingr-bewerk .boven { display: grid; grid-template-columns: 4.2rem 5.2rem 1fr 32px; gap: .4rem; align-items: center; }
 .ingr-bewerk input, .ingr-bewerk select { padding: .5rem .6rem; font-size: .92rem; }
-.ingr-bewerk .koppel { display: flex; align-items: center; gap: .5rem; margin-top: .4rem; font-size: .8rem; color: var(--stil); }
-.ingr-bewerk .koppel select { width: auto; flex: 1; padding: .3rem 1.8rem .3rem .5rem; font-size: .82rem; background-color: transparent; border: 1px solid var(--lijn); }
+.ingr-bewerk .koppel { display: flex; align-items: center; gap: .5rem; margin-top: .4rem; font-size: .8rem; min-width: 0; color: var(--stil); }
+.ingr-bewerk .koppel select { width: auto; flex: 1; min-width: 0; text-overflow: ellipsis; padding: .3rem 1.8rem .3rem .5rem; font-size: .82rem; background-color: transparent; border: 1px solid var(--lijn); }
 .melding { background: var(--accent-zacht); border-radius: 12px; padding: .8rem 1rem; font-size: .9rem; margin-bottom: 1.2rem; }
 
 .kook-rij { display: flex; align-items: center; gap: .7rem; border-bottom: 1px solid var(--lijn); padding: .6rem 0; }
@@ -456,7 +457,7 @@ details.hl-thema > summary::after { content: ""; flex: none; width: .55rem; heig
 details.hl-thema[open] > summary::after { transform: rotate(-135deg); margin-bottom: -.2rem; }
 .hl-thema-inhoud { padding-bottom: 1rem; }
 .hl-onderwerpen { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .6rem; }
-.hl-onderwerpen .chip { white-space: normal; text-align: left; }
+.hl-onderwerpen .chip { white-space: normal; text-align: left; max-width: 100%; flex: 0 1 auto; }
 .handleiding h3 { scroll-margin-top: .5rem; }
 .handleiding .hl-thema-inhoud > h3:first-of-type { margin-top: .6rem; }
 .handleiding h3 { color: var(--tekst); font-size: 1.02rem; margin: 1.4rem 0 .4rem; }
