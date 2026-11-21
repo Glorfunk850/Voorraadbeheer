@@ -8,6 +8,12 @@ Voorlopig uitgeschakeld: barcodes scannen en recepten inlezen vanaf een foto (of
 Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf te typen.
 (Het bestand `barcode.js` wordt niet meer gebruikt en is bewaard voor later.)
 
+## Loopt de app vast?
+
+- Bij Instellingen → **Probleemlogboek** staat wat er misliep (fouten, opdrachten die lang duurden, problemen met de opslag).
+  Tik op **Kopiëren** en stuur het door naar wie je helpt. Het logboek blijft op het toestel; er gaat niets vanzelf naar buiten.
+- Duurt bewaren langer dan 5 seconden, dan zie je onderaan *Even geduld, de app is nog aan het bewaren…*.
+
 ## Boodschappen toevoegen
 
 - Typ bovenaan iets in (bv. `2 l melk`) en tik op **+**, of tik op de knop met het **lijstje** ernaast.

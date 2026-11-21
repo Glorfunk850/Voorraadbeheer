@@ -5,6 +5,24 @@
 // de tekstherkenning (Tesseract.js, open source, geen AI-dienst). Bestanden blijven op het toestel.
 (function () {
   const DB_NAAM = 'voorraadbeheer', DB_TABEL = 'staat', SLEUTEL = 'gegevens';
+  // ------------------------------------------------------------------ probleemlogboek
+  // Fouten en trage opdrachten worden genoteerd (alleen op dit toestel, de laatste 60), zodat je bij een probleem
+  // kunt nakijken wat er gebeurde: Instellingen → Probleemlogboek → Kopiëren.
+  const LOG_SLEUTEL = 'voorraad-logboek';
+  const logLezen = () => { try { const l = JSON.parse(localStorage.getItem(LOG_SLEUTEL) || '[]'); return Array.isArray(l) ? l : []; } catch { return []; } };
+  function log(tekst) {
+    const t = new Date(), tijd = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')} ${t.toTimeString().slice(0, 8)}`;
+    const regel = `${tijd} ${String(tekst).slice(0, 600)}`;
+    try { localStorage.setItem(LOG_SLEUTEL, JSON.stringify([...logLezen(), regel].slice(-60))); } catch { /* */ }
+    try { console.warn('[logboek]', regel); } catch { /* */ }
+  }
+  const foutTekst = (f) => (f && (f.stack || f.message)) ? `${f.name || 'Fout'}: ${f.message}${f.stack ? ' | ' + String(f.stack).split('\n').slice(1, 4).map((x) => x.trim()).join(' | ') : ''}` : String(f);
+  window.addEventListener('error', (e) => log(`JS-fout: ${e.error ? foutTekst(e.error) : e.message} (${(e.filename || '').split('/').pop()}:${e.lineno})`));
+  window.addEventListener('unhandledrejection', (e) => log(`Niet opgevangen fout: ${foutTekst(e.reason)}`));
+  window.voorraadLog = {
+    schrijf: log, fout: (wat, f) => log(`${wat}: ${foutTekst(f)}`),
+    lezen: () => logLezen(), wissen: () => { try { localStorage.removeItem(LOG_SLEUTEL); } catch { /* */ } },
+  };
   const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 
   const datum = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -139,9 +157,11 @@
     if (opslagStuk) { herstelPlannen(); throw new Error('De opslag op dit toestel werkt even niet.'); }
     try { return await opslagKeer(modus, werk); } catch (f) {
       console.warn('Opslag: opnieuw proberen', f);
+      log(`Opslag: ${modus} mislukt, opnieuw (${foutTekst(f).slice(0, 200)})`);
       dbVergeten();
       try { return await opslagKeer(modus, werk); } catch (f2) {
         opslagStuk = true; herstelPlannen();
+        log(`Opslag stuk: ${foutTekst(f2).slice(0, 200)}`);
         throw f2;
       }
     }
@@ -164,13 +184,13 @@
     try {
       await opslagKeer('readonly', (st) => st.count());
       opslagStuk = false;
-      console.info('Opslag werkt weer');
+      console.info('Opslag werkt weer'); log('Opslag werkt weer');
       if (ladenMislukt) {
         // bij het openen kon niets gelezen worden: nu de echte gegevens lezen, samen met wat je intussen invoerde
         await inWachtrij(async () => {
           await schrijfKetting;
           await laden();
-        });
+        }, 'opslag herstellen');
         if (kanaal) kanaal.postMessage('gewijzigd');
         document.dispatchEvent(new Event('syncgewijzigd'));
       } else if (noodLezen()) bewaren().catch(() => {});
@@ -1325,6 +1345,7 @@
       try { await syncRonde(); } catch (f) {
         if (Z) { Z.fout = f.message || 'Synchroniseren lukte niet.'; Z.foutNetwerk = !!f.netwerk; zBewaren(); }
         if (!f.netwerk) console.error('Synchroniseren', f);
+        log(`Synchroniseren: ${f.netwerk ? f.message : foutTekst(f)}`);
         throw f;
       } finally { syncBezig = false; syncMeld(); }
     });
@@ -1415,7 +1436,7 @@
         await bewaren();
         await zBewaren();
         if (kanaal) kanaal.postMessage('gewijzigd');
-      });
+      }, 'koppelen');
       try { await syncNu(); } catch { /* staat in de status; volgende keer opnieuw */ }
     },
     nu: () => syncNu(),
@@ -1437,9 +1458,11 @@
   const LEZEN = new Set(['status', 'alles', 'statistieken', 'barcode', 'ocr']);
   const echteFetch = window.fetch.bind(window);
   let wachtrij = Promise.resolve();
+  // wat er nu in de wachtrij bezig is (en in welke stap), voor het logboek als iets te lang duurt
+  let bezigMet = '';
   /** Iets doen met de gegevens, na de opdrachten van de app die al wachten (en niet tegelijk ermee). */
-  function inWachtrij(f) {
-    const r = wachtrij.then(f);
+  function inWachtrij(f, naam = 'synchroniseren: samenvoegen') {
+    const r = wachtrij.then(async () => { bezigMet = naam; try { return await f(); } finally { bezigMet = ''; } });
     wachtrij = r.catch(() => {});
     return r;
   }
@@ -1451,13 +1474,24 @@
     const bron = pad.split('/')[0];
     let data = {};
     if (opties.body && typeof opties.body === 'string') { try { data = JSON.parse(opties.body); } catch { data = {}; } }
+    const naam = `${methode} ${pad}`, begin = Date.now();
+    let stap = 'wacht op vorige opdracht';
+    // waakhond: duurt het te lang, dan noteren waarop gewacht wordt en de app laten weten (melding "Even geduld")
+    const waak = methode === 'GET' ? null : setTimeout(() => {
+      log(`Traag: ${naam} duurt al 5 s (stap: ${stap}${stap === 'wacht op vorige opdracht' ? `; bezig: ${bezigMet || 'niets'}` : ''}; opslag ${opslagStuk ? 'stuk' : 'ok'}; sync ${syncBezig ? 'bezig' : 'niet bezig'})`);
+      document.dispatchEvent(new CustomEvent('traag', { detail: { stap } }));
+    }, 5000);
     const uitvoeren = async () => {
+      bezigMet = naam; stap = 'opstarten';
       await klaar;
       try {
+        stap = 'verwerken';
         const antwoord = await api(methode, pad, data, opties.body);
         const wijzigt = methode !== 'GET' && !LEZEN.has(bron);
         if (wijzigt) {
-          try { await bewaren(); } catch {
+          stap = 'bewaren';
+          try { await bewaren(); } catch (f) {
+            log(`Bewaren mislukt bij ${naam}: ${foutTekst(f)}`);
             fout(507, 'Je gegevens konden niet bewaard worden op dit toestel. Open de app niet in een privévenster en kijk of er nog opslagruimte vrij is.');
           }
           if (kanaal) kanaal.postMessage('gewijzigd');
@@ -1466,24 +1500,36 @@
         }
         return new Response(JSON.stringify(antwoord), { status: 200, headers: { 'Content-Type': 'application/json' } });
       } catch (e) {
-        if (!e.status) console.error(e);
+        if (!e.status) { console.error(e); log(`Fout bij ${naam}: ${foutTekst(e)}`); }
         return new Response(JSON.stringify({ fout: e.status ? e.message : 'Er ging iets mis: ' + e.message }), { status: e.status || 500, headers: { 'Content-Type': 'application/json' } });
       }
     };
     // trage opdrachten (tekstherkenning, barcode opzoeken) houden de rest niet op
-    if (bron === 'ocr' || bron === 'barcode') return uitvoeren();
-    const r = wachtrij.then(uitvoeren);
+    const klaarMet = (r) => {
+      clearTimeout(waak); bezigMet = '';
+      const duur = Date.now() - begin;
+      if (duur > 5000) log(`${naam} klaar na ${Math.round(duur / 1000)} s`);
+      return r;
+    };
+    if (bron === 'ocr' || bron === 'barcode') return uitvoeren().finally(() => clearTimeout(waak));
+    const r = wachtrij.then(uitvoeren).then(klaarMet, (f) => { klaarMet(); throw f; });
     wachtrij = r.catch(() => {});
     return r;
   };
 
   // gewijzigd in een ander venster van de app: opnieuw inlezen
-  if (kanaal) kanaal.onmessage = async () => { await laden(); document.dispatchEvent(new Event('visibilitychange')); };
+  // (in de wachtrij: niet midden in een opdracht van dit venster de gegevens vervangen)
+  if (kanaal) kanaal.onmessage = async () => {
+    log('Ander venster van de app wijzigde iets: opnieuw inlezen');
+    await inWachtrij(() => laden(), 'ander venster: opnieuw inlezen').catch(() => {});
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
 
   // ------------------------------------------------------------------ installeren / offline
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').then((reg) => {
+        if (!reg) return;
         // een geïnstalleerde app op de gsm wordt vaak alleen uit de achtergrond teruggehaald (niet opnieuw geopend):
         // dan ook nakijken of er een nieuwe versie is
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });

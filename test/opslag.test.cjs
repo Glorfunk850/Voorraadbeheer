@@ -127,6 +127,15 @@ async function main() {
   await page.waitForFunction(() => document.querySelector('#inhoud').textContent.includes('Appelsap'), null, { timeout: 3000 }).catch(() => {});
   controle(await getoond(), 'paneel dicht: nieuwe gegevens vanzelf getoond');
 
+  // probleemlogboek: wat misliep staat erin, en is te zien bij Instellingen
+  await page.evaluate(() => { location.hash = 'instellingen'; });
+  await page.waitForSelector('#logboek', { state: 'attached' });
+  const logboek = await page.textContent('#logboek');
+  controle(logboek.includes('Opslag stuk') && logboek.includes('Opslag werkt weer') && logboek.includes('App geopend (versie'), 'probleemlogboek bij Instellingen toont wat er gebeurde');
+  await page.evaluate(() => { document.querySelector('[data-uitklap="logboek"]').open = true; });
+  await page.click('#log-wis');
+  controle((await page.textContent('#logboek')).includes('Niets genoteerd'), 'probleemlogboek wissen');
+
   controle(!jsFouten.length, `geen JavaScript-fouten (${jsFouten.join(' | ')})`);
   await browser.close(); srv.close();
   if (fouten.length) { console.log(`\n${fouten.length} fout(en)`); process.exit(1); }
