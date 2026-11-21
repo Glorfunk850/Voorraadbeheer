@@ -125,6 +125,45 @@ async function main() {
   b = d.boodschappen.filter((x) => x.naam === 'Rijst');
   controle(b.length === 1 && !b[0].verpakking && b[0].hoeveelheid === 1, 'zonder grootte: minimum zoals vroeger');
 
+  // Overblijfsel van vroeger: een minimum voor alle merken samen ZONDER grootte (3), en later een minimum voor de kleine
+  // verpakkingen (1). Alle Maïs is klein en er is genoeg klein in huis: Maïs mag NIET op de lijst
+  // (het oude minimum gold voor "zonder grootte", en daarvan heb je niets).
+  const mais = { naam: 'Maïs', eenheid: 'blik', inhoud: 140, inhoud_eenheid: 'g', uitlekgewicht: true, categorie: 'Conserven' };
+  d = await api('POST', 'producten', { ...mais, hoeveelheid: 1, merk: 'Jumbo', catalogus_minimum: 3 });
+  controle(d.boodschappen.some((x) => x.naam === 'Maïs'), 'zonder grootte, 1 blik, minimum 3 alle merken samen: op de lijst');
+  const jumbo = d.producten.find((x) => x.naam === 'Maïs');
+  d = await api('PUT', `producten/${jumbo.id}`, { verpakking: 'klein', catalogus_minimum: 1 });
+  d = await api('POST', 'producten', { ...mais, hoeveelheid: 2, merk: 'Noliko', inhoud: 230, verpakking: 'klein' });
+  let cm = d.catalogus.find((x) => x.naam === 'Maïs');
+  controle(cm.varianten.length === 2 && cm.varianten.every((v) => v.verpakking === 'klein'), `grootte verbeterd naar klein: geen variant zonder grootte achtergebleven (${JSON.stringify(cm.varianten)})`);
+  controle(cm.minimum === 3 && cm.minimum_klein === 1, `catalogus: oud minimum 3 (zonder grootte) en minimum 1 klein (${cm.minimum}, ${cm.minimum_klein})`);
+  controle(!d.boodschappen.some((x) => x.naam === 'Maïs'), `alles klein, 3 in huis, minimum klein 1: Maïs niet op de lijst (${JSON.stringify(d.boodschappen.filter((x) => x.naam === 'Maïs'))})`);
+  // klein zakt onder zijn minimum: wel op de lijst, als kleine verpakking
+  for (const p of d.producten.filter((x) => x.naam === 'Maïs')) d = await api('POST', `producten/${p.id}/verbruik`, { hoeveelheid: p.hoeveelheid });
+  b = d.boodschappen.filter((x) => x.naam === 'Maïs');
+  controle(b.length === 1 && b[0].verpakking === 'klein' && b[0].hoeveelheid === 1, `geen klein meer in huis: 1 kleine op de lijst (${JSON.stringify(b)})`);
+  // komt er toch weer Maïs zonder grootte bij, dan geldt het oude minimum daarvoor opnieuw
+  d = await api('POST', 'producten', { ...mais, hoeveelheid: 1, merk: 'Bonduelle' });
+  b = d.boodschappen.filter((x) => x.naam === 'Maïs' && !x.verpakking);
+  controle(b.length === 1 && b[0].hoeveelheid === 2, `Maïs zonder grootte: oud minimum 3 geldt weer, 2 op de lijst (${JSON.stringify(b)})`);
+
+  // Verkeerde boodschap uit een oudere versie (bv. uit een back-up) verdwijnt vanzelf, ook na opnieuw openen
+  const oud = await api('GET', 'alles');
+  oud.producten = oud.producten.filter((x) => !(x.naam === 'Maïs' && x.merk === 'Bonduelle'));
+  for (const p of oud.producten) if (p.naam === 'Maïs') p.hoeveelheid = 2;
+  // ook een achtergebleven variant zonder grootte (van een oudere versie) naast dezelfde kleine
+  const cv = oud.catalogus.find((x) => x.naam === 'Maïs');
+  cv.varianten = [...cv.varianten.filter((v) => v.merk !== 'Bonduelle'), { merk: 'Jumbo', inhoud: 140, inhoud_eenheid: 'g', uitlekgewicht: true }];
+  oud.boodschappen = [...oud.boodschappen.filter((x) => x.naam !== 'Maïs'),
+    { id: 999001, naam: 'Maïs', hoeveelheid: 3, eenheid: 'blik', minimum_maat: '', product_id: null, afgevinkt: 0, bron: 'minimum' }];
+  d = await api('POST', 'import', oud);
+  controle(!d.boodschappen.some((x) => x.naam === 'Maïs'), `back-up met verkeerde Maïs op de lijst: na terugzetten weg (${JSON.stringify(d.boodschappen.filter((x) => x.naam === 'Maïs'))})`);
+  cm = d.catalogus.find((x) => x.naam === 'Maïs');
+  controle(cm.varianten.length === 2 && cm.varianten.every((v) => v.verpakking === 'klein'), `achtergebleven variant zonder grootte opgeruimd (${JSON.stringify(cm.varianten)})`);
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  d = await api('GET', 'alles');
+  controle(!d.boodschappen.some((x) => x.naam === 'Maïs'), 'ook na opnieuw openen niet op de lijst');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();
