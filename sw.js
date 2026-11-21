@@ -1,6 +1,7 @@
 // Service worker: laat de app installeren en offline werken.
 // Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v81';
+// Verhoog ook APP_VERSIE in app.js naar hetzelfde nummer (test/versie.test.cjs controleert dat).
+const VERSIE = 'voorraad-v82';
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
   './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'handleiding.js', 'handleiding-pdf.js', 'manifest.webmanifest',
