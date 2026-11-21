@@ -205,7 +205,8 @@ class Opmaak {
     if (!maat) { if (onder) this.alinea(stukjes(onder), { grootte: 9, kleur: KLEUR_STIL }); return; } // geen afbeelding: alleen de uitleg
     let naam = this.gebruikt.findIndex((a) => a.bytes === bytes);
     if (naam < 0) { this.gebruikt.push({ bytes, ...maat }); naam = this.gebruikt.length - 1; }
-    const b = FOTO_BREED, h = b * maat.hoog / maat.breed;
+    // een laag stukje scherm (breder dan half zo hoog) breder zetten, anders is het te klein om te lezen
+    const b = maat.hoog < maat.breed * 1.2 ? 230 : FOTO_BREED, h = b * maat.hoog / maat.breed;
     this.y -= 4;
     this.ruimte(h + 8);
     const y = this.y - h;

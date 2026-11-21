@@ -471,6 +471,7 @@ details.hl-thema[open] > summary::after { transform: rotate(-135deg); margin-bot
 /* schermafbeeldingen in de handleiding: telefoonformaat, met de uitleg ernaast (breed) of eronder (smal) */
 .handleiding figure.hl-foto { display: flex; align-items: center; gap: 1rem; margin: .9rem 0 1.1rem; }
 .handleiding figure.hl-foto img { flex: none; width: 46%; max-width: 210px; height: auto; border: 1px solid var(--lijn); border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
+.handleiding figure.hl-foto.breed img { width: 58%; max-width: 300px; } /* een laag stukje scherm: breder, anders is het te klein */
 .handleiding figure.hl-foto figcaption { flex: 1; min-width: 0; font-size: .86rem; line-height: 1.5; color: var(--stil); }
 .handleiding figure.hl-foto img[role="button"] { cursor: zoom-in; }
 .handleiding figure.hl-foto.groot { flex-direction: column; align-items: stretch; }
@@ -478,6 +479,7 @@ details.hl-thema[open] > summary::after { transform: rotate(-135deg); margin-bot
 @media (max-width: 360px) {
   .handleiding figure.hl-foto { flex-direction: column; align-items: flex-start; }
   .handleiding figure.hl-foto img { width: 70%; }
+  .handleiding figure.hl-foto.breed img { width: 100%; }
 }
 
 /* QR-code scannen (koppelen met een ander toestel) */
@@ -503,6 +505,7 @@ details.hl-thema[open] > summary::after { transform: rotate(-135deg); margin-bot
   #afdruk code { background: #eee; }
   #afdruk figure.hl-foto { break-inside: avoid; page-break-inside: avoid; }
   #afdruk figure.hl-foto img { max-width: 45mm; box-shadow: none; border-color: #ccc; }
+  #afdruk figure.hl-foto.breed img { max-width: 70mm; }
   #afdruk figure.hl-foto figcaption { color: #555; }
   @page { margin: 18mm 16mm; }
 }

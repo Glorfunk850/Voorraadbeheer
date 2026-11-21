@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 87; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 88; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -34,7 +34,7 @@ export const HANDLEIDING = `
 <h3>Een product toevoegen</h3>
 <ol>
   <li>Tik op <b>Toevoegen</b>.</li>
-  <li>Typ de <b>naam</b>. Na twee letters verschijnt eronder <b>Kies uit je catalogus</b>: elk merk en elke inhoud staat er apart, bv. <i>Doperwten en wortelen – Everyday · 530 g · uitlekgewicht</i> (je kunt ook op merk zoeken). Kies je er een, dan worden merk, inhoud, uitlekgewicht en verpakking (klein of groot) ingevuld, samen met eenheid, plaats, categorie, datumtype en prijzen. Typ je alleen een gekende naam zonder te kiezen, dan blijven merk en inhoud leeg; die vul je dan zelf in (of laat je leeg).</li>
+  <li>Typ de <b>naam</b>. Na twee letters verschijnt eronder <b>Kies uit je catalogus</b>: elk merk en elke inhoud staat er apart, bv. <i>Doperwten en wortelen – Everyday · 530 g · uitlekgewicht</i> (je kunt ook op merk zoeken). Kies je er een, dan worden merk, inhoud, uitlekgewicht en verpakking (klein of groot) ingevuld, samen met eenheid, plaats, categorie, datumtype en prijzen. Typ je alleen een gekende naam zonder te kiezen, dan blijven merk en inhoud leeg; die vul je dan zelf in (of laat je leeg).<br><b>Nieuw product, nog niet in je catalogus?</b> Dan verschijnt er geen lijst (of alleen producten met een gelijkaardige naam: kies er dan geen). Typ de naam volledig en vul de rest zelf in zoals hieronder. Na <b>Toevoegen</b> komt het product vanzelf in je catalogus, zodat je het de volgende keer wel kunt kiezen.</li>
   <li>Vul <b>hoeveelheid</b> en <b>eenheid</b> in (stuks, g, kg, l, pak, blik …). Bij telbare eenheden kun je ook de <b>inhoud per stuk</b> invullen, bv. 2 pak à 500 g. Is het gewicht een <b>uitlekgewicht</b> (bv. groenten of fruit in blik of bokaal), zet dan het vinkje <b>Uitlekgewicht</b> aan; dat staat dan overal bij het gewicht. Bij <b>Merk</b> vul je eventueel het merk in; dat staat achter de naam en je kunt erop zoeken.</li>
   <li>Kies bij <b>Verpakking</b> (net onder Merk) eventueel <b>Klein</b> of <b>Groot</b> als je het product in twee groottes koopt (zie <i>Kleine en grote verpakkingen</i>). Laat je <b>Niet opgegeven</b> staan, dan maakt de grootte niet uit.</li>
   <li>Kies de <b>plaats</b> (Koelkast, Diepvries, Voorraadkast …).</li>
@@ -80,6 +80,8 @@ export const HANDLEIDING = `
   <li>Wat je na het winkelen in je voorraad zet, wordt nooit bij een geopende verpakking geteld.</li>
 </ul>
 
+<figure class="hl-foto breed"><img src="handleiding/geopend.jpg" alt="Het blok Geopend op het voorraadscherm met twee geopende verpakkingen" width="390" height="187"><figcaption>Het blok <b>Geopend</b> op het voorraadscherm: wat open is, met wanneer je het opende.</figcaption></figure>
+
 <h3>Minimumvoorraad</h3>
 <p>Vul bij <b>Meer → Minimumvoorraad</b> in hoeveel je altijd in huis wilt hebben. Zakt je voorraad eronder, dan komt het tekort vanzelf op je boodschappenlijst.
 Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijst in pakken à 500 g en à 1 kg, dan vul je bij elk zijn eigen minimum in. Elke inhoud en elke grootte wordt apart geteld. Het tekort komt <b>zonder merk en inhoud</b> op je lijst: na het winkelen kies je zelf welk merk en welke inhoud je kocht. Koop je een ander merk of een andere inhoud, dan telt dat niet mee voor dit minimum; wil je dat wel, gebruik dan het minimum voor alle merken samen.</p>
@@ -118,6 +120,8 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
 </ol>
 <p>Heb je de zak nog niet verdeeld, laat het veld dan leeg: de zak komt dan als aparte regel in je voorraad. Zet je het vinkje <b>Bijkopen in een grote verpakking</b> weer uit, dan komt het tekort aan potten op je lijst, zoals bij elk ander minimum.</p>
 
+<figure class="hl-foto"><img src="handleiding/grote-verpakking.jpg" alt="Bewerken van rijst in potten: minimum 2 en Bijkopen in een grote verpakking: zak van 5 kg die ongeveer 4 potten vult" width="390" height="780"><figcaption>Rijst in potten: onder <b>Meer</b> het minimum (2 potten) en <b>Bijkopen in een grote verpakking</b>: een zak van 5 kg vult ongeveer 4 potten.</figcaption></figure>
+
 <h3>Doos met losse zakjes (bv. vanillepudding)</h3>
 <p>Zit er in één verpakking meer dan één portie, bv. een doos vanillepudding met 4 zakjes, soep in zakjes of gist, dan houd je je voorraad bij <b>per zakje</b> en koop je bij <b>per doos</b>. Zo gebruik je de zakjes op verschillende momenten en weet de app altijd hoeveel er nog zijn.</p>
 <p><b>Eenmalig instellen</b></p>
@@ -150,6 +154,8 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
   <li><b>Uit een lijst:</b> tik op de knop met het <b>lijstje</b>. Kies uit de producten in je catalogus (je ziet meteen het merk, de inhoud en wat je daarvan in huis hebt, per merk en inhoud; zoek met het <b>zoekveld</b> boven de lijst of door te typen bij <b>Wat</b>, ook op merk) of typ zelf iets, vul eventueel het <b>merk</b> in, kies bij <b>Verpakking</b> eventueel <b>Klein</b> of <b>Groot</b> (bij een product uit de catalogus staat dat al ingevuld), stel het aantal in met <b>−</b> en <b>+</b>, kies de eenheid en vul eventueel de <b>inhoud per stuk of pak</b> in (bv. pak à 500 g). Bij een gekend product staat die inhoud al ingevuld, maar je mag ze voor deze boodschap aanpassen. Heeft een product meer merken of inhouden, dan staat bovenaan ook <b>elk merk</b>: kies dat als je nog niet weet in welke winkel je gaat; de boodschap komt dan zonder merk en inhoud op je lijst. Vanuit de catalogus kan het ook, met <b>Op boodschappenlijst, elk merk</b>. Onder <b>Categorie, plaats, houdbaarheid en prijzen</b> vul je hetzelfde in als bij <b>Aan catalogus toevoegen</b>; dat wordt in de catalogus bewaard. Tik op <b>Toevoegen</b>. Het menu blijft open voor de volgende; tik op <b>Klaar</b> als je klaar bent.</li>
 </ul>
 
+<figure class="hl-foto"><img src="handleiding/boodschap-uit-lijst.jpg" alt="Het venster Boodschap toevoegen met de lijst Kies uit je catalogus, met wat je in huis hebt en wat al op je lijst staat" width="390" height="780"><figcaption>Met het <b>lijstje</b> naast <b>+</b>: kies uit je catalogus. Onder elk product staat wat je in huis hebt of wat al op je lijst staat; tik op <b>+</b> om het toe te voegen.</figcaption></figure>
+
 <h3>Op de lijst</h3>
 <ul>
   <li><b>− en +</b> naast een boodschap veranderen het aantal: per stuk, per 100 g of 100 ml, per 0,5 kg of 0,5 l.</li>
@@ -170,6 +176,7 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
   <li>De prijs geldt <b>per inhoud</b>: een pak à 500 g kan per kg duurder zijn dan een pak à 1 kg. In het venster <b>Prijzen</b> staat elke inhoud apart; met <b>+ Prijs voor een andere inhoud</b> voeg je er een toe. In een formulier gelden de prijzen voor de inhoud die erboven staat. Heeft een inhoud geen eigen prijs, dan gebruikt de app de prijs zonder inhoud (als die er is).</li>
   <li>Je kunt ook een prijs <b>per merk</b> invullen: koffie van Lavazza is vaak duurder dan die van het huismerk. In het venster <b>Prijzen</b> staat elk merk (en elke inhoud) apart; met <b>+ Prijs voor een ander merk of een andere inhoud</b> voeg je er een toe. In een formulier gelden de prijzen voor het merk en de inhoud die erboven staan. Heeft een merk geen eigen prijs, dan gebruikt de app de prijs zonder merk. Op de <b>boodschappenlijst</b> staan onder een boodschap de prijzen van de merken (goedkoopste winkel per merk, voor dezelfde hoeveelheid); tik op een merk om het voor die boodschap te kiezen. Ook in de <b>catalogus</b> staat bij elk merk en elke inhoud de goedkoopste prijs en winkel; tik erop voor alle prijzen per merk.</li>
 </ol>
+<figure class="hl-foto"><img src="handleiding/prijzen.jpg" alt="Het venster Prijzen van melk met de prijs per liter bij Colruyt en Aldi" width="390" height="780"><figcaption>Prijzen invullen: kies bij <b>Prijs per</b> de eenheid van het prijskaartje en vul per winkel de prijs in.</figcaption></figure>
 <p>Daarna verschijnt bovenaan een grijs kader <b>Winkel</b> met knoppen: <b>Alles</b> en één per winkel. Het staat standaard open; met <b>Verbergen</b> klap je het dicht (de gekozen winkel blijft ernaast staan), met <b>Tonen</b> weer open. Elk product staat op Alles én bij de winkel waar het het goedkoopst is. Een product komt op de lijst van een winkel zodra er bij dat product een prijs ingevuld is, bij één of meer winkels. Heeft het merk of de inhoud van de boodschap geen eigen prijs (bv. de boodschap staat er zonder merk, of je vulde alleen een prijs in voor een pak à 250 g), dan kiest de app de goedkoopste winkel van hetzelfde merk, of anders van het product. Het blijft dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere. Boven de lijst staat de geschatte totaalprijs.</p>
 
 <h3>Winkelen</h3>
@@ -194,6 +201,8 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
   <li><b>Zelf typen:</b> vul alles zelf in.</li>
 </ul>
 <p>Foto's en gescande pdf's kunnen voorlopig niet ingelezen worden. Krijg je de melding dat er geen leesbare tekst in de pdf staat, typ het recept dan zelf.</p>
+
+<figure class="hl-foto"><img src="handleiding/recept-toevoegen.jpg" alt="Het venster Recept toevoegen met Pdf kiezen en Zelf typen" width="390" height="780"><figcaption>Een recept toevoegen: uit een pdf of zelf typen.</figcaption></figure>
 
 <h3>Wat je invult</h3>
 <ul>
@@ -236,6 +245,7 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
   <li>Kies <b>Uit je recepten</b> (zoek een recept en stel het aantal personen in) of <b>Zelf typen</b>, bv. restjes of uit eten.</li>
   <li>Tik op <b>Inplannen</b>.</li>
 </ol>
+<figure class="hl-foto"><img src="handleiding/maaltijd-plannen.jpg" alt="Het venster Maaltijd plannen met dag, maaltijd en een lijst recepten" width="390" height="780"><figcaption>Een maaltijd plannen: kies de dag, de maaltijd en een recept (of typ zelf iets), en tik op <b>Inplannen</b>.</figcaption></figure>
 <p>Rechts van een geplande maaltijd staat hoeveel ingrediënten je in huis hebt, bv. <b>3/5</b>. Oranje betekent dat er iets ontbreekt.</p>
 
 <figure class="hl-foto"><img src="handleiding/planner.jpg" alt="De maaltijdplanner met een week, Plannen per dag en geplande maaltijden" width="390" height="780"><figcaption>De planner: per dag <b>+ Plannen</b>. Rechts van een maaltijd hoeveel ingrediënten je in huis hebt (oranje: er ontbreekt iets).</figcaption></figure>
@@ -253,6 +263,8 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
 <h3>Boodschappen voor de hele week</h3>
 <p>Tik bovenaan op <b>Boodschappen voor … maaltijden</b>. De app telt de ingrediënten van alle recepten die deze week nog gekookt moeten worden samen, rekening houdend met het aantal personen. Wat ontbreekt, staat aangevinkt; jij kiest wat op de lijst komt.</p>
 <p>De maaltijden zelf (bv. een Vieruurtje erbij) pas je aan bij <b>Instellingen → Maaltijden in de planner</b>.</p>
+
+<figure class="hl-foto"><img src="handleiding/week-boodschappen.jpg" alt="Het venster Op boodschappenlijst voor de maaltijden van deze week, met aangevinkt wat ontbreekt" width="390" height="780"><figcaption>Boodschappen voor de week: wat ontbreekt staat aangevinkt, wat je in huis hebt niet. Pas aan en tik op <b>… toevoegen</b>.</figcaption></figure>
 
 <h2>Instellingen</h2>
 <p>Bij <b>Instellingen</b> stel je de waarschuwingen in en beheer je je eigen lijsten. Wijzigingen worden meteen bewaard.</p>
@@ -326,6 +338,8 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
 </ol>
 <p>Vraagt Chrome na het herstarten opnieuw toestemming, kies dan <b>Toestaan bij elk bezoek</b>. Gebruik hetzelfde bestand niet tegelijk op twee toestellen: het toestel dat het laatst iets wijzigt, overschrijft het.</p>
 
+<figure class="hl-foto"><img src="handleiding/backup.jpg" alt="Bij Instellingen: Automatische back-up, Bewaren in een bestand en Back-up" width="390" height="691"><figcaption>Bij Instellingen: <b>Automatische back-up</b>, <b>Bewaren in een bestand</b> en daaronder <b>Back-up downloaden</b> en <b>Back-up terugzetten</b>.</figcaption></figure>
+
 <h3>Zelf een back-up maken of terugzetten</h3>
 <ul>
   <li><b>Back-up downloaden</b> maakt een bestand <code>voorraad-backup-….json</code>.</li>
@@ -350,6 +364,8 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
   <li>Een gezin dat één voorraad deelt, koppelt alle toestellen met dezelfde code. Wie apart wil, zet zelf synchronisatie aan en krijgt een eigen code.</li>
   <li><b>Stoppen</b> stopt alleen dit toestel. Kies je daarna ook <b>Ook wissen</b>, dan gaat alles van de server en stoppen ook je andere toestellen; hun gegevens blijven staan.</li>
 </ul>
+
+<figure class="hl-foto breed"><img src="handleiding/synchroniseren.jpg" alt="Bij Instellingen: Synchroniseren tussen toestellen met Synchronisatie aanzetten, QR-code scannen en Koppelen met een code" width="390" height="325"><figcaption>Bij Instellingen: <b>Synchronisatie aanzetten</b> op je eerste toestel; op een ander toestel <b>QR-code scannen</b> of <b>Koppelen met een code</b>.</figcaption></figure>
 
 <h3>Moet ik opnieuw koppelen?</h3>
 <p>Nee. Je koppelt een toestel één keer. De app onthoudt de koppeling op het toestel en synchroniseert daarna vanzelf, ook na het sluiten van de app, het herstarten van het toestel of een nieuwe versie van de app.</p>

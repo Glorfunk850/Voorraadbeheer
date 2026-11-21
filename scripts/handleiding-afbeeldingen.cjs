@@ -31,7 +31,8 @@ async function main() {
   fs.mkdirSync(UIT, { recursive: true });
   const srv = await server();
   const basis = `http://localhost:${srv.address().port}/`;
-  const browser = await chromium.launch({ args: ['--lang=nl-BE'] });
+  // Nederlandse datums in datumvelden: de browser volgt de taal van de omgeving
+  const browser = await chromium.launch({ args: ['--lang=nl-BE'], env: { ...process.env, LANG: 'nl_BE.UTF-8', LANGUAGE: 'nl_BE:nl' } });
   // telefoon, licht thema, scherp genoeg om te lezen
   const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 780 }, deviceScaleFactor: 2,
     colorScheme: 'light', locale: 'nl-BE', hasTouch: true, isMobile: true });
