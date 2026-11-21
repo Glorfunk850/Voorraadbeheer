@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 85;
+const APP_VERSIE = 86;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -234,16 +234,25 @@ async function api(methode, pad, body, stil = false) {
   const opties = { method: methode, headers: {} };
   if (body !== undefined) { opties.body = JSON.stringify(body); opties.headers['Content-Type'] = 'application/json'; }
   let antwoord;
-  try { antwoord = await fetch('api/' + pad, opties); } catch {
+  try { antwoord = await fetch('api/' + pad, opties); } catch (f) {
+    window.voorraadLog?.fout(`Opdracht ${methode} ${pad} mislukt`, f);
     if (!stil) toast('Er ging iets mis bij het bewaren. Herlaad de app.');
     throw new Error('geen verbinding');
   }
   const data = await antwoord.json().catch(() => ({}));
   if (!antwoord.ok) {
+    window.voorraadLog?.schrijf(`Opdracht ${methode} ${pad} gaf fout ${antwoord.status}: ${data.fout || ''}`);
     if (!stil) toast(data.fout || 'Er ging iets mis.');
     throw new Error(data.fout || 'fout');
   }
-  if (data.producten) { S = data; tekenen(); if (paneelVernieuwen) paneelVernieuwen(); }
+  if (data.producten) {
+    S = data;
+    // het is bewaard; lukt het scherm bijwerken niet, dan dat melden (vroeger: "knop doet niets")
+    try { tekenen(); if (paneelVernieuwen) paneelVernieuwen(); } catch (f) {
+      window.voorraadLog?.fout(`Scherm bijwerken na ${methode} ${pad} (scherm ${ui.view})`, f);
+      if (!stil) toast(`Bewaard, maar het scherm bijwerken lukte niet (${f.message}). Kijk bij Instellingen → Probleemlogboek.`, null, null, true);
+    }
+  }
   return data;
 }
 
@@ -3178,6 +3187,8 @@ async function syncKoppelen(code, adres) {
   toast('Gekoppeld. Wijzigingen op je toestellen worden voortaan vanzelf gesynchroniseerd.');
   if (ui.view === 'instellingen') tekenen();
 }
+// een opdracht duurt al 5 s (zie lokaal.js): laten weten dat de app nog bezig is, niet vastzit
+document.addEventListener('traag', () => toast('Even geduld, de app is nog aan het bewaren…'));
 document.addEventListener('syncstatus', (e) => {
   if (ui.view === 'instellingen') syncBlokTekenen();
   if (e.detail?.melding) toast(e.detail.melding, null, null, true);
@@ -3383,7 +3394,13 @@ async function tekenInstellingen() {
       <div class="knoppenrij"><a class="knop" href="api/export.json" download>Back-up downloaden</a><a class="knop" href="api/export.csv" download>Voorraad als CSV</a>
       <button class="knop" id="i-terug">Back-up terugzetten</button></div></section>
     <section class="sectie"><div class="sectie-titel">Over</div>
-      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd (behalve als je synchronisatie aanzet: dan gaan je gegevens versleuteld naar je eigen server) en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
+      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd (behalve als je synchronisatie aanzet: dan gaan je gegevens versleuteld naar je eigen server) en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>
+    <details class="sectie uitklap" data-uitklap="logboek"${ui.uitgeklapt.has('logboek') ? ' open' : ''}>
+      <summary><span>Probleemlogboek</span><span class="stil">${(window.voorraadLog?.lezen() || []).length}</span></summary>
+      <p class="stil" style="font-size:.82rem;margin:.2rem 0 .5rem">Loopt de app vast of gebeurt er iets vreemds, dan staat hier wat er gebeurde (alleen op dit toestel). Tik op <b>Kopiëren</b> en stuur het door naar wie je helpt.</p>
+      <pre id="logboek" style="white-space:pre-wrap;word-break:break-word;font-size:.75rem;max-height:16rem;overflow:auto;background:var(--vlak, rgba(127,127,127,.08));padding:.5rem;border-radius:8px">${esc((window.voorraadLog?.lezen() || []).slice().reverse().join('\n') || 'Niets genoteerd.')}</pre>
+      <div class="knoppenrij"><button class="knop" id="log-kopie">Kopiëren</button><button class="knop" id="log-wis">Wissen</button></div>
+    </details>`;
   installBlokTekenen();
   bestandBlokTekenen();
   syncBlokTekenen();
@@ -3391,6 +3408,12 @@ async function tekenInstellingen() {
   meldingBlokTekenen();
   if (!meldingInfo) meldingStaat().then(() => meldingBlokTekenen());
   $m('#i-handleiding').onclick = () => handleidingPaneel();
+  const logInfo = () => `Voorraad versie ${APP_VERSIE} · ${navigator.userAgent}${matchMedia('(display-mode: standalone)').matches ? ' · geïnstalleerd' : ''}\n` + (window.voorraadLog?.lezen() || []).join('\n');
+  $m('#log-kopie').onclick = async () => {
+    try { await navigator.clipboard.writeText(logInfo()); toast('Gekopieerd. Plak het in een bericht.'); }
+    catch { const r = document.createRange(); r.selectNodeContents($m('#logboek')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Kopiëren lukte niet vanzelf: de tekst is geselecteerd, kopieer ze zelf.'); }
+  };
+  $m('#log-wis').onclick = () => { window.voorraadLog?.wissen(); tekenen(); };
   handleidingKnoppen($('#inhoud'));
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
@@ -3495,6 +3518,7 @@ async function start() {
   if (koppel) history.replaceState(null, '', '#instellingen'); // de code niet in de adresbalk laten staan
   ui.view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'voorraad';
   schermBijwerken(); // "Scherm aan laten: Altijd" meteen toepassen
+  window.voorraadLog?.schrijf(`App geopend (versie ${APP_VERSIE}${matchMedia('(display-mode: standalone)').matches ? ', geïnstalleerd' : ''})`);
   try { status = await fetch('api/status').then((r) => r.json()); } catch { /* */ }
   try { await api('GET', 'alles'); } catch {
     $('#inhoud').innerHTML = '<div class="leeg"><b>De app kon niet starten</b>Herlaad de pagina. Gebruik geen privévenster.</div>';
