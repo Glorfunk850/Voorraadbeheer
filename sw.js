@@ -16,7 +16,9 @@ const PDF_BESTANDEN = [
   'vendor/wasm/jbig2_nowasm_fallback.js', 'vendor/wasm/openjpeg_nowasm_fallback.js',
   'sync-adres.js', 'vendor/qrcode.js', 'vendor/jsQR.js', // ook los: ontbreekt sync-adres.js, dan werkt de app gewoon
   // schermafbeeldingen in de handleiding (ook los: zonder afbeelding blijft de uitleg leesbaar)
-  ...['voorraad', 'product-toevoegen', 'product', 'boodschappen', 'winkelen', 'catalogus', 'recepten', 'recept', 'planner', 'instellingen']
+  ...['voorraad', 'product-toevoegen', 'product', 'geopend', 'grote-verpakking', 'catalogus', 'boodschappen', 'boodschap-uit-lijst',
+    'prijzen', 'winkelen', 'recepten', 'recept-toevoegen', 'recept', 'maaltijd-plannen', 'planner', 'week-boodschappen', 'instellingen',
+    'backup', 'synchroniseren']
     .map((n) => `handleiding/${n}.jpg`),
 ];
 
