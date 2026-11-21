@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 87; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 88; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -34,7 +34,7 @@ export const HANDLEIDING = `
 <h3>Een product toevoegen</h3>
 <ol>
   <li>Tik op <b>Toevoegen</b>.</li>
-  <li>Typ de <b>naam</b>. Na twee letters verschijnt eronder <b>Kies uit je catalogus</b>: elk merk en elke inhoud staat er apart, bv. <i>Doperwten en wortelen – Everyday · 530 g · uitlekgewicht</i> (je kunt ook op merk zoeken). Kies je er een, dan worden merk, inhoud, uitlekgewicht en verpakking (klein of groot) ingevuld, samen met eenheid, plaats, categorie, datumtype en prijzen. Typ je alleen een gekende naam zonder te kiezen, dan blijven merk en inhoud leeg; die vul je dan zelf in (of laat je leeg).</li>
+  <li>Typ de <b>naam</b>. Na twee letters verschijnt eronder <b>Kies uit je catalogus</b>: elk merk en elke inhoud staat er apart, bv. <i>Doperwten en wortelen – Everyday · 530 g · uitlekgewicht</i> (je kunt ook op merk zoeken). Kies je er een, dan worden merk, inhoud, uitlekgewicht en verpakking (klein of groot) ingevuld, samen met eenheid, plaats, categorie, datumtype en prijzen. Typ je alleen een gekende naam zonder te kiezen, dan blijven merk en inhoud leeg; die vul je dan zelf in (of laat je leeg).<br><b>Nieuw product, nog niet in je catalogus?</b> Dan verschijnt er geen lijst (of alleen producten met een gelijkaardige naam: kies er dan geen). Typ de naam volledig en vul de rest zelf in zoals hieronder. Na <b>Toevoegen</b> komt het product vanzelf in je catalogus, zodat je het de volgende keer wel kunt kiezen.</li>
   <li>Vul <b>hoeveelheid</b> en <b>eenheid</b> in (stuks, g, kg, l, pak, blik …). Bij telbare eenheden kun je ook de <b>inhoud per stuk</b> invullen, bv. 2 pak à 500 g. Is het gewicht een <b>uitlekgewicht</b> (bv. groenten of fruit in blik of bokaal), zet dan het vinkje <b>Uitlekgewicht</b> aan; dat staat dan overal bij het gewicht. Bij <b>Merk</b> vul je eventueel het merk in; dat staat achter de naam en je kunt erop zoeken.</li>
   <li>Kies bij <b>Verpakking</b> (net onder Merk) eventueel <b>Klein</b> of <b>Groot</b> als je het product in twee groottes koopt (zie <i>Kleine en grote verpakkingen</i>). Laat je <b>Niet opgegeven</b> staan, dan maakt de grootte niet uit.</li>
   <li>Kies de <b>plaats</b> (Koelkast, Diepvries, Voorraadkast …).</li>
