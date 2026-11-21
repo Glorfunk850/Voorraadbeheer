@@ -83,6 +83,8 @@ async function main() {
     await ctx.addInitScript(nepBestand); // bestandskiezer van het systeem kan in de test niet open
     // afdrukvenster kan in de test niet open: tellen hoe vaak het gevraagd wordt
     await ctx.addInitScript(() => { window.__afgedrukt = 0; window.print = () => { window.__afgedrukt++; }; });
+    // venster "Op te gebruiken" bij het openen niet over de knoppen leggen (getest in test/melding.test.cjs)
+    await ctx.addInitScript(() => { try { localStorage.setItem('op-te-gebruiken-venster', 'uit'); } catch { /* */ } });
     const page = await ctx.newPage();
     page.jsFouten = [];
     page.on('pageerror', (e) => page.jsFouten.push(e.message));

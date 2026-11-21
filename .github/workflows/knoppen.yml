@@ -15,6 +15,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Versienummer gelijk in sw.js en app.js
+        run: node test/versie.test.cjs
       - name: Recepten uit pdf inlezen
         run: node test/recepten.test.cjs
       - name: Playwright installeren
@@ -37,6 +39,8 @@ jobs:
         run: node test/minimum.test.cjs
       - name: Kleine en grote verpakkingen
         run: node test/verpakking.test.cjs
+      - name: Geopende verpakkingen en voorraad per categorie
+        run: node test/geopend.test.cjs
       - name: Maaltijdplanner
         run: node test/planner.test.cjs
       - name: Bewaren in een bestand op het toestel
@@ -47,5 +51,11 @@ jobs:
         run: node test/potten.test.cjs
       - name: Scherm aan laten tijdens het koken
         run: node test/scherm.test.cjs
+      - name: Melding als een product op moet
+        run: node test/melding.test.cjs
+      - name: Niets steekt buiten een smal telefoonscherm uit
+        run: node test/breedte.test.cjs
+      - name: Niet vastlopen als de opslag op de gsm stilvalt
+        run: node test/opslag.test.cjs
       - name: Afbeeldingen in de handleiding (app en pdf)
         run: node test/handleiding.test.cjs

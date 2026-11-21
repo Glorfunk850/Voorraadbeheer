@@ -42,7 +42,7 @@ async function main() {
 
   await page.goto(basis + '#voorraad');
   await page.waitForSelector('#inhoud h1');
-  await page.evaluate(() => localStorage.setItem('installtip-weg', '1'));
+  await page.evaluate(() => { localStorage.setItem('installtip-weg', '1'); localStorage.setItem('op-te-gebruiken-venster', 'uit'); });
 
   // voorbeeldgegevens
   await api('PUT', 'instellingen', { winkels: ['Colruyt', 'Aldi'], auto_backup: false });

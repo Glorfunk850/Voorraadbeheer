@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 74;
+const APP_VERSIE = 87;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -79,7 +79,61 @@ const fmt = (n) => (n === null || n === undefined ? '' : (Math.round(n * 100) / 
 const eenheidKort = (e) => (e === 'stuks' ? '' : e || '');
 const hoeveelTekst = (n, e) => (n === null || n === undefined ? '' : `${fmt(n)}${eenheidKort(e) ? ' ' + eenheidKort(e) : ''}`);
 // Inhoud per verpakking (bv. 2 pak à 500 g). Alleen bij telbare eenheden.
-const INHOUD_EENHEDEN = ['g', 'kg', 'ml', 'cl', 'dl', 'l'];
+const STANDAARD_INHOUD = ['g', 'kg', 'ml', 'cl', 'dl', 'l'];
+/** Eenheden voor de inhoud per stuk of verpakking (uit Instellingen; standaard g, kg, ml, cl, dl, l). */
+const inhoudEenheden = () => (Array.isArray(S.instellingen.inhoud_eenheden) && S.instellingen.inhoud_eenheden.length
+  ? S.instellingen.inhoud_eenheden : STANDAARD_INHOUD);
+/** Keuzelijst voor de eenheid van de inhoud: de bewaarde waarde, anders `standaard` (of de eerste als die verwijderd is). */
+const inhoudOpties = (waarde, standaard = 'g') => {
+  const l = inhoudEenheden();
+  return opties(l, waarde || (l.includes(standaard) ? standaard : l[0])) + NIEUWE_INHOUD;
+};
+/** Keuzelijst voor de eenheid (stuks, g, pak …), met onderaan "Andere eenheid…". */
+const eenheidOpties = (waarde) => opties(eenheden(), waarde) + NIEUWE_EENHEID;
+// laatste keuze in een eenhedenlijst: zelf een eenheid toevoegen (zie eenheidToevoegen)
+const NIEUW = { eenheden: '__nieuwe_eenheid__', inhoud_eenheden: '__nieuwe_inhoud__' };
+const NIEUWE_EENHEID = `<option value="${NIEUW.eenheden}">Andere eenheid…</option>`;
+const NIEUWE_INHOUD = `<option value="${NIEUW.inhoud_eenheden}">Andere eenheid…</option>`;
+const VASTE_INHOUD = new Set(['g', 'kg', 'mg', 'ml', 'cl', 'dl', 'l']);
+/** Naam voor een nieuwe eenheid controleren; geeft een foutmelding terug, of '' als ze goed is. */
+function eenheidFout(sleutel, naam, lijst) {
+  if (!naam) return 'Typ een eenheid.';
+  if (naam.length > 20) return 'Kies een kortere eenheid (hoogstens 20 tekens).';
+  if (naam.startsWith('__')) return 'Kies een andere naam.';
+  if (lijst.some((x) => zelfde(x, naam))) return `"${naam}" staat al in de lijst.`;
+  return '';
+}
+// Kiest iemand "Andere eenheid…" in een keuzelijst: naam vragen, bij Instellingen bewaren en meteen kiezen.
+// Dit gebeurt vóór de andere luisteraars (capture), zodat die nooit de tijdelijke waarde zien.
+const eenheidVorige = new WeakMap();
+document.addEventListener('focusin', (e) => { if (e.target.tagName === 'SELECT') eenheidVorige.set(e.target, e.target.value); }, true);
+document.addEventListener('change', async (e) => {
+  const sel = e.target;
+  if (sel.tagName !== 'SELECT') return;
+  const sleutel = Object.keys(NIEUW).find((k) => NIEUW[k] === sel.value);
+  if (!sleutel) { eenheidVorige.set(sel, sel.value); return; }
+  e.stopImmediatePropagation();
+  const vorige = eenheidVorige.get(sel) ?? sel.options[0]?.value ?? '';
+  sel.value = vorige;
+  const lijst = sleutel === 'inhoud_eenheden' ? inhoudEenheden() : eenheden();
+  const naam = ((await vraag(sleutel === 'inhoud_eenheden' ? 'Nieuwe eenheid voor de inhoud, bv. vel, rol of wasbeurt:' : 'Nieuwe eenheid, bv. bokaal, tube of rol:',
+    { invoer: true, ja: 'Toevoegen' })) || '').trim().toLowerCase();
+  if (!naam) return;
+  const fout = eenheidFout(sleutel, naam, lijst);
+  if (fout && !lijst.some((x) => zelfde(x, naam))) return toast(fout);
+  if (!fout) await api('PUT', 'instellingen', { [sleutel]: [...lijst, naam] });
+  // de keuzelijst kan intussen opnieuw getekend zijn: dezelfde (of de nieuwe) lijst opzoeken
+  const doel = sel.isConnected ? sel : (sel.id && document.getElementById(sel.id));
+  if (!doel) return;
+  if (![...doel.options].some((o) => o.value === naam)) {
+    const o = document.createElement('option'); o.value = naam; o.textContent = naam;
+    doel.insertBefore(o, [...doel.options].find((x) => x.value === NIEUW[sleutel]) || null);
+  }
+  doel.value = naam;
+  eenheidVorige.set(doel, naam);
+  doel.dispatchEvent(new Event('change', { bubbles: true }));
+  if (!fout) toast(`Eenheid "${naam}" toegevoegd. Beheren kan bij Instellingen.`);
+}, true);
 const inhoudVan = (p) => (p && TELBAAR.has(p.eenheid) && p.inhoud > 0 && p.inhoud_eenheid ? { per: p.inhoud, eenheid: p.inhoud_eenheid } : null);
 /** Inhoud per verpakking van één boodschap (bv. pak à 500 g); een boodschap zonder eenheid telt als stuks. */
 const boodschapInhoudVan = (b) => inhoudVan(b && { ...b, eenheid: b.eenheid || 'stuks' });
@@ -169,6 +223,10 @@ function houdbaarheid(p) {
   return { niveau: 0, kleur: '' };
 }
 
+/** Wat op moet (bijna of al voorbij de datum): eerst "te gebruiken tot", dan de vroegste datum. [{ p, h }] */
+const opTeGebruikenVan = (producten) => producten.map((p) => ({ p, h: houdbaarheid(p) })).filter((x) => x.h.niveau > 0)
+  .sort((a, b) => (b.h.niveau >= 3) - (a.h.niveau >= 3) || a.p.vervaldatum.localeCompare(b.p.vervaldatum));
+
 // ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
@@ -176,16 +234,25 @@ async function api(methode, pad, body, stil = false) {
   const opties = { method: methode, headers: {} };
   if (body !== undefined) { opties.body = JSON.stringify(body); opties.headers['Content-Type'] = 'application/json'; }
   let antwoord;
-  try { antwoord = await fetch('api/' + pad, opties); } catch {
+  try { antwoord = await fetch('api/' + pad, opties); } catch (f) {
+    window.voorraadLog?.fout(`Opdracht ${methode} ${pad} mislukt`, f);
     if (!stil) toast('Er ging iets mis bij het bewaren. Herlaad de app.');
     throw new Error('geen verbinding');
   }
   const data = await antwoord.json().catch(() => ({}));
   if (!antwoord.ok) {
+    window.voorraadLog?.schrijf(`Opdracht ${methode} ${pad} gaf fout ${antwoord.status}: ${data.fout || ''}`);
     if (!stil) toast(data.fout || 'Er ging iets mis.');
     throw new Error(data.fout || 'fout');
   }
-  if (data.producten) { S = data; tekenen(); if (paneelVernieuwen) paneelVernieuwen(); }
+  if (data.producten) {
+    S = data;
+    // het is bewaard; lukt het scherm bijwerken niet, dan dat melden (vroeger: "knop doet niets")
+    try { tekenen(); if (paneelVernieuwen) paneelVernieuwen(); } catch (f) {
+      window.voorraadLog?.fout(`Scherm bijwerken na ${methode} ${pad} (scherm ${ui.view})`, f);
+      if (!stil) toast(`Bewaard, maar het scherm bijwerken lukte niet (${f.message}). Kijk bij Instellingen → Probleemlogboek.`, null, null, true);
+    }
+  }
   return data;
 }
 
@@ -222,6 +289,7 @@ function vraag(tekst, { invoer = false, standaard = '', ja = 'OK', gevaar = fals
 }
 
 let paneelVernieuwen = null;
+let vernieuwenNodig = false, vrijTimer = null; // zie vernieuwenAlsVrij
 // Toestand van het open paneel (bv. "formulier staat er al"). Bewust GEEN data-attributen op #paneel:
 // die kunnen botsen met selectors als [data-recept] en dan knoppen kapen.
 let paneelStaat = {};
@@ -253,6 +321,7 @@ function paneelSluiten() {
   paneelStaat = {};
   schermBijRecept = false;
   schermBijwerken();
+  vrijNakijken();
 }
 $('#sluier').onclick = paneelSluiten;
 
@@ -350,7 +419,8 @@ const winkels = () => S.instellingen.winkels || [];
 const prijsEenheid = (e) => ({ g: 'kg', ml: 'l', cl: 'l', dl: 'l', '': 'stuks' })[e || ''] || e;
 const perTekst = (e) => (e === 'stuks' ? 'stuk' : e);
 // Eenheden waarin je een prijs kunt invullen (bv. een pak à 500 g, maar de prijs per kg zoals op het prijskaartje)
-const prijsEenheden = () => ['kg', 'g', 'l', 'ml', ...eenheden().filter((e) => TELBAAR.has(e))];
+const prijsEenheden = () => ['kg', 'g', 'l', 'ml', ...eenheden().filter((e) => TELBAAR.has(e)),
+  ...inhoudEenheden().filter((e) => !VASTE_INHOUD.has(e) && !eenheden().includes(e))]; // bv. prijs per vel of per wasbeurt
 /** Eenheid van de prijzen die er al zijn, anders die die bij de eenheid van het product past. */
 const prijsPerVan = (prijzen, eenheid) => (prijzen || []).find((p) => p.per)?.per || prijsEenheid(eenheid);
 const euro = (n) => '€ ' + n.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -390,6 +460,18 @@ function prijzenSorteren(lijst) {
 }
 const prijzenGesorteerd = (naam, inh) => prijzenSorteren(prijzenVan(naam, inh === undefined ? null : inh));
 const goedkoopste = (naam, inh) => prijzenGesorteerd(naam, inh)[0] || null;
+/**
+ * Winkel (goedkoopste prijsregel) voor een boodschap. Is er geen prijs voor precies dit merk en deze inhoud,
+ * dan die van hetzelfde merk (andere inhoud), en anders alle prijzen van het product: zo komt een boodschap
+ * altijd op de lijst van een winkel zodra er ergens een prijs bij het product ingevuld is.
+ */
+function winkelVoor(naam, inh) {
+  const p = goedkoopste(naam, inh);
+  if (p) return p;
+  const alle = prijzenVan(naam), m = prijsMerk(inh);
+  const zelfdeMerk = m ? alle.filter((x) => prijsMerk(x) === m) : [];
+  return prijzenSorteren(zelfdeMerk.length ? zelfdeMerk : alle)[0] || null;
+}
 /** Geschatte prijs van een boodschap bij prijsregel p, of null als dat niet te berekenen is. */
 function kostprijs(b, p) {
   if (b.hoeveelheid === null || b.hoeveelheid === undefined) return TELBAAR.has(p.per) ? p.prijs : null;
@@ -415,7 +497,7 @@ function merkPrijzen(b) {
   }
   return uit.sort((x, y) => (x.kost ?? Infinity) - (y.kost ?? Infinity) || x.merk.localeCompare(y.merk, 'nl'));
 }
-const lijstMelding = (naam, inh) => { const g = goedkoopste(naam, inh); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
+const lijstMelding = (naam, inh) => { const g = winkelVoor(naam, inh); return `${naam} staat op de boodschappenlijst${g ? ` (goedkoopst bij ${g.winkel})` : ''}`; };
 const prijsRegelTekst = (p) => `${euro(p.prijs)} per ${perTekst(p.per)}`;
 
 /** Invulvelden voor de prijzen: kies de eenheid (per kg, per stuk ...), één regel per winkel uit Instellingen, plus zelf winkels toevoegen. */
@@ -575,7 +657,7 @@ function prijzenPaneel(naam, eenheid, terug) {
         <details class="meer" id="pz-nieuw" style="margin-top:.8rem"><summary>+ Prijs voor een ander merk${telbaar ? ' of een andere inhoud' : ''}</summary>
           <label class="veld"><span>Merk${telbaar ? ' (mag leeg)' : ''}</span><input id="pz-nieuw-merk" placeholder="bv. Lavazza" autocomplete="off" autocapitalize="words"></label>
           ${telbaar ? `<div class="rij2"><label class="veld"><span>Inhoud per ${esc(perTekst(e))} (mag leeg)</span><input id="pz-nieuw-inhoud" inputmode="decimal" placeholder="bv. 1"></label>
-            <label class="veld"><span>Eenheid inhoud</span><select id="pz-nieuw-eenheid">${opties(INHOUD_EENHEDEN, 'kg')}</select></label></div>` : ''}
+            <label class="veld"><span>Eenheid inhoud</span><select id="pz-nieuw-eenheid">${inhoudOpties('', 'kg')}</select></label></div>` : ''}
           <button type="button" class="knop" id="pz-nieuw-ok">Toevoegen</button></details>
         <p class="stil pz-uitleg" style="margin-top:.8rem">Op je boodschappenlijst komt ${esc(naam)} bij de goedkoopste winkel voor het merk en de inhoud die je koopt.</p>
         <div class="paneel-voet"><button type="submit" class="knop primair">Bewaren</button></div></form>`;
@@ -706,20 +788,54 @@ const instellingenKnop = `<button class="icoon alleen-mobiel" data-actie="naar" 
 // ---------------------------------------------------------------------------
 // VOORRAAD
 // ---------------------------------------------------------------------------
+// Een geopende verpakking telt als opgebruikt: ze staat nog in je voorraad (om op te maken), maar niet in de aantallen of het minimum.
+const geopendTekst = (p) => (p && p.geopend ? `geopend ${dagenTot(p.geopend) === 0 ? 'vandaag' : dagenTot(p.geopend) === -1 ? 'gisteren' : 'op ' + datumNL(p.geopend)}` : '');
+/** Hoeveel er (ongeopend) in huis is van een groep voorraadregels, bv. "2 pak à 500 g + 1 pak à 1 kg". */
+function groepHoeveelheid(regels) {
+  const per = new Map();
+  for (const p of regels.filter((x) => !x.geopend && x.hoeveelheid > 0)) {
+    const k = `${p.eenheid}|${prijsSleutel(inhoudVan(p) ? p : {})}|${p.uitlekgewicht ? 1 : 0}`;
+    if (per.has(k)) per.get(k).hoeveelheid += p.hoeveelheid; else per.set(k, { ...p });
+  }
+  return [...per.values()].map((p) => voorraadTekst({ ...p, hoeveelheid: Math.round(p.hoeveelheid * 1000) / 1000 })).join(' + ');
+}
+const opTeGebruikenRij = ({ p, h }) => `<li><button class="rij" data-product="${p.id}">
+      <span class="stip ${h.kleur}"></span>
+      <span class="naam">${esc(p.naam)}${merkTekst(p)}${p.geopend ? '<span class="geopend-tag">geopend</span>' : ''}<small>${esc(h.uitleg)}</small></span>
+      <span class="rechts ${h.kleur}">${esc(h.kort)}</span>
+    </button></li>`;
 function tekenVoorraad() {
   const zoek = ui.zoek.trim().toLowerCase();
-  const passend = S.producten.filter((p) => (!zoek || `${p.naam} ${p.merk || ''} ${p.locatie} ${p.categorie} ${p.notitie} ${p.barcode || ''}`.toLowerCase().includes(zoek)));
+  const passend = S.producten.filter((p) => (!zoek || `${p.naam} ${p.merk || ''} ${p.locatie} ${p.categorie} ${p.notitie} ${p.barcode || ''}${p.geopend ? ' geopend' : ''}`.toLowerCase().includes(zoek)));
   const metH = passend.map((p) => ({ p, h: houdbaarheid(p) }));
-  const opTeGebruiken = metH.filter((x) => x.h.niveau > 0)
-    .sort((a, b) => (b.h.niveau >= 3) - (a.h.niveau >= 3) || a.p.vervaldatum.localeCompare(b.p.vervaldatum));
-  const rest = metH.filter((x) => x.h.niveau === 0 && x.p.hoeveelheid > 0);
-  const op = metH.filter((x) => !(x.p.hoeveelheid > 0));
+  const opTeGebruiken = opTeGebruikenVan(passend);
 
-  const rij = ({ p, h }, metStatus) => `<li><button class="rij${p.hoeveelheid > 0 ? '' : ' op'}" data-product="${p.id}">
-      ${metStatus ? `<span class="stip ${h.kleur}"></span>` : ''}
-      <span class="naam">${esc(p.naam)}${merkTekst(p)}${metStatus ? `<small>${esc(h.uitleg)}</small>` : ''}</span>
-      <span class="rechts${metStatus ? ' ' + h.kleur : ''}">${metStatus ? esc(h.kort) : p.hoeveelheid > 0 ? esc(voorraadTekst(p)) : 'op'}</span>
-    </button></li>`;
+
+  // Alle producten per categorie (uitklapbaar), per product en merk één regel met wat er (ongeopend) in huis is.
+  // Wat op is (0), staat onderaan bij "Op", elk apart.
+  const groepen = new Map();
+  for (const { p } of metH.filter((x) => x.p.hoeveelheid > 0)) {
+    const k = `${p.naam.trim().toLowerCase()}|${String(p.merk || '').trim().toLowerCase()}|${maatVan(p)}`;
+    if (!groepen.has(k)) groepen.set(k, []);
+    groepen.get(k).push(p);
+  }
+  const perCategorie = new Map();
+  const op = metH.filter((x) => !(x.p.hoeveelheid > 0)).map((x) => x.p).sort((a, b) => a.naam.localeCompare(b.naam, 'nl') || (a.merk || '').localeCompare(b.merk || '', 'nl'));
+  for (const g of groepen.values()) {
+    const cat = (g.find((p) => (p.categorie || '').trim())?.categorie || '').trim() || ZONDER_CATEGORIE;
+    if (!perCategorie.has(cat)) perCategorie.set(cat, []);
+    perCategorie.get(cat).push(g);
+  }
+  const opNaam = (a, b) => a[0].naam.localeCompare(b[0].naam, 'nl') || (a[0].merk || '').localeCompare(b[0].merk || '', 'nl');
+  const cats = [...perCategorie.keys()].sort((a, b) => (a === ZONDER_CATEGORIE) - (b === ZONDER_CATEGORIE) || a.localeCompare(b, 'nl'));
+  const groepRij = (g) => {
+    const open = g.filter((p) => p.geopend && p.hoeveelheid > 0);
+    const hoeveel = groepHoeveelheid(g);
+    const onder = open.length ? (open.length === 1 ? geopendTekst(open[0]) : `${open.length} geopend`) : '';
+    return `<li><button class="rij${hoeveel ? '' : ' alleen-geopend'}" data-groep="${g.map((p) => p.id).join(',')}">
+      <span class="naam">${esc(g[0].naam)}${merkTekst(g[0])}${onder ? `<small class="geopend-tekst">${esc(onder)}</small>` : ''}</span>
+      <span class="rechts">${hoeveel ? esc(hoeveel) : 'geopend'}</span></button></li>`;
+  };
 
   let lijst = '';
   if (!S.producten.length) {
@@ -727,24 +843,25 @@ function tekenVoorraad() {
   } else if (!passend.length) {
     lijst = `<div class="leeg">Niets gevonden.</div>`;
   } else {
-    if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map((x) => rij(x, true)).join('')}</ul></section>`;
-    // De rest van de voorraad verschijnt alleen bij zoeken
-    if (zoek && rest.length) {
-      // Elk product maar één keer tonen per merk (meerdere partijen van hetzelfde product en merk samen), zonder aantallen
-      const groepen = new Map();
-      for (const x of rest) {
-        const k = `${x.p.naam.trim().toLowerCase()}|${String(x.p.merk || '').trim().toLowerCase()}|${maatVan(x.p)}`;
-        if (!groepen.has(k)) groepen.set(k, []);
-        groepen.get(k).push(x.p);
-      }
-      const items = [...groepen.values()].sort((a, b) => a[0].naam.localeCompare(b[0].naam, 'nl') || (a[0].merk || '').localeCompare(b[0].merk || '', 'nl'));
-      lijst += `<section class="sectie"><div class="sectie-titel">Gevonden</div><ul class="lijst">${items.map((g) =>
-        `<li><button class="rij" data-groep="${g.map((p) => p.id).join(',')}"><span class="naam">${esc(g[0].naam)}${merkTekst(g[0])}</span></button></li>`).join('')}</ul></section>`;
-    }
-    if (!zoek && !opTeGebruiken.length) {
-      lijst += `<div class="leeg"><b>Niets dat binnenkort op moet</b>Zoek een product om het te bekijken of aan te passen.</div>`;
-    }
-    if (op.length) lijst += `<section class="sectie"><div class="sectie-titel">Op</div><ul class="lijst">${op.map((x) => rij(x, false)).join('')}</ul></section>`;
+    if (opTeGebruiken.length) lijst += `<section class="sectie"><div class="sectie-titel">Op te gebruiken</div><ul class="lijst">${opTeGebruiken.map(opTeGebruikenRij).join('')}</ul></section>`;
+    // overzicht van alles wat geopend is, het langst geopend bovenaan
+    const geopend = metH.filter((x) => x.p.geopend && x.p.hoeveelheid > 0).sort((a, b) => a.p.geopend.localeCompare(b.p.geopend) || a.p.naam.localeCompare(b.p.naam, 'nl'));
+    if (geopend.length) lijst += `<section class="sectie voorraad-geopend"><div class="sectie-titel"><span>Geopend</span><span>${geopend.length}</span></div><ul class="lijst">${geopend.map(({ p, h }) => {
+      const dagen = -dagenTot(p.geopend);
+      const onder = [geopendTekst(p) + (dagen > 1 ? ` (${dagen} dagen)` : ''), h.niveau > 0 ? h.uitleg : ''].filter(Boolean).join(' · ');
+      return `<li><button class="rij" data-product="${p.id}">${h.niveau > 0 ? `<span class="stip ${h.kleur}"></span>` : ''}
+        <span class="naam">${esc(p.naam)}${merkTekst(p)}<small class="geopend-tekst">${esc(onder)}</small></span>
+        <span class="rechts${h.niveau > 0 ? ' ' + h.kleur : ''}">${esc(h.niveau > 0 ? h.kort : voorraadTekst(p))}</span></button></li>`;
+    }).join('')}</ul></section>`;
+    // elke categorie is uitklapbaar (dicht tot je erop tikt; open/dicht blijft onthouden zolang de app open is);
+    // tijdens het zoeken staat alles open, zodat je meteen ziet wat je vond
+    if (cats.length) lijst += `<div class="sectie-titel voorraad-alles">Alle producten</div>` + cats.map((k) => {
+      const g = perCategorie.get(k).sort(opNaam), sleutel = `voorraad-categorie:${k.toLowerCase()}`;
+      return `<details class="sectie uitklap voorraad-groep" data-uitklap="${esc(sleutel)}"${zoek || ui.uitgeklapt.has(sleutel) ? ' open' : ''}>
+        <summary><span>${esc(k)}</span><span class="stil">${g.length}</span></summary><ul class="lijst">${g.map(groepRij).join('')}</ul></details>`;
+    }).join('');
+    if (op.length) lijst += `<section class="sectie"><div class="sectie-titel">Op</div><ul class="lijst">${op.map((p) =>
+      `<li><button class="rij op" data-product="${p.id}"><span class="naam">${esc(p.naam)}${merkTekst(p)}</span><span class="rechts">op</span></button></li>`).join('')}</ul></section>`;
   }
 
   inhoudZetten(`
@@ -755,7 +872,7 @@ function tekenVoorraad() {
       </div></header>
     <div class="installeer-tip" id="installeer-tip" hidden></div>
     ${S.producten.length ? `
-    <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
+    <div class="zoek">${ICOON.zoek}<input type="search" id="zoek-voorraad" placeholder="Zoeken in voorraad" value="${esc(ui.zoek)}" autocomplete="off"></div>` : ''}
     ${lijst}`);
   installTipTekenen();
   $m('#nieuw').onclick = () => productFormulier(null);
@@ -766,19 +883,22 @@ function tekenVoorraad() {
     const ids = b.dataset.groep.split(',').map(Number);
     if (ids.length === 1) productPaneel(ids[0]); else partijenPaneel(ids);
   }));
+  if (!zoek) $$m('.voorraad-groep[data-uitklap]').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) ui.uitgeklapt.add(d.dataset.uitklap); else ui.uitgeklapt.delete(d.dataset.uitklap);
+  }));
 }
 
 // Meerdere partijen van hetzelfde product: kies welke je wilt bekijken
 function partijenPaneel(ids) {
   paneelOpenen((el) => {
     const lijst = ids.map((id) => S.producten.find((p) => p.id === id)).filter(Boolean)
-      .sort((a, b) => (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
+      .sort((a, b) => !b.geopend - !a.geopend || (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
     if (!lijst.length) return paneelSluiten();
     if (lijst.length === 1) return productPaneel(lijst[0].id);
     el.innerHTML = `${paneelKop(esc(lijst[0].naam), 'Kies welke je wilt bekijken')}
       <ul class="lijst">${lijst.map((p) => `<li><button class="rij" data-partij="${p.id}"><span class="naam">${
         esc(p.vervaldatum ? `${TYPE_LANG[p.datumtype] || TYPE_LANG.THT} ${datumNL(p.vervaldatum, true)}` : 'Geen houdbaarheidsdatum')
-      }<small>${esc([p.merk, maatWoord(maatVan(p)), p.locatie, p.categorie].filter(Boolean).join(' · ') || ' ')}</small></span><span class="rechts">›</span></button></li>`).join('')}</ul>`;
+      }<small>${esc([geopendTekst(p), p.merk, maatWoord(maatVan(p)), p.locatie, p.categorie].filter(Boolean).join(' · ') || ' ')}</small></span><span class="rechts">${esc(p.hoeveelheid > 0 ? voorraadTekst(p) : 'op')}</span></button></li>`).join('')}</ul>`;
     sluitKnoppen(el);
     $$('[data-partij]', el).forEach((b) => (b.onclick = () => productPaneel(+b.dataset.partij)));
   });
@@ -802,6 +922,7 @@ function productPaneel(id) {
     const delen = !telbaar && p.hoeveelheid > 0 ? [[p.hoeveelheid / 4, '¼'], [p.hoeveelheid / 2, '½'], [null, 'Alles']] : [];
     el.innerHTML = `
       ${paneelKop(esc(p.naam), esc([p.merk, maatWoord(maatVan(p)), p.locatie, p.categorie].filter(Boolean).join(' · ')))}
+      ${p.geopend ? `<div class="geopend-blok"><span class="geopend-tag">geopend</span><div>${esc(geopendTekst(p).replace(/^./, (c) => c.toUpperCase()))}<small>Telt als opgebruikt: niet meegeteld in je voorraad en het minimum.</small></div></div>` : ''}
       <div class="hoeveelheid">
         ${telbaar ? `<button class="rond" id="min" aria-label="Eén minder" ${p.hoeveelheid >= 1 ? '' : 'disabled'}>−</button>` : ''}
         <div class="getal">${esc(fmt(p.hoeveelheid))}<span>${esc(p.eenheid === 'stuks' ? (p.hoeveelheid === 1 ? 'stuk' : 'stuks') : p.eenheid)}</span>${inh ? `<small class="inhoud-per">à ${esc(hoeveelTekst(inh.per, inh.eenheid))}${esc(uitlekTekst(p))}${p.hoeveelheid > 0 && p.hoeveelheid !== 1 ? ` · samen ${esc(samenTekst(p.hoeveelheid * inh.per, inh.eenheid))}` : ''}</small>` : uitlekTekst(p) ? '<small class="inhoud-per">uitlekgewicht</small>' : ''}</div>
@@ -811,6 +932,8 @@ function productPaneel(id) {
       ${datum}
       ${prijzenBlok(p.naam)}
       <ul class="acties">
+        ${p.geopend ? `<li><button id="leeg">Op (weggooien of opgebruikt)</button></li><li><button id="sluiten">Toch niet geopend</button></li>`
+          : p.hoeveelheid > 0 ? `<li><button id="openen">${telbaar && p.hoeveelheid > 1 ? `1 ${esc(p.eenheid === 'stuks' ? 'stuk' : meervoud(p.eenheid, 1))} geopend` : 'Geopend'} <small class="stil">telt als opgebruikt</small></button></li>` : ''}
         <li><button id="erbij">Nieuwe verpakking toevoegen</button></li>
         <li><button id="lijst">Op boodschappenlijst</button></li>
         ${p.grootverpakking?.potten && p.eenheid !== 'pot' && p.eenheid !== p.grootverpakking.eenheid ? `<li><button id="groot-erbij">${esc(grootNaam(p.grootverpakking))} erbij <small class="stil">+${esc(fmt(p.grootverpakking.potten))} ${esc(meervoud(p.eenheid, p.grootverpakking.potten))} in je voorraad</small></button></li>` : ''}
@@ -845,6 +968,9 @@ function productPaneel(id) {
     });
     knop('prijzen', () => prijzenPaneel(p.naam, p.eenheid, () => productPaneel(p.id)));
     knop('weggooien', () => verbruiken(p, null, 'weggegooid', true));
+    knop('openen', () => openen(p));
+    knop('leeg', () => verbruiken(p, null, 'verbruikt', true));
+    knop('sluiten', async () => { await api('POST', `producten/${p.id}/sluiten`, {}); paneelSluiten(); toast(`${p.naam} staat weer als ongeopend in je voorraad`); });
     knop('bewerk', () => productFormulier(p));
     knop('verwijder', async () => {
       if (!(await vraag(`${p.naam} verwijderen?`, { ja: 'Verwijderen', gevaar: true }))) return;
@@ -871,7 +997,7 @@ const variantLabel = (v) => [v.merk, inhoudLabel(v), maatVan(v) ? `(${maatWoord(
 /** Hoeveel heb je in huis van alle merken en inhouden samen (in de eenheid van het product)? Met `maat`: alleen die grootte. */
 function totaalInHuis(naam, maat) {
   const c = catalogusVan(naam), eenheid = c?.eenheid || S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || 'stuks';
-  return S.producten.filter((p) => zelfde(p.naam, naam) && (maat === undefined || maatVan(p) === maat)).reduce((s, p) => s + (omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid)
+  return S.producten.filter((p) => zelfde(p.naam, naam) && !p.geopend && (maat === undefined || maatVan(p) === maat)).reduce((s, p) => s + (omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid)
     ?? (TELBAAR.has(p.eenheid || 'stuks') && TELBAAR.has(eenheid) ? p.hoeveelheid || 0 : 0)), 0);
 }
 /** Grote verpakking van een product leesbaar, bv. "1 zak à 5 kg · vult ±4 potten". */
@@ -934,7 +1060,7 @@ const grootVeldenHtml = (id, g) => `<label class="vink uitlek-vink"><input type=
     </div>
     <div class="rij2">
       <label class="veld"><span>Inhoud (mag leeg)</span><input id="${id}-groot-inhoud" inputmode="decimal" value="${g?.inhoud > 0 ? esc(fmt(g.inhoud)) : ''}" placeholder="bv. 5"></label>
-      <label class="veld"><span>Eenheid inhoud</span><select id="${id}-groot-inhoud-eenheid">${opties(INHOUD_EENHEDEN, g?.inhoud_eenheid || 'kg')}</select></label>
+      <label class="veld"><span>Eenheid inhoud</span><select id="${id}-groot-inhoud-eenheid">${inhoudOpties(g?.inhoud_eenheid, 'kg')}</select></label>
     </div>
   </div>`;
 /** Titel van het aantal: "Vult ongeveer (potten)" of "Aantal zakjes erin", naar de eenheid van het product. */
@@ -948,7 +1074,7 @@ function grootVeldenZetten(el, id, g) {
   $(`#${id}-groot-eenheid`, el).innerHTML = opties(eenheden().filter((e) => TELBAAR.has(e)), g.eenheid || 'zak');
   $(`#${id}-groot-potten`, el).value = g.potten ? fmt(g.potten) : '';
   $(`#${id}-groot-inhoud`, el).value = g.inhoud > 0 ? fmt(g.inhoud) : '';
-  $(`#${id}-groot-inhoud-eenheid`, el).innerHTML = opties(INHOUD_EENHEDEN, g.inhoud_eenheid || 'kg');
+  $(`#${id}-groot-inhoud-eenheid`, el).innerHTML = inhoudOpties(g.inhoud_eenheid, 'kg');
 }
 /** Het vinkje koppelen; `aanGezet` wordt opgeroepen als je het aanzet (bv. om een minimum voor te stellen). */
 function grootVeldenKoppelen(el, id, aanGezet) {
@@ -1098,6 +1224,14 @@ function catalogusItem(c0, vi = 0) {
   });
 }
 
+/** Eén verpakking (of alles, bij gewicht en volume) als geopend aanduiden: telt als opgebruikt. */
+async function openen(p) {
+  const r = await api('POST', `producten/${p.id}/openen`, { hoeveelheid: 1 });
+  const nieuw = r && r.nieuw_id;
+  if (nieuw) productPaneel(nieuw); else paneelSluiten();
+  toast(`${p.naam} geopend: telt als opgebruikt`, 'Ongedaan maken', () => nieuw && api('POST', `producten/${nieuw}/sluiten`, {}));
+}
+
 async function verbruiken(p, hoeveelheid, soort, sluiten) {
   const oud = { ...p };
   const alles = hoeveelheid === null || hoeveelheid >= p.hoeveelheid - 1e-9;
@@ -1138,7 +1272,7 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
         <p class="stil" style="margin:-.4rem 0 1rem">Wordt ingevuld als je het product vanuit de catalogus aan je voorraad toevoegt.</p>
         <div class="rij2" id="cf-inhoud-rij">
           <label class="veld"><span id="cf-inhoud-titel">Inhoud per stuk</span><input id="cf-inhoud" inputmode="decimal" value="${c.inhoud > 0 ? esc(fmt(c.inhoud)) : ''}" placeholder="bv. 500"></label>
-          <label class="veld"><span>Eenheid inhoud</span><select id="cf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, c.inhoud_eenheid || 'g')}</select></label>
+          <label class="veld"><span>Eenheid inhoud</span><select id="cf-inhoud-eenheid">${inhoudOpties(c.inhoud_eenheid, 'g')}</select></label>
         </div>
         ${uitlekVinkje('cf', c.uitlekgewicht)}
         <div class="rij2">
@@ -1239,11 +1373,11 @@ function productFormulier(bestaand, sjabloon = {}) {
         ${minimumVinkjeHtml('pf', catMinimum(catalogusVan(p.naam), maatVan(p)))}
         <div class="rij2">
           <label class="veld"><span>Hoeveelheid</span><input id="pf-hv" inputmode="decimal" value="${esc(fmt(p.hoeveelheid))}" required></label>
-          <label class="veld"><span>Eenheid</span><select id="pf-eenheid">${opties(eenheden(), p.eenheid)}</select></label>
+          <label class="veld"><span>Eenheid</span><select id="pf-eenheid">${eenheidOpties(p.eenheid)}</select></label>
         </div>
         <div class="rij2" id="pf-inhoud-rij">
           <label class="veld"><span id="pf-inhoud-titel">Inhoud per stuk</span><input id="pf-inhoud" inputmode="decimal" value="${p.inhoud > 0 ? esc(fmt(p.inhoud)) : ''}" placeholder="bv. 500"></label>
-          <label class="veld"><span>Eenheid inhoud</span><select id="pf-inhoud-eenheid">${opties(INHOUD_EENHEDEN, p.inhoud_eenheid || 'g')}</select></label>
+          <label class="veld"><span>Eenheid inhoud</span><select id="pf-inhoud-eenheid">${inhoudOpties(p.inhoud_eenheid, 'g')}</select></label>
         </div>
         ${uitlekVinkje('pf', p.uitlekgewicht)}
         <div class="veld" style="margin-bottom:1rem"><span class="veld-titel">Plaats</span>
@@ -1310,10 +1444,10 @@ function productFormulier(bestaand, sjabloon = {}) {
     const invullen = (info) => {
       if (info.naam) $('#pf-naam', el).value = info.naam;
       if (info.hoeveelheid) $('#pf-hv', el).value = fmt(info.hoeveelheid);
-      if (info.eenheid) { $('#pf-eenheid', el).innerHTML = opties(eenheden(), info.eenheid); inhoudTonen(); grootTitel(); prijsPerZetten(el, info.eenheid); }
+      if (info.eenheid) { $('#pf-eenheid', el).innerHTML = eenheidOpties(info.eenheid); inhoudTonen(); grootTitel(); prijsPerZetten(el, info.eenheid); }
       if (info.inhoud > 0 && !$('#pf-inhoud', el).value) {
         $('#pf-inhoud', el).value = fmt(info.inhoud);
-        if (info.inhoud_eenheid) $('#pf-inhoud-eenheid', el).innerHTML = opties(INHOUD_EENHEDEN, info.inhoud_eenheid);
+        if (info.inhoud_eenheid) $('#pf-inhoud-eenheid', el).innerHTML = inhoudOpties(info.inhoud_eenheid);
       }
       if (info.categorie) $('#pf-cat', el).innerHTML = opties(categorieen(), info.categorie, 'Geen');
       if (info.merk && !$('#pf-merk', el).value) $('#pf-merk', el).value = info.merk;
@@ -1343,7 +1477,7 @@ function productFormulier(bestaand, sjabloon = {}) {
       bekendeNaam();
       $('#pf-merk', el).value = v ? v.merk || '' : '';
       $('#pf-inhoud', el).value = v && v.inhoud > 0 ? fmt(v.inhoud) : '';
-      if (v && v.inhoud > 0) $('#pf-inhoud-eenheid', el).innerHTML = opties(INHOUD_EENHEDEN, v.inhoud_eenheid || 'g');
+      if (v && v.inhoud > 0) $('#pf-inhoud-eenheid', el).innerHTML = inhoudOpties(v.inhoud_eenheid, 'g');
       $('#pf-uitlek', el).checked = !!(v && v.uitlekgewicht);
       maatZetten(el, 'pf', v ? v.verpakking : ''); minimumVinkjeMaat(el, 'pf');
       pfPrijzen();
@@ -1411,7 +1545,7 @@ function productFormulier(bestaand, sjabloon = {}) {
 function tekenBoodschappen() {
   // Elke boodschap staat op de algemene lijst én op de lijst van de winkel waar ze het goedkoopst is.
   // Het is telkens dezelfde boodschap: afvinken op de ene lijst vinkt ze dus ook af op de andere.
-  const metWinkel = S.boodschappen.map((b) => ({ b, p: goedkoopste(b.naam, b) }));
+  const metWinkel = S.boodschappen.map((b) => ({ b, p: winkelVoor(b.naam, b) }));
   const telPer = new Map();
   for (const x of metWinkel) if (x.p && !x.b.afgevinkt) telPer.set(x.p.winkel.toLowerCase(), (telPer.get(x.p.winkel.toLowerCase()) || 0) + 1);
   const tabs = uniek(metWinkel.filter((x) => x.p).map((x) => x.p.winkel)).sort((a, b) => winkelPlek(a) - winkelPlek(b) || a.localeCompare(b, 'nl'));
@@ -1517,7 +1651,7 @@ function hoeveelheidKiezen(id) {
         <button type="button" class="rond" id="hk-min" aria-label="Minder">−</button>
         <input id="hk-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid ?? stapVan(e0)))}" aria-label="Hoeveelheid">
         <button type="button" class="rond" id="hk-plus" aria-label="Meer">+</button>
-        <select id="hk-eenheid" aria-label="Eenheid">${opties(keuzes, e0)}</select></div></div>
+        <select id="hk-eenheid" aria-label="Eenheid">${opties(keuzes, e0)}${NIEUWE_EENHEID}</select></div></div>
       ${inhoudVeldenHtml('hk', e0, bi?.per, bi?.eenheid)}
       <div class="paneel-voet"><button class="knop" data-sluit>Annuleren</button><button class="knop primair" id="hk-ok">Bewaren</button></div>`;
     sluitKnoppen(el);
@@ -1546,7 +1680,7 @@ function inhoudVeldenHtml(id, eenheid, inhoud, inhoudEenheid) {
   const e = eenheid || 'stuks';
   return `<div class="rij2" id="${id}-inhoud-rij"${TELBAAR.has(e) ? '' : ' hidden'}>
     <label class="veld"><span id="${id}-inhoud-titel">Inhoud per ${esc(perTekst(TELBAAR.has(e) ? e : 'stuks'))} (mag leeg)</span><input id="${id}-inhoud" inputmode="decimal" value="${inhoud > 0 ? esc(fmt(inhoud)) : ''}" placeholder="bv. 500"></label>
-    <label class="veld"><span>Eenheid inhoud</span><select id="${id}-inhoud-eenheid">${opties(INHOUD_EENHEDEN, inhoudEenheid || 'g')}</select></label></div>`;
+    <label class="veld"><span>Eenheid inhoud</span><select id="${id}-inhoud-eenheid">${inhoudOpties(inhoudEenheid, 'g')}</select></label></div>`;
 }
 /** Inhoudvelden tonen of verbergen bij een andere eenheid. */
 function inhoudVeldenZetten(el, id, eenheid) {
@@ -1619,7 +1753,7 @@ function boodschapToevoegen() {
           <button type="button" class="rond" id="bt-min" aria-label="Minder">−</button>
           <input id="bt-hv" inputmode="decimal" value="1" aria-label="Hoeveelheid">
           <button type="button" class="rond" id="bt-plus" aria-label="Meer">+</button>
-          <select id="bt-eenheid" aria-label="Eenheid">${opties(eenheden(), 'stuks')}</select></div></div>
+          <select id="bt-eenheid" aria-label="Eenheid">${eenheidOpties('stuks')}</select></div></div>
         ${inhoudVeldenHtml('bt', 'stuks', null, 'g')}
         <details class="meer" id="bt-meer" style="margin-bottom:1rem"><summary>Categorie, plaats, houdbaarheid en prijzen</summary><div id="bt-meer-inhoud"></div></details>
         <div id="bt-zoek-blok"><div class="sectie-titel"><span>Kies uit je catalogus</span></div>
@@ -1749,7 +1883,7 @@ function boodschapBewerken(id) {
         <button type="button" class="rond" id="bb-min" aria-label="Minder">−</button>
         <input id="bb-hv" inputmode="decimal" value="${esc(fmt(b.hoeveelheid))}" placeholder="–" aria-label="Hoeveelheid">
         <button type="button" class="rond" id="bb-plus" aria-label="Meer">+</button>
-        <select id="bb-eenheid" aria-label="Eenheid">${opties(eenheden(), b.eenheid || 'stuks')}</select></div></div>
+        <select id="bb-eenheid" aria-label="Eenheid">${eenheidOpties(b.eenheid || 'stuks')}</select></div></div>
       ${inhoudVeldenHtml('bb', b.eenheid || 'stuks', boodschapInhoudVan(b)?.per, boodschapInhoudVan(b)?.eenheid)}
       <ul class="acties">
         <li><button id="bb-prijs">Prijzen per winkel</button></li>
@@ -1818,13 +1952,13 @@ function winkelenAfronden(ids) {
             <div class="af-ander" hidden>
               <input class="af-merk" placeholder="Merk (mag leeg)" aria-label="Merk" autocomplete="off" autocapitalize="words">
               <div class="af-inhoud-rij"><input class="af-inhoud" inputmode="decimal" placeholder="Inhoud per stuk" aria-label="Inhoud per stuk">
-                <select class="af-inhoud-eenheid" aria-label="Eenheid inhoud">${opties(INHOUD_EENHEDEN, 'g')}</select></div>
+                <select class="af-inhoud-eenheid" aria-label="Eenheid inhoud">${inhoudOpties('', 'g')}</select></div>
               <label class="vink uitlek-vink af-uitlek-vink"><input type="checkbox" class="af-uitlek"><span class="vakje"></span><span>Uitlekgewicht</span></label>
             </div>` : ''}
             ${x.doel ? `<label class="veld af-potten-veld"><span>${x.doel.eenheid === 'pot' ? 'Verdeeld over hoeveel potten?' : `Hoeveel ${esc(meervoud(x.doel.eenheid))} zitten erin?`} <small class="stil">leeg: de verpakking zelf in je voorraad zetten</small></span>
               <input class="af-potten" inputmode="decimal" value="${x.potten ? esc(fmt(x.potten)) : ''}" placeholder="bv. 4" aria-label="Aantal ${esc(meervoud(x.doel.eenheid))}"></label>` : ''}
             <input class="af-hv" inputmode="decimal" value="${esc(fmt(x.b.hoeveelheid ?? 1))}" aria-label="Hoeveelheid">
-            <select class="af-eenheid" aria-label="Eenheid">${opties(eenheden(), x.eenheid)}</select>
+            <select class="af-eenheid" aria-label="Eenheid">${eenheidOpties(x.eenheid)}</select>
             <select class="af-plaats" aria-label="Plaats">${opties(locaties(), x.locatie, 'Plaats')}</select>
             <input type="date" class="af-datum" aria-label="Houdbaar tot">
             <div class="segment af-type">
@@ -1881,8 +2015,9 @@ function beschikbaarheid(ingr, factor = 1, namen = productnamen(), geleerd = gel
   if (altijdInHuis(ingr)) return { st: 'ok', partijen: [], altijd: true };
   const naam = ingr.voorraadnaam || zoekVoorraadnaam(ingr.naam, namen, geleerd);
   if (!naam) return { st: 'ontbreekt', naam: '' };
+  // geopende verpakkingen eerst opmaken
   const partijen = S.producten.filter((p) => zelfde(p.naam, naam) && p.hoeveelheid > 0 && houdbaarheid(p).niveau !== 4)
-    .sort((a, b) => (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
+    .sort((a, b) => !b.geopend - !a.geopend || (a.vervaldatum || '9999').localeCompare(b.vervaldatum || '9999'));
   if (!partijen.length) return { st: 'ontbreekt', naam };
   // eenheid om in te rekenen: die van de voorraad, of de inhoud per verpakking als het recept bv. in gram rekent
   let eenheid = partijen[0].eenheid;
@@ -2689,6 +2824,161 @@ function schermBlokTekenen() {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// Op te gebruiken melden (per toestel):
+//  - een venster bij het openen van de app (hoogstens één keer per dag) met wat bijna of al voorbij de datum is;
+//  - als je dat aanzet: een melding op het toestel, ook als de app dicht is. Dat doet de service worker (sw.js)
+//    met "periodic background sync" (Chrome en Edge, als de app geïnstalleerd is). Hij leest de keuze en de dag van
+//    de laatste melding uit IndexedDB (sleutel 'melding', niet gesynchroniseerd), en de voorraad uit 'gegevens'.
+// ---------------------------------------------------------------------------
+const MELDING_TAG = 'op-te-gebruiken';
+const meldingKan = typeof Notification !== 'undefined' && 'serviceWorker' in navigator;
+const lsLezen = (k) => { try { return localStorage.getItem(k); } catch { return ui['ls:' + k] ?? null; } };
+const lsZetten = (k, w) => { ui['ls:' + k] = w; try { localStorage.setItem(k, w); } catch { /* */ } };
+const vensterBijOpenen = () => lsLezen('op-te-gebruiken-venster') !== 'uit';
+let meldingInfo = null; // { aan, laatst } uit IndexedDB, null zolang niet gelezen
+
+/** { aan, laatst } in IndexedDB lezen en eventueel aanvullen met `wijzig`. Geeft null als het niet lukt. */
+function meldingStaat(wijzig) {
+  return new Promise((ok) => {
+    let r;
+    try { r = indexedDB.open('voorraadbeheer', 1); } catch { return ok(null); }
+    r.onupgradeneeded = () => r.result.createObjectStore('staat');
+    r.onerror = () => ok(null);
+    r.onsuccess = () => {
+      const db = r.result;
+      try {
+        const t = db.transaction('staat', wijzig ? 'readwrite' : 'readonly'), st = t.objectStore('staat');
+        let uit = null;
+        const g = st.get('melding');
+        g.onsuccess = () => { uit = { ...(g.result || {}), ...(wijzig || {}) }; if (wijzig) st.put(uit, 'melding'); };
+        t.oncomplete = () => { db.close(); meldingInfo = uit; ok(uit); };
+        t.onerror = t.onabort = () => { db.close(); ok(null); };
+      } catch { db.close(); ok(null); }
+    };
+  });
+}
+
+/** Titel en tekst van een melding, bv. "2 producten op te gebruiken" en "Melk: vandaag · Kaas: morgen". */
+function meldingTekst(lijst) {
+  const titel = lijst.length === 1 ? `${lijst[0].p.naam} op te gebruiken` : `${lijst.length} producten op te gebruiken`;
+  const delen = lijst.slice(0, 4).map(({ p, h }) => `${p.naam}: ${h.kort}`);
+  return { titel, tekst: delen.join(' · ') + (lijst.length > 4 ? ` · en nog ${lijst.length - 4}` : '') };
+}
+
+async function swRegistratie() {
+  if (!('serviceWorker' in navigator)) return null;
+  try { return (await navigator.serviceWorker.getRegistration()) || null; } catch { return null; }
+}
+/** Kan de app nakijken terwijl ze dicht is? true / false (bv. iPhone, Firefox, niet geïnstalleerd). */
+async function achtergrondKan() {
+  const reg = await swRegistratie();
+  if (!reg || !reg.periodicSync) return false;
+  try { return (await navigator.permissions.query({ name: 'periodic-background-sync' })).state === 'granted'; } catch { return false; }
+}
+/** Nakijken in de achtergrond aan- of afmelden (ongeveer twee keer per dag; de browser kiest het moment). */
+async function achtergrondZetten(aan) {
+  const reg = await swRegistratie();
+  if (!reg || !reg.periodicSync) return false;
+  try {
+    if (!aan) { await reg.periodicSync.unregister(MELDING_TAG); return false; }
+    if (!(await achtergrondKan())) return false;
+    await reg.periodicSync.register(MELDING_TAG, { minInterval: 12 * 60 * 60 * 1000 });
+    return true;
+  } catch { return false; }
+}
+async function meldingTonen(titel, tekst) {
+  const opties = { body: tekst, icon: 'icoon-192.png', badge: 'icoon-192.png', tag: MELDING_TAG, data: { view: 'voorraad' } };
+  const reg = await swRegistratie();
+  try {
+    if (reg && reg.showNotification) await reg.showNotification(titel, opties);
+    else new Notification(titel, opties);
+    return true;
+  } catch { return false; }
+}
+
+/** Venster met alles wat op moet; tik op een product om het te openen. */
+function opTeGebruikenVenster() {
+  paneelOpenen((el) => {
+    const lijst = opTeGebruikenVan(S.producten);
+    if (!lijst.length) return paneelSluiten();
+    el.innerHTML = `${paneelKop('Op te gebruiken', lijst.length === 1 ? '1 product is bijna of al voorbij de datum' : `${lijst.length} producten zijn bijna of al voorbij de datum`)}
+      <ul class="lijst" id="otg-lijst">${lijst.map(opTeGebruikenRij).join('')}</ul>
+      <div class="knoppenrij" style="margin-top:1rem"><button class="knop primair" id="otg-voorraad">Naar voorraad</button><button class="knop" data-sluit>Sluiten</button></div>
+      <p class="stil" style="font-size:.85rem;line-height:1.5;margin-top:.8rem">Dit venster verschijnt hoogstens één keer per dag als je de app opent. Uitzetten kan bij Instellingen → Meldingen.</p>`;
+    sluitKnoppen(el);
+    $$('[data-product]', el).forEach((b) => (b.onclick = () => productPaneel(+b.dataset.product)));
+    $('#otg-voorraad', el).onclick = () => { paneelSluiten(); naar('voorraad'); };
+  });
+}
+/** Bij het openen (en terugkeren naar) de app: het venster tonen, hoogstens één keer per dag. */
+function opTeGebruikenNakijken() {
+  if (!vensterBijOpenen() || bezig()) return false;
+  const d = vandaag();
+  if (lsLezen('op-te-gebruiken-getoond') === d || !opTeGebruikenVan(S.producten).length) return false;
+  lsZetten('op-te-gebruiken-getoond', d);
+  meldingStaat({ laatst: d }); // je zag het al: vandaag geen melding meer op het toestel
+  opTeGebruikenVenster();
+  return true;
+}
+
+function meldingBlokTekenen() {
+  const blok = $m('#melding-blok');
+  if (!blok) return;
+  const venster = vensterBijOpenen();
+  const toestemming = meldingKan ? Notification.permission : 'nee';
+  const aan = !!meldingInfo?.aan && toestemming === 'granted';
+  blok.innerHTML = `<div class="sectie-titel">Meldingen</div>
+    <p class="stil" style="margin-bottom:.6rem;font-size:.92rem;line-height:1.55">Als een product op moet (zoveel dagen vooraf als hierboven ingesteld).</p>
+    <div class="instelling"><span>Venster bij het openen van de app</span>
+      <div class="segment" id="m-venster" role="group" aria-label="Venster bij het openen" style="min-width:8rem">
+        <button type="button" data-venster="aan" class="${venster ? 'aan' : ''}" aria-pressed="${venster}">Aan</button>
+        <button type="button" data-venster="uit" class="${venster ? '' : 'aan'}" aria-pressed="${!venster}">Uit</button></div></div>
+    <div class="instelling" style="border-bottom:0;flex-wrap:wrap"><span>Melding op dit toestel<small class="stil" id="m-uitleg" style="display:block;font-size:.85rem;line-height:1.5;margin-top:.2rem">${
+      !meldingKan ? 'Deze browser kan geen meldingen tonen. Op een iPhone of iPad lukt het alleen als je de app op het beginscherm zet (iOS 16.4 of nieuwer).'
+      : toestemming === 'denied' ? 'Meldingen zijn geblokkeerd voor deze app. Sta ze toe in de instellingen van je browser of toestel, en tik dan op Aanzetten.'
+      : aan ? 'Aan. Hoogstens één melding per dag.' : 'Uit.'}</small></span>
+      <span class="knoppenrij" style="margin:0">${meldingKan ? `${aan ? '<button class="knop" id="m-proef">Proefmelding</button>' : ''}<button class="knop${aan ? '' : ' primair'}" id="m-toestel">${aan ? 'Uitzetten' : 'Aanzetten'}</button>` : ''}</span></div>
+    <p class="stil" id="m-achtergrond" style="font-size:.85rem;line-height:1.5" hidden></p>`;
+  $$m('[data-venster]', blok).forEach((b) => (b.onclick = () => {
+    lsZetten('op-te-gebruiken-venster', b.dataset.venster);
+    meldingBlokTekenen();
+  }));
+  if (aan) achtergrondKan().then((kan) => {
+    const p = $('#m-achtergrond', blok);
+    if (!p) return;
+    p.hidden = false;
+    p.textContent = kan ? 'Ook als de app dicht is, kijkt ze ongeveer twee keer per dag na wat op moet (je toestel kiest het juiste moment).'
+      : 'Deze browser kan niet nakijken terwijl de app dicht is. Dat lukt alleen in Chrome of Edge (Android of computer) met de app geïnstalleerd. Anders zie je wat op moet in het venster bij het openen.';
+  });
+  const proef = $('#m-proef', blok);
+  if (proef) proef.onclick = async () => {
+    const lijst = opTeGebruikenVan(S.producten);
+    const m = lijst.length ? meldingTekst(lijst) : { titel: 'Op te gebruiken', tekst: 'Er moet nu niets op. Zo ziet een melding eruit.' };
+    if (!(await meldingTonen(m.titel, m.tekst))) toast('De melding kon niet getoond worden.');
+  };
+  const knop = $('#m-toestel', blok);
+  if (knop) knop.onclick = async () => {
+    if (aan) {
+      await meldingStaat({ aan: false });
+      await achtergrondZetten(false);
+      toast('Geen meldingen meer op dit toestel.');
+      return meldingBlokTekenen();
+    }
+    let t = Notification.permission;
+    if (t === 'default') { try { t = await Notification.requestPermission(); } catch { t = Notification.permission; } }
+    if (t !== 'granted') { toast('Geen toestemming voor meldingen gekregen.'); return meldingBlokTekenen(); }
+    await meldingStaat({ aan: true });
+    const achter = await achtergrondZetten(true);
+    toast(achter ? 'Je krijgt een melding als een product op moet.' : 'Meldingen staan aan. Deze browser kijkt alleen na als de app open is.');
+    meldingBlokTekenen();
+  };
+}
+// tik op een melding: de service worker vraagt de open app om naar de voorraad te gaan
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => {
+  if (e.data && e.data.naar && VIEWS.includes(e.data.naar)) { if (!$('#paneel').hidden) paneelSluiten(); naar(e.data.naar); }
+});
+
 // Automatische back-up in Downloads (alle toestellen; aan/uit)
 function autoBlokTekenen() {
   const blok = $('#auto-blok');
@@ -2897,12 +3187,14 @@ async function syncKoppelen(code, adres) {
   toast('Gekoppeld. Wijzigingen op je toestellen worden voortaan vanzelf gesynchroniseerd.');
   if (ui.view === 'instellingen') tekenen();
 }
+// een opdracht duurt al 5 s (zie lokaal.js): laten weten dat de app nog bezig is, niet vastzit
+document.addEventListener('traag', () => toast('Even geduld, de app is nog aan het bewaren…'));
 document.addEventListener('syncstatus', (e) => {
   if (ui.view === 'instellingen') syncBlokTekenen();
   if (e.detail?.melding) toast(e.detail.melding, null, null, true);
 });
 // gegevens kwamen binnen van een ander toestel: scherm bijwerken (niet midden in het invullen van iets)
-document.addEventListener('syncgewijzigd', () => { if (!bezig()) api('GET', 'alles', undefined, true).catch(() => {}); });
+document.addEventListener('syncgewijzigd', () => vernieuwenAlsVrij());
 
 // De app kon niet zelf om toestemming vragen (of kreeg nee): één keer per sessie een melding met een knop
 let toestemmingGemeld = false;
@@ -3061,6 +3353,7 @@ async function tekenInstellingen() {
     : veld === 'winkel' ? (S.catalogus || []).filter((c) => (c.prijzen || []).some((p) => zelfde(p.winkel, naam))).length
     : veld === 'maaltijd' ? (S.planning || []).filter((m) => zelfde(m.maaltijd, naam)).length
     : veld === 'eenheid' ? S.producten.filter((p) => p.eenheid === naam || p.grootverpakking?.eenheid === naam).length
+    : veld === 'inhoud_eenheid' ? S.producten.filter((p) => p.inhoud_eenheid === naam || p.grootverpakking?.inhoud_eenheid === naam).length
     : S.producten.filter((p) => zelfde(p[veld], naam)).length;
   const isRecept = (veld) => veld.startsWith('recept_');
   const aantalTekst = (veld, n) => !n ? '' : veld === 'maaltijd' ? `${n} gepland` : isRecept(veld) ? `${n} ${n === 1 ? 'recept' : 'recepten'}` : `${n} ${n === 1 ? 'product' : 'producten'}`;
@@ -3079,7 +3372,7 @@ async function tekenInstellingen() {
           </span></li>`;
       }).join('')}</ul>
       <form class="toevoegen beheer-nieuw" data-nieuw="${sleutel}" autocomplete="off">
-        <input placeholder="${voorbeeld}" autocapitalize="${veld === 'eenheid' ? 'none' : 'sentences'}">
+        <input placeholder="${voorbeeld}" autocapitalize="${veld.includes('eenheid') ? 'none' : 'sentences'}">
         <button class="knop" aria-label="Toevoegen">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</button>
       </form></details>`;
   const dagen = (titel, sleutel) => `<div class="instelling"><span>${titel}</span>
@@ -3096,6 +3389,7 @@ async function tekenInstellingen() {
     <section class="sectie" id="scherm-blok"></section>
     <section class="sectie"><div class="sectie-titel">Waarschuwen, zoveel dagen vooraf</div>
       ${dagen('Te gebruiken tot', 'tgt_dagen')}${dagen('Ten minste houdbaar tot', 'tht_dagen')}</section>
+    <section class="sectie" id="melding-blok"></section>
     ${lijstBlok('Plaatsen', 'locaties', 'locatie', 'Nieuwe plaats, bv. Kelder')}
     ${lijstBlok('Productcategorieën', 'categorieen', 'categorie', 'Nieuwe categorie, bv. Babyvoeding')}
     ${lijstBlok('Winkels', 'winkels', 'winkel', 'Nieuwe winkel, bv. Colruyt')}
@@ -3104,6 +3398,8 @@ async function tekenInstellingen() {
     ${lijstBlok('Maaltijden in de planner', 'maaltijden', 'maaltijd', 'Nieuwe maaltijd, bv. Vieruurtje')}
     ${lijstBlok('Eenheden', 'eenheden', 'eenheid', 'Nieuwe eenheid, bv. bokaal',
       'De eenheden die je kiest bij je voorraad en boodschappen. Een eigen eenheid (bv. bokaal, tube, rol) telt als verpakking: je kunt er een inhoud per stuk bij invullen. Tik op een eigen eenheid om ze te hernoemen.')}
+    ${lijstBlok('Eenheden voor de inhoud', 'inhoud_eenheden', 'inhoud_eenheid', 'Nieuwe eenheid, bv. vel',
+      'De eenheden bij <b>Eenheid inhoud</b>, bv. pak à 500 g of rol à 200 vel. Een eigen eenheid (bv. vel, wasbeurt, tablet) rekent de app niet om naar g of l, maar je kunt er wel een prijs per vel of per wasbeurt voor invullen. Tik op een eigen eenheid om ze te hernoemen.')}
     <section class="sectie"><div class="sectie-titel">Overzicht</div><div id="stats" class="stil">Laden…</div></section>
     <section class="sectie" id="sync-blok"></section>
     <section class="sectie" id="auto-blok"></section>
@@ -3113,12 +3409,26 @@ async function tekenInstellingen() {
       <div class="knoppenrij"><a class="knop" href="api/export.json" download>Back-up downloaden</a><a class="knop" href="api/export.csv" download>Voorraad als CSV</a>
       <button class="knop" id="i-terug">Back-up terugzetten</button></div></section>
     <section class="sectie"><div class="sectie-titel">Over</div>
-      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd (behalve als je synchronisatie aanzet: dan gaan je gegevens versleuteld naar je eigen server) en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>`;
+      <p class="stil" style="font-size:.92rem;line-height:1.6">Alles draait op dit toestel, ook zonder internet. Er wordt niets naar buiten gestuurd (behalve als je synchronisatie aanzet: dan gaan je gegevens versleuteld naar je eigen server) en er wordt geen AI gebruikt; ingelezen pdf's verlaten het toestel niet.<br>Versie ${APP_VERSIE}${status.opslag === false ? '<br><b style="color:var(--rood, #b42318)">Let op: deze browser bewaart je gegevens niet. Open de app niet in een privévenster.</b>' : ''}</p></section>
+    <details class="sectie uitklap" data-uitklap="logboek"${ui.uitgeklapt.has('logboek') ? ' open' : ''}>
+      <summary><span>Probleemlogboek</span><span class="stil">${(window.voorraadLog?.lezen() || []).length}</span></summary>
+      <p class="stil" style="font-size:.82rem;margin:.2rem 0 .5rem">Loopt de app vast of gebeurt er iets vreemds, dan staat hier wat er gebeurde (alleen op dit toestel). Tik op <b>Kopiëren</b> en stuur het door naar wie je helpt.</p>
+      <pre id="logboek" style="white-space:pre-wrap;word-break:break-word;font-size:.75rem;max-height:16rem;overflow:auto;background:var(--vlak, rgba(127,127,127,.08));padding:.5rem;border-radius:8px">${esc((window.voorraadLog?.lezen() || []).slice().reverse().join('\n') || 'Niets genoteerd.')}</pre>
+      <div class="knoppenrij"><button class="knop" id="log-kopie">Kopiëren</button><button class="knop" id="log-wis">Wissen</button></div>
+    </details>`;
   installBlokTekenen();
   bestandBlokTekenen();
   syncBlokTekenen();
   schermBlokTekenen();
+  meldingBlokTekenen();
+  if (!meldingInfo) meldingStaat().then(() => meldingBlokTekenen());
   $m('#i-handleiding').onclick = () => handleidingPaneel();
+  const logInfo = () => `Voorraad versie ${APP_VERSIE} · ${navigator.userAgent}${matchMedia('(display-mode: standalone)').matches ? ' · geïnstalleerd' : ''}\n` + (window.voorraadLog?.lezen() || []).join('\n');
+  $m('#log-kopie').onclick = async () => {
+    try { await navigator.clipboard.writeText(logInfo()); toast('Gekopieerd. Plak het in een bericht.'); }
+    catch { const r = document.createRange(); r.selectNodeContents($m('#logboek')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Kopiëren lukte niet vanzelf: de tekst is geselecteerd, kopieer ze zelf.'); }
+  };
+  $m('#log-wis').onclick = () => { window.voorraadLog?.wissen(); tekenen(); };
   handleidingKnoppen($('#inhoud'));
 
   // open/dicht onthouden, ook als het scherm opnieuw getekend wordt
@@ -3130,17 +3440,18 @@ async function tekenInstellingen() {
     const k = b.dataset.dagen;
     bewaar({ [k]: Math.min(60, Math.max(0, (inst[k] ?? 0) + +b.dataset.stap)) });
   }));
-  const VELD = { locaties: 'locatie', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'recept_soort', recept_categorieen: 'recept_categorie', maaltijden: 'maaltijd', eenheden: 'eenheid' };
-  const SOORT = { locaties: 'plaats', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'soort', recept_categorieen: 'categorie', maaltijden: 'maaltijd', eenheden: 'eenheid' };
+  const VELD = { locaties: 'locatie', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'recept_soort', recept_categorieen: 'recept_categorie', maaltijden: 'maaltijd', eenheden: 'eenheid', inhoud_eenheden: 'inhoud_eenheid' };
+  const SOORT = { locaties: 'plaats', categorieen: 'categorie', winkels: 'winkel', recept_soorten: 'soort', recept_categorieen: 'categorie', maaltijden: 'maaltijd', eenheden: 'eenheid', inhoud_eenheden: 'eenheid' };
   const HOOFD = { plaats: 'Plaats', categorie: 'Categorie', soort: 'Soort', winkel: 'Winkel', maaltijd: 'Maaltijd', eenheid: 'Eenheid' };
   // eenheden altijd in kleine letters; de standaardeenheden (g, kg, l …) rekent de app om, die hernoem je niet
-  const netjes = (k, naam) => (k === 'eenheden' ? naam.toLowerCase() : naam);
-  const vastEenheid = (k, naam) => k === 'eenheden' && STANDAARD_EENHEDEN.includes(naam);
+  const isEenheid = (k) => k === 'eenheden' || k === 'inhoud_eenheden';
+  const netjes = (k, naam) => (isEenheid(k) ? naam.toLowerCase() : naam);
+  const vastEenheid = (k, naam) => (k === 'eenheden' && STANDAARD_EENHEDEN.includes(naam)) || (k === 'inhoud_eenheden' && VASTE_INHOUD.has(naam));
   $$m('[data-nieuw]').forEach((f) => (f.onsubmit = async (e) => {
     e.preventDefault();
     const k = f.dataset.nieuw, naam = netjes(k, $m('input', f).value.trim());
     if (!naam) return;
-    if (k === 'eenheden' && naam.length > 20) return toast('Kies een kortere eenheid (hoogstens 20 tekens).');
+    if (isEenheid(k) && eenheidFout(k, naam, [])) return toast(eenheidFout(k, naam, []));
     if ((inst[k] || []).some((x) => zelfde(x, naam))) return toast(`"${naam}" bestaat al.`);
     await bewaar({ [k]: [...(inst[k] || []), naam] });
     toast(`${naam} toegevoegd`);
@@ -3151,8 +3462,9 @@ async function tekenInstellingen() {
       if (vastEenheid(k, naam)) return toast(`"${naam}" is een standaardeenheid; die kun je niet hernoemen. Verwijderen of een nieuwe toevoegen kan wel.`);
       const nieuw = netjes(k, ((await vraag(`Nieuwe naam voor ${SOORT[k]} "${naam}":`, { invoer: true, standaard: naam, ja: 'Bewaren' })) || '').trim());
       if (!nieuw || nieuw === naam) return;
-      if (k === 'eenheden' && (nieuw.length > 20 || STANDAARD_EENHEDEN.includes(nieuw) || RECEPT_EENHEDEN.includes(nieuw)))
-        return toast(nieuw.length > 20 ? 'Kies een kortere eenheid (hoogstens 20 tekens).' : `"${nieuw}" is een standaardeenheid. Kies een andere naam.`);
+      if (isEenheid(k) && eenheidFout(k, nieuw, [])) return toast(eenheidFout(k, nieuw, []));
+      if ((k === 'eenheden' && (STANDAARD_EENHEDEN.includes(nieuw) || RECEPT_EENHEDEN.includes(nieuw))) || (k === 'inhoud_eenheden' && VASTE_INHOUD.has(nieuw)))
+        return toast(`"${nieuw}" is een standaardeenheid. Kies een andere naam.`);
       if (lijst.some((x, j) => j !== i && zelfde(x, nieuw))) return toast(`"${nieuw}" bestaat al.`);
       lijst[i] = nieuw;
       await bewaar({ [k]: lijst });
@@ -3161,17 +3473,18 @@ async function tekenInstellingen() {
     $m('[data-omhoog]', rij).onclick = () => { [lijst[i - 1], lijst[i]] = [lijst[i], lijst[i - 1]]; bewaar({ [k]: lijst }); };
     $m('[data-wis]', rij).onclick = async () => {
       if (k === 'eenheden' && naam === 'stuks') return toast('"stuks" kun je niet verwijderen: dat is de eenheid als je niets kiest.');
+      if (k === 'inhoud_eenheden' && lijst.length === 1) return toast('Er moet minstens één eenheid voor de inhoud overblijven.');
       const aantal = telling(VELD[k], naam);
       const wie = isRecept(VELD[k]) ? (aantal === 1 ? 'recept heeft' : 'recepten hebben') : (aantal === 1 ? 'product heeft' : 'producten hebben');
       const tekst = !aantal ? `${HOOFD[SOORT[k]]} "${naam}" verwijderen?`
         : VELD[k] === 'maaltijd' ? `Maaltijd "${naam}" verwijderen? ${aantal} ${aantal === 1 ? 'geplande maaltijd blijft' : 'geplande maaltijden blijven'} in de planner staan, zonder dit moment.`
-        : VELD[k] === 'eenheid' ? `Eenheid "${naam}" verwijderen? Je kunt ze daarna niet meer kiezen. ${aantal} ${aantal === 1 ? 'product houdt' : 'producten houden'} wel deze eenheid tot je ze aanpast.`
+        : isEenheid(k) ? `Eenheid "${naam}" verwijderen? Je kunt ze daarna niet meer kiezen. ${aantal} ${aantal === 1 ? 'product houdt' : 'producten houden'} wel deze eenheid tot je ze aanpast.`
         : VELD[k] === 'winkel' ? `Winkel "${naam}" verwijderen? De prijzen bij deze winkel (${aantal} ${aantal === 1 ? 'product' : 'producten'}) worden gewist.`
         : `${HOOFD[SOORT[k]]} "${naam}" verwijderen? ${aantal} ${wie} daarna ${VELD[k] === 'recept_categorie' ? 'deze categorie niet' : `geen ${SOORT[k]}`} meer.`;
       if (!(await vraag(tekst, { ja: 'Verwijderen', gevaar: true }))) return;
       lijst.splice(i, 1);
       await bewaar({ [k]: lijst });
-      if (aantal && VELD[k] !== 'eenheid') await api('POST', 'hernoemen', { veld: VELD[k], van: naam, naar: '' });
+      if (aantal && !isEenheid(k)) await api('POST', 'hernoemen', { veld: VELD[k], van: naam, naar: '' });
     };
   });
   $m('#i-terug').onclick = () => $('#bestand-backup').click();
@@ -3220,6 +3533,7 @@ async function start() {
   if (koppel) history.replaceState(null, '', '#instellingen'); // de code niet in de adresbalk laten staan
   ui.view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'voorraad';
   schermBijwerken(); // "Scherm aan laten: Altijd" meteen toepassen
+  window.voorraadLog?.schrijf(`App geopend (versie ${APP_VERSIE}${matchMedia('(display-mode: standalone)').matches ? ', geïnstalleerd' : ''})`);
   try { status = await fetch('api/status').then((r) => r.json()); } catch { /* */ }
   try { await api('GET', 'alles'); } catch {
     $('#inhoud').innerHTML = '<div class="leeg"><b>De app kon niet starten</b>Herlaad de pagina. Gebruik geen privévenster.</div>';
@@ -3230,10 +3544,23 @@ async function start() {
     else await syncKoppelen(koppel.get('koppelen') || '', koppel.get('server') || '');
     return;
   }
+  opTeGebruikenNakijken();
   bestandHerinneren();
+  // meldingen staan aan: opnieuw aanmelden om na te kijken (bv. nadat de app intussen geïnstalleerd werd)
+  meldingStaat().then((m) => { if (m?.aan && meldingKan && Notification.permission === 'granted') achtergrondZetten(true); });
 }
 const bezig = () => !$('#paneel').hidden || $('#vraag').open || document.activeElement?.matches('input, textarea');
 document.addEventListener('installeerbaar', () => { installBlokTekenen(); installTipTekenen(); });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !bezig()) api('GET', 'alles', undefined, true).catch(() => {}); });
+// Nieuwe gegevens (van een ander toestel, of na het terugkomen in de app): scherm bijwerken. Ben je net iets aan het
+// invullen, dan pas zodra je klaar bent (paneel of venster dicht), anders moest je zelf vernieuwen.
+function vernieuwenAlsVrij(nakijken = false) {
+  if (bezig()) { vernieuwenNodig = true; return; }
+  vernieuwenNodig = false;
+  api('GET', 'alles', undefined, true).then(() => { if (nakijken) opTeGebruikenNakijken(); }).catch(() => {});
+}
+function vrijNakijken() { if (!vernieuwenNodig) return; clearTimeout(vrijTimer); vrijTimer = setTimeout(() => { if (vernieuwenNodig) vernieuwenAlsVrij(); }, 400); }
+document.addEventListener('focusout', vrijNakijken);
+$('#vraag').addEventListener('close', vrijNakijken);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') vernieuwenAlsVrij(true); });
 window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== ui.view) naar(v); });
 start();

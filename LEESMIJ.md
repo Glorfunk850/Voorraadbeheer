@@ -8,6 +8,12 @@ Voorlopig uitgeschakeld: barcodes scannen en recepten inlezen vanaf een foto (of
 Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf te typen.
 (Het bestand `barcode.js` wordt niet meer gebruikt en is bewaard voor later.)
 
+## Loopt de app vast?
+
+- Bij Instellingen → **Probleemlogboek** staat wat er misliep (fouten, opdrachten die lang duurden, problemen met de opslag).
+  Tik op **Kopiëren** en stuur het door naar wie je helpt. Het logboek blijft op het toestel; er gaat niets vanzelf naar buiten.
+- Duurt bewaren langer dan 5 seconden, dan zie je onderaan *Even geduld, de app is nog aan het bewaren…*.
+
 ## Boodschappen toevoegen
 
 - Typ bovenaan iets in (bv. `2 l melk`) en tik op **+**, of tik op de knop met het **lijstje** ernaast.
@@ -18,6 +24,22 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - Tik op de **naam** van een boodschap om ze te bewerken: naam, aantal en eenheid aanpassen, de prijzen per winkel,
   het product in je voorraad bewerken (of er een product van maken), of ze van de lijst halen.
   Afvinken doe je door op het rondje te tikken.
+
+## Voorraad per categorie en geopende verpakkingen
+
+- Op het tabblad **Voorraad** staan onder *Op te gebruiken* al je producten per **categorie**; tik op een categorie
+  om ze open of dicht te klappen. Met het **zoekveld** bovenaan zoek je op naam, merk, plaats, categorie of notitie.
+- Tik op een product → **Geopend** (of *1 fles geopend* als je er meer hebt). Een geopende verpakking **telt als opgebruikt**:
+  ze gaat van je voorraad af en telt niet mee voor het minimum (zakt het daaronder, dan komt het op je lijst).
+  Ze blijft wel zichtbaar met *geopend* erbij, en bovenaan bij **Geopend** staat een overzicht van alles wat open is. Leeg? Tik erop → **Op**. Vergissing? **Toch niet geopend**.
+
+## Melding als een product op moet
+
+- Moet er iets op (de datum komt eraan of is voorbij), dan verschijnt bij het openen van de app een venster
+  **Op te gebruiken** (hoogstens één keer per dag). Uitzetten kan bij Instellingen → **Meldingen**.
+- Daar zet je ook een **melding op dit toestel** aan. Ook als de app dicht is, kijkt ze dan ongeveer twee keer per dag na
+  wat op moet (hoogstens één melding per dag). Dat lukt alleen in Chrome of Edge met de app geïnstalleerd; op iPhone/iPad
+  en in Firefox zie je het in het venster bij het openen.
 
 ## Grote verpakkingen, thuis verdeeld over potten
 
@@ -55,6 +77,8 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   berekend kan worden. Winkels beheer je bij Instellingen → **Winkels**.
 - Op de boodschappenlijst staat elk product op de **algemene lijst** (Alles) én op de lijst van de winkel
   waar het het goedkoopst is. Het is telkens dezelfde boodschap: afvinken op de ene lijst vinkt ze ook af op de andere.
+- Een product komt op de lijst van een winkel zodra er bij dat product een prijs ingevuld is. Heeft het merk of de inhoud
+  van de boodschap geen eigen prijs, dan kiest de app de goedkoopste winkel van hetzelfde merk, of anders van het product.
 - Tik op de prijs (of op "Prijs invullen") onder een boodschap om de prijzen meteen aan te passen.
 
 ## Maaltijdplanner
@@ -75,6 +99,10 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
   Een eigen eenheid telt als verpakking (met eventueel een inhoud per stuk) en wordt herkend als je `2 bokaal augurken` typt.
 - De standaardeenheden (g, kg, l …) kun je niet hernoemen, wel verwijderen; *stuks* blijft altijd.
   Producten die een verwijderde eenheid hebben, houden ze.
+- Bij Instellingen → **Eenheden voor de inhoud** doe je hetzelfde voor de eenheid van de inhoud (bv. rol à 200 *vel*,
+  doos à 40 *wasbeurten*). Zo'n eenheid wordt niet omgerekend, maar een prijs per vel of per wasbeurt kan wel.
+- In elke keuzelijst voor een eenheid staat onderaan **Andere eenheid…**: zo voeg je meteen een eenheid toe terwijl je
+  een product in je voorraad zet; ze wordt ook bij Instellingen bewaard.
 
 ## Scherm aan laten tijdens het koken
 

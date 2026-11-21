@@ -5,6 +5,24 @@
 // de tekstherkenning (Tesseract.js, open source, geen AI-dienst). Bestanden blijven op het toestel.
 (function () {
   const DB_NAAM = 'voorraadbeheer', DB_TABEL = 'staat', SLEUTEL = 'gegevens';
+  // ------------------------------------------------------------------ probleemlogboek
+  // Fouten en trage opdrachten worden genoteerd (alleen op dit toestel, de laatste 60), zodat je bij een probleem
+  // kunt nakijken wat er gebeurde: Instellingen → Probleemlogboek → Kopiëren.
+  const LOG_SLEUTEL = 'voorraad-logboek';
+  const logLezen = () => { try { const l = JSON.parse(localStorage.getItem(LOG_SLEUTEL) || '[]'); return Array.isArray(l) ? l : []; } catch { return []; } };
+  function log(tekst) {
+    const t = new Date(), tijd = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')} ${t.toTimeString().slice(0, 8)}`;
+    const regel = `${tijd} ${String(tekst).slice(0, 600)}`;
+    try { localStorage.setItem(LOG_SLEUTEL, JSON.stringify([...logLezen(), regel].slice(-60))); } catch { /* */ }
+    try { console.warn('[logboek]', regel); } catch { /* */ }
+  }
+  const foutTekst = (f) => (f && (f.stack || f.message)) ? `${f.name || 'Fout'}: ${f.message}${f.stack ? ' | ' + String(f.stack).split('\n').slice(1, 4).map((x) => x.trim()).join(' | ') : ''}` : String(f);
+  window.addEventListener('error', (e) => log(`JS-fout: ${e.error ? foutTekst(e.error) : e.message} (${(e.filename || '').split('/').pop()}:${e.lineno})`));
+  window.addEventListener('unhandledrejection', (e) => log(`Niet opgevangen fout: ${foutTekst(e.reason)}`));
+  window.voorraadLog = {
+    schrijf: log, fout: (wat, f) => log(`${wat}: ${foutTekst(f)}`),
+    lezen: () => logLezen(), wissen: () => { try { localStorage.removeItem(LOG_SLEUTEL); } catch { /* */ } },
+  };
   const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 
   const datum = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -80,6 +98,8 @@
       maaltijden: ['Ontbijt', 'Lunch', 'Avondeten'], // momenten in de maaltijdplanner
       // eenheden voor voorraad en boodschappen (zelf aan te passen bij Instellingen)
       eenheden: ['stuks', 'g', 'kg', 'ml', 'cl', 'dl', 'l', 'pak', 'blik', 'fles', 'pot', 'zak', 'doos'],
+      // eenheden voor de inhoud per stuk of verpakking (bv. pak à 500 g); zelf aan te vullen, bv. vel of wasbeurt
+      inhoud_eenheden: ['g', 'kg', 'ml', 'cl', 'dl', 'l'],
     },
   });
   let S = STANDAARD();
@@ -92,34 +112,131 @@
   };
 
   // ------------------------------------------------------------------ opslag
-  let dbBelofte = null;
+  // Op een gsm kan de browser de verbinding met de opslag stil sluiten of laten hangen (bv. als de app een tijd op de
+  // achtergrond stond; op iPhone soms tot je de app herstart). Dan wachtte alles daarna: de app "blokkeerde".
+  // Daarom: een verbinding die gesloten wordt, vergeten; een opdracht die te lang duurt (of mislukt) nog één keer
+  // proberen met een nieuwe verbinding. Lukt dat ook niet, dan geldt de opslag als "stuk": de app wacht er niet meer
+  // op en bewaart meteen in een noodopslag (localStorage). Op de achtergrond (en bij het terugkomen in de app) wordt
+  // nagekeken of de gewone opslag weer werkt; dan gaat alles daar terug naartoe.
+  const DB_WACHT = 4000, NOOD_SLEUTEL = 'voorraad-noodopslag';
+  let dbBelofte = null, opslagStuk = false;
+  const dbVergeten = (d) => {
+    const oud = dbBelofte; dbBelofte = null;
+    try { if (d) d.close(); } catch { /* al dicht */ }
+    if (oud && !d) oud.then((x) => { try { x.close(); } catch { /* */ } }, () => {});
+  };
   const db = () => dbBelofte || (dbBelofte = new Promise((ok, nee) => {
-    const r = indexedDB.open(DB_NAAM, 1);
+    let r;
+    try { r = indexedDB.open(DB_NAAM, 1); } catch (f) { dbBelofte = null; return nee(f); }
+    const klok = setTimeout(() => { dbBelofte = null; nee(new Error('De opslag op dit toestel reageert niet.')); }, DB_WACHT);
     r.onupgradeneeded = () => r.result.createObjectStore(DB_TABEL);
-    r.onsuccess = () => ok(r.result);
-    r.onerror = () => nee(r.error);
+    r.onsuccess = () => {
+      clearTimeout(klok);
+      const d = r.result;
+      d.onclose = () => { if (dbBelofte) dbBelofte = null; };
+      d.onversionchange = () => dbVergeten(d);
+      ok(d);
+    };
+    r.onerror = () => { clearTimeout(klok); dbBelofte = null; nee(r.error); };
+    r.onblocked = () => console.warn('Opslag geblokkeerd door een ander venster van de app');
   }));
-  async function laden() {
+  /** Eén poging: werk(store) geeft een IDBRequest (of niets); de belofte geeft het resultaat ervan. */
+  async function opslagKeer(modus, werk) {
+    const d = await db();
+    return new Promise((ok, nee) => {
+      let t, r;
+      try { t = d.transaction(DB_TABEL, modus); r = werk(t.objectStore(DB_TABEL)); } catch (f) { dbVergeten(d); return nee(f); } // verbinding was dicht
+      const klok = setTimeout(() => { try { t.abort(); } catch { /* */ } dbVergeten(d); nee(new Error('De opslag op dit toestel reageert niet.')); }, DB_WACHT);
+      t.oncomplete = () => { clearTimeout(klok); ok(r && r.result); };
+      t.onerror = () => { clearTimeout(klok); nee(t.error); };
+      t.onabort = () => { clearTimeout(klok); nee(t.error || new Error('afgebroken')); };
+    });
+  }
+  /** Eén opdracht op de opslag; mislukt ze, nog één keer met een nieuwe verbinding. Is de opslag stuk: meteen een fout. */
+  async function opslag(modus, werk) {
+    if (opslagStuk) { herstelPlannen(); throw new Error('De opslag op dit toestel werkt even niet.'); }
+    try { return await opslagKeer(modus, werk); } catch (f) {
+      console.warn('Opslag: opnieuw proberen', f);
+      log(`Opslag: ${modus} mislukt, opnieuw (${foutTekst(f).slice(0, 200)})`);
+      dbVergeten();
+      try { return await opslagKeer(modus, werk); } catch (f2) {
+        opslagStuk = true; herstelPlannen();
+        log(`Opslag stuk: ${foutTekst(f2).slice(0, 200)}`);
+        throw f2;
+      }
+    }
+  }
+  // noodopslag: alleen zolang de gewone opslag niet werkt; verdwijnt zodra alles weer in de gewone opslag staat
+  const noodLezen = () => { try { const t = localStorage.getItem(NOOD_SLEUTEL); return t ? JSON.parse(t) : null; } catch { return null; } };
+  const noodSchrijven = (tekst) => { localStorage.setItem(NOOD_SLEUTEL, tekst); };
+  const noodWissen = () => { try { localStorage.removeItem(NOOD_SLEUTEL); } catch { /* */ } };
+  let herstelTimer = null, herstelBezig = false;
+  function herstelPlannen(wacht = 15000) {
+    if (!opslagStuk || herstelBezig) return;
+    clearTimeout(herstelTimer);
+    herstelTimer = setTimeout(herstellen, wacht);
+  }
+  /** Kijken of de gewone opslag weer werkt (zonder de app op te houden); zo ja: wat in de noodopslag staat erin zetten. */
+  async function herstellen() {
+    if (!opslagStuk || herstelBezig) return;
+    herstelBezig = true; herstelTimer = null;
+    dbVergeten();
     try {
-      const d = await db();
-      const waarde = await new Promise((ok, nee) => {
-        const r = d.transaction(DB_TABEL).objectStore(DB_TABEL).get(SLEUTEL);
-        r.onsuccess = () => ok(r.result); r.onerror = () => nee(r.error);
-      });
-      if (waarde) S = normaliseren(waarde);
-    } catch (f) { console.error('Laden mislukt', f); opslagWerkt = false; }
+      await opslagKeer('readonly', (st) => st.count());
+      opslagStuk = false;
+      console.info('Opslag werkt weer'); log('Opslag werkt weer');
+      if (ladenMislukt) {
+        // bij het openen kon niets gelezen worden: nu de echte gegevens lezen, samen met wat je intussen invoerde
+        await inWachtrij(async () => {
+          await schrijfKetting;
+          await laden();
+        }, 'opslag herstellen');
+        if (kanaal) kanaal.postMessage('gewijzigd');
+        document.dispatchEvent(new Event('syncgewijzigd'));
+      } else if (noodLezen()) bewaren().catch(() => {});
+    } catch { /* nog niet */ }
+    herstelBezig = false;
+    if (opslagStuk) herstelPlannen(30000);
+  }
+  // terug in de app: meteen nakijken (dan wacht de volgende tik niet)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && opslagStuk) herstelPlannen(0); });
+  // Kon de app bij het openen niets lezen (opslag stuk), dan start ze leeg. Wat je dan invoert, mag je echte gegevens
+  // later niet overschrijven: zodra de opslag weer werkt, worden ze samengevoegd (zie herstellen).
+  let ladenMislukt = false;
+  async function laden() {
+    let waarde, gelezen = false;
+    try { waarde = await opslag('readonly', (st) => st.get(SLEUTEL)); gelezen = true; } catch (f) { console.error('Laden mislukt', f); }
+    if (gelezen) ladenMislukt = false; else if (!ladenMislukt) ladenMislukt = S.producten.length === 0 && S.recepten.length === 0 && S.boodschappen.length === 0;
+    // wat in de noodopslag staat, is nieuwer dan de gewone opslag (bij het eerstvolgende goede bewaren wordt ze gewist)
+    const nood = noodLezen();
+    const metNood = !!(nood && nood.gegevens);
+    if (metNood) waarde = nood.leegBegonnen && gelezen && waarde ? metEcht(nood.gegevens, waarde) : nood.gegevens;
+    if (waarde) { S = normaliseren(waarde); minimumBoodschappenNakijken(); }
+    if (metNood && gelezen) bewaren().catch(() => {}); // terug naar de gewone opslag (de noodopslag wordt dan gewist)
+  }
+  /** Ingevoerd op een lege app (opslag was stuk bij het openen) samenvoegen met de echte gegevens: alles blijft. */
+  function metEcht(ingevoerd, echt) {
+    let n = Math.max(+echt.volgendId || 1, Date.now() * 1000);
+    const eigen = M.nieuweIds(syncDeel(ingevoerd), () => n++);
+    // basis: de lege app zoals ze begon; zo winnen je echte instellingen, behalve wat je intussen zelf veranderde
+    const uit = M.samenvoegen(syncDeel(STANDAARD()), eigen, syncDeel(echt));
+    uit.volgendId = n;
+    if (echt.laatste_backup) uit.laatste_backup = echt.laatste_backup;
+    return uit;
   }
   let opslagWerkt = true, schrijfKetting = Promise.resolve();
-  /** Bewaart S. De belofte faalt als het bewaren mislukt, zodat de app dat kan melden (niet stil verloren gaan). */
+  /** Bewaart S. De belofte faalt alleen als ook de noodopslag mislukt, zodat de app dat kan melden (niet stil verloren gaan). */
   function bewaren() {
-    const kopie = JSON.parse(JSON.stringify(S));
+    const tekst = JSON.stringify(S), kopie = JSON.parse(tekst);
     const schrijf = schrijfKetting.then(async () => {
-      const d = await db();
-      await new Promise((ok, nee) => {
-        const t = d.transaction(DB_TABEL, 'readwrite');
-        t.objectStore(DB_TABEL).put(kopie, SLEUTEL);
-        t.oncomplete = ok; t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
-      });
+      try {
+        if (ladenMislukt) throw new Error('eerst de echte gegevens lezen');
+        await opslag('readwrite', (st) => { st.put(kopie, SLEUTEL); });
+        noodWissen();
+      } catch (f) {
+        console.warn('Gewone opslag werkt niet; bewaard in de noodopslag', f);
+        noodSchrijven(JSON.stringify({ tijd: nu(), ...(ladenMislukt ? { leegBegonnen: true } : {}), gegevens: kopie })); // gooit een fout als ook dit niet lukt
+      }
       opslagWerkt = true;
       bestandPlannen();
     });
@@ -245,17 +362,27 @@
     // Wat daar niet onder valt, volgt het minimum van de voorraadregels zelf (per inhoud en grootte).
     const vrij = new Set(MATEN), actief = new Set();
     for (const m of ['klein', 'groot']) if (c && c[catMinimumVeld(m)] > 0) { vrij.delete(m); actief.add(m); minimumTotaal(naam, c, m, [m]); }
-    if (c && c.minimum > 0) { const rest = [...vrij]; vrij.clear(); actief.add(''); minimumTotaal(naam, c, '', rest); }
+    // Het algemene minimum geldt voor de groottes zonder eigen minimum. Heeft het product daarvan niets (geen voorraadregel
+    // en geen variant in de catalogus, bv. alles is klein en klein heeft een eigen minimum), dan is het een overblijfsel
+    // van vroeger: niet tellen, anders staat het product altijd op de lijst (0 in huis van een grootte die je nooit koopt).
+    if (c && c.minimum > 0) {
+      const rest = [...vrij];
+      const heeftRest = rest.length === MATEN.length || S.producten.some((p) => zelfde(p.naam, naam) && rest.includes(maatVan(p)))
+        || variantenVan(c).some((v) => rest.includes(maatVan(v)));
+      if (heeftRest) { vrij.clear(); actief.add(''); minimumTotaal(naam, c, '', rest); }
+    }
     // automatische boodschap van een catalogusminimum dat er niet meer is: weg (het minimum per inhoud neemt het over)
     S.boodschappen = S.boodschappen.filter((b) => !(zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum'
       && typeof b.minimum_maat === 'string' && !actief.has(b.minimum_maat)));
     if (!vrij.size) return;
-    const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam) && vrij.has(maatVan(p))).map(productSleutel),
+    const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam) && vrij.has(maatVan(p)) && telt(p)).map(productSleutel),
       ...autoBoodschappen(naam).filter((b) => typeof b.minimum_maat !== 'string' && vrij.has(maatVan(b))).map(minimumSleutel)]);
     for (const sleutel of sleutels) minimumPerInhoud(naam, sleutel);
   }
+  // Een geopende verpakking telt als opgebruikt: ze staat nog in je voorraad (om op te maken), maar telt niet mee voor het minimum.
+  const telt = (p) => !p.geopend;
   function minimumPerInhoud(naam, sleutel) {
-    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && productSleutel(p) === sleutel);
+    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && productSleutel(p) === sleutel && telt(p));
     const auto = autoBoodschappen(naam).find((b) => typeof b.minimum_maat !== 'string' && minimumSleutel(b) === sleutel);
     const weg = () => { if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto); };
     if (!regels.length) return weg();
@@ -288,7 +415,7 @@
     const eenheid = c.eenheid || S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || 'stuks';
     // verpakkingen tellen per stuk (blik, pot, pak ... samen); gewicht en volume worden omgerekend
     const tel = (p) => omrekenen(p.hoeveelheid || 0, p.eenheid || 'stuks', eenheid) ?? (TELBARE.has(p.eenheid || 'stuks') && TELBARE.has(eenheid) ? p.hoeveelheid || 0 : 0);
-    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && groep.includes(maatVan(p)));
+    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && groep.includes(maatVan(p)) && telt(p));
     const totaal = regels.reduce((s, p) => s + tel(p), 0);
     // de automatische boodschappen van dit minimum (oudere: alles van deze groottes)
     const autos = autoBoodschappen(naam).filter((b) => (typeof b.minimum_maat === 'string' ? b.minimum_maat === m : groep.includes(maatVan(b))));
@@ -342,7 +469,7 @@
     Object.assign(c, { merk: v.merk, inhoud: v.inhoud, inhoud_eenheid: v.inhoud_eenheid, uitlekgewicht: v.uitlekgewicht });
     delete c.verpakking; Object.assign(c, maatVeld(maatVan(v)));
   }
-  function catalogusBijwerken(p, teller = true, oudeNaam = null) {
+  function catalogusBijwerken(p, teller = true, oudeNaam = null, oudeVariant = null) {
     const naam = (p.naam || '').trim();
     if (!naam) return;
     let c = S.catalogus.find((x) => zelfde(x.naam, naam));
@@ -359,7 +486,13 @@
       const v = variantUit({ merk: 'merk' in p ? p.merk : c.merk, inhoud: 'inhoud' in p ? p.inhoud : c.inhoud,
         inhoud_eenheid: 'inhoud' in p ? p.inhoud_eenheid : c.inhoud_eenheid, uitlekgewicht: 'uitlekgewicht' in p ? p.uitlekgewicht : c.uitlekgewicht,
         verpakking: 'verpakking' in p ? p.verpakking : c.verpakking });
-      variantBewaren(c, v);
+      // Alleen de grootte van een voorraadregel veranderd (bv. van "niet opgegeven" naar klein): dat is een verbetering,
+      // geen ander product. De oude variant vervangen als geen andere voorraadregel ze nog heeft; anders blijft er een
+      // variant zonder grootte staan die je niet (meer) koopt, en blijft een oud minimum daarvoor gelden.
+      const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
+      const vervang = oudeVariant && variantSleutel(oudeVariant) !== variantSleutel(v) && zonderMaat(oudeVariant) === zonderMaat(v)
+        && !S.producten.some((x) => x !== p && zelfde(x.naam, naam) && variantSleutel(variantUit(x)) === variantSleutel(oudeVariant));
+      variantBewaren(c, v, vervang ? oudeVariant : null);
     } else if ('uitlekgewicht' in p) c.uitlekgewicht = !!p.uitlekgewicht;
     if (teller) c.aantal = (c.aantal || 0) + 1;
     c.laatst = nu();
@@ -533,6 +666,7 @@
       const d = data && (Array.isArray(data.producten) || Array.isArray(data.recepten) ? data : data.gegevens || data.data);
       if (!d || (!Array.isArray(d.producten) && !Array.isArray(d.recepten))) fout(400, 'Dit is geen geldig back-upbestand.');
       S = normaliseren(d);
+      minimumBoodschappenNakijken(); // back-up van een oudere versie: verkeerde minimum-boodschappen weg
       return alles();
     }
     if (bron === 'hernoemen') {
@@ -561,6 +695,18 @@
         }
         for (const c of S.catalogus) for (const pr of c.prijzen || []) if (pr.per === van) pr.per = naar;
         for (const r of S.recepten) for (const i of r.ingredienten || []) if (i.eenheid === van) i.eenheid = naar;
+        return alles();
+      }
+      if (data.veld === 'inhoud_eenheid') {
+        // eigen eenheid voor de inhoud hernoemd (bv. vel → vellen): overal mee aanpassen
+        const van = data.van, naar = data.naar;
+        if (!van || !naar) return alles();
+        const pas = (x) => { if (x && x.inhoud_eenheid === van) x.inhoud_eenheid = naar; };
+        for (const x of [...S.producten, ...S.boodschappen, ...S.catalogus]) {
+          pas(x); pas(x.grootverpakking);
+          for (const v of Array.isArray(x.varianten) ? x.varianten : []) pas(v);
+        }
+        for (const c of S.catalogus) for (const pr of c.prijzen || []) { pas(pr); if (pr.per === van) pr.per = naar; }
         return alles();
       }
       if (data.veld === 'winkel') {
@@ -652,6 +798,7 @@
         p.uitlekgewicht = !!p.uitlekgewicht; p.merk = String(p.merk || '').trim();
         delete p.verpakking; Object.assign(p, maatVeld(maatVan(data)));
         const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g;
+        if (data.geopend && /^\d{4}-\d{2}-\d{2}$/.test(data.geopend)) p.geopend = data.geopend; // ongedaan maken van een geopende verpakking
         S.producten.push(p);
         catalogusBijwerken(p);
         // grote verpakking: meegegeven (ook null = uit) geldt voor het hele product; anders die uit de catalogus of van een andere voorraadregel
@@ -669,7 +816,7 @@
       const p = S.producten.find((x) => x.id === ident);
       if (!p) fout(404, 'Dit product bestaat niet (meer).');
       if (methode === 'PUT') {
-        const oudeNaam = p.naam;
+        const oudeNaam = p.naam, oudeVariant = variantUit(p);
         for (const k of VELDEN) if (k in data) p[k] = data[k];
         if ('hoeveelheid' in data) p.hoeveelheid = getal(data.hoeveelheid) || 0;
         if ('minimum' in data) p.minimum = getal(data.minimum) || 0;
@@ -679,12 +826,40 @@
         if ('verpakking' in data) { delete p.verpakking; Object.assign(p, maatVeld(maatVan(data))); }
         if ('grootverpakking' in data) { const g = grootUit(data.grootverpakking); if (g) p.grootverpakking = g; else delete p.grootverpakking; }
         p.gewijzigd = nu();
-        if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam);
+        if (VELDEN.some((k) => k !== 'hoeveelheid' && k in data)) catalogusBijwerken(p, false, oudeNaam, zelfde(oudeNaam, p.naam) ? oudeVariant : null);
         if ('grootverpakking' in data) grootZetten(p.naam, p.grootverpakking || null);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
         catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid, maatVan(p));
         minimumControleren(oudeNaam); minimumControleren(p.naam);
+        return alles();
+      }
+      // Geopend: `hoeveelheid` verpakkingen (telbaar, standaard 1) of alles (gewicht, volume) gaan naar een aparte regel
+      // met `geopend` = datum. Die telt als opgebruikt: ze gaat van je voorraad af en telt niet mee voor het minimum.
+      // De oorspronkelijke regel blijft (ook op 0) als ze een minimum heeft; anders verdwijnt ze als ze leeg is.
+      if (methode === 'POST' && actie === 'openen') {
+        if (p.geopend) fout(400, 'Dit is al geopend.');
+        if (!(p.hoeveelheid > 0)) fout(400, 'Hiervan is niets meer in huis.');
+        const n = TELBARE.has(p.eenheid) ? Math.min(p.hoeveelheid, getal(data.hoeveelheid) > 0 ? getal(data.hoeveelheid) : 1) : p.hoeveelheid;
+        const open = { ...JSON.parse(JSON.stringify(p)), id: id(), hoeveelheid: n, minimum: 0, geopend: vandaag(), gesloten_id: p.id, aangemaakt: nu(), gewijzigd: nu() };
+        p.hoeveelheid = Math.max(0, Math.round((p.hoeveelheid - n) * 1000) / 1000); p.gewijzigd = nu();
+        S.producten.push(open);
+        if (p.hoeveelheid === 0 && !p.minimum) S.producten = S.producten.filter((x) => x !== p);
+        gebeurtenis('geopend', p.naam);
+        minimumControleren(p.naam);
+        return { ...alles(), nieuw_id: open.id };
+      }
+      // Toch niet geopend: terug bij de ongeopende regel (dezelfde, of een met hetzelfde merk, dezelfde inhoud, grootte en datum)
+      if (methode === 'POST' && actie === 'sluiten') {
+        if (!p.geopend) return alles();
+        const doel = S.producten.find((x) => x.id === p.gesloten_id && !x.geopend)
+          || S.producten.find((x) => x !== p && !x.geopend && zelfde(x.naam, p.naam) && zelfde(x.merk, p.merk) && x.eenheid === p.eenheid
+            && productSleutel(x) === productSleutel(p) && (x.vervaldatum || '') === (p.vervaldatum || ''));
+        if (doel) {
+          doel.hoeveelheid = Math.round(((doel.hoeveelheid || 0) + (p.hoeveelheid || 0)) * 1000) / 1000; doel.gewijzigd = nu();
+          S.producten = S.producten.filter((x) => x !== p);
+        } else { delete p.geopend; delete p.gesloten_id; p.gewijzigd = nu(); }
+        minimumControleren(p.naam);
         return alles();
       }
       if (methode === 'POST' && actie === 'verbruik') {
@@ -725,7 +900,7 @@
           const maat = 'verpakking' in item ? maatVan(item) : gekozen && maatVan(gekozen) ? maatVan(gekozen) : maatVan(b);
           // alleen bijtellen bij een voorraadregel met hetzelfde merk, dezelfde inhoud en dezelfde grootte (ook: allebei zonder);
           // nooit vanzelf een merk of inhoud overnemen die je niet koos
-          const bestaand = S.producten.find((p) => zelfde(p.naam, b.naam) && omrekenen(1, item.eenheid, p.eenheid) !== null
+          const bestaand = S.producten.find((p) => zelfde(p.naam, b.naam) && !p.geopend && omrekenen(1, item.eenheid, p.eenheid) !== null
             && productSleutel(p) === metMaat(maat, inhoudSleutel(inh)) && zelfde(p.merk, merk)
             && (!item.vervaldatum || p.vervaldatum === item.vervaldatum || !p.hoeveelheid));
           if (bestaand) {
@@ -865,15 +1040,8 @@
   let bestandTimer = null, bestandKetting = Promise.resolve(), gekozen = null;
   const JSON_TYPE = [{ description: 'Voorraad-gegevens', accept: { 'application/json': ['.json'] } }];
   const backupTekst = () => JSON.stringify({ app: 'Voorraadbeheer', versie: 2, gemaakt: nu(), ...S }, null, 1);
-  const idb = async (sleutel, waarde, wissen) => {
-    const d = await db();
-    return new Promise((ok, nee) => {
-      const t = d.transaction(DB_TABEL, waarde === undefined && !wissen ? 'readonly' : 'readwrite');
-      const st = t.objectStore(DB_TABEL);
-      const r = wissen ? st.delete(sleutel) : waarde === undefined ? st.get(sleutel) : st.put(waarde, sleutel);
-      t.oncomplete = () => ok(r.result); t.onerror = () => nee(t.error); t.onabort = () => nee(t.error || new Error('afgebroken'));
-    });
-  };
+  const idb = (sleutel, waarde, wissen) => opslag(waarde === undefined && !wissen ? 'readonly' : 'readwrite',
+    (st) => (wissen ? st.delete(sleutel) : waarde === undefined ? st.get(sleutel) : st.put(waarde, sleutel)));
   /** nodig: de app kon niet zelf om toestemming vragen (of kreeg nee) — de gebruiker moet op een knop tikken */
   const meldBestand = (nodig = false) => document.dispatchEvent(new CustomEvent('bestandstatus', { detail: { nodig } }));
   const toestemming = async (handle, vragen) => {
@@ -1070,9 +1238,13 @@
     if (methode === 'GET' && versie) h['If-None-Match'] = `"${versie}"`;
     if (methode === 'PUT') { h['Content-Type'] = 'application/octet-stream'; if (nieuw) h['If-None-Match'] = '*'; else h['If-Match'] = `"${versie}"`; }
     let r;
-    try { r = await echteFetch(`${adres}/r/${k.ruimte}`, { method: methode, headers: h, body, cache: 'no-store' }); } catch {
+    // zonder antwoord binnen 30 s opgeven (op een gsm met slecht bereik hing de synchronisatie anders lang vast)
+    const stop = new AbortController(), klok = setTimeout(() => stop.abort(), 30000);
+    try { r = await echteFetch(`${adres}/r/${k.ruimte}`, { method: methode, headers: h, body, cache: 'no-store', signal: stop.signal }); } catch {
+      clearTimeout(klok);
       throw Object.assign(new Error(navigator.onLine ? 'De synchronisatieserver is niet bereikbaar.' : 'Geen internet.'), { netwerk: true });
     }
+    clearTimeout(klok);
     const et = r.headers.get('ETag');
     return { status: r.status, versie: et ? +et.replace(/\D/g, '') : 0, r };
   }
@@ -1099,6 +1271,19 @@
       gezien.add(k); return true;
     });
     for (const n of new Set([...S.producten.filter((p) => p.minimum > 0).map((p) => p.naam), ...S.catalogus.filter((c) => MATEN.some((m) => c[catMinimumVeld(m)] > 0)).map((c) => c.naam)])) minimumControleren(n);
+  }
+  /** Na het laden: de automatische boodschappen (minimum) opnieuw nakijken, zodat een verkeerde van een oudere versie
+   *  vanzelf verdwijnt. Alleen producten die al zo'n boodschap hebben: wat je zelf van de lijst haalde, komt niet terug. */
+  function minimumBoodschappenNakijken() {
+    // overblijfsel van een oudere versie: een variant zonder grootte naast dezelfde (merk en inhoud) mét grootte,
+    // terwijl geen enkele voorraadregel nog zonder grootte is: dat was een verbetering van de grootte, geen ander product
+    for (const c of S.catalogus) {
+      if (!Array.isArray(c.varianten) || c.varianten.length < 2) continue;
+      const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
+      c.varianten = c.varianten.filter((v) => maatVan(v) || !c.varianten.some((w) => maatVan(w) && zonderMaat(w) === zonderMaat(v))
+        || S.producten.some((x) => zelfde(x.naam, c.naam) && variantSleutel(variantUit(x)) === variantSleutel(v)));
+    }
+    for (const n of new Set(S.boodschappen.filter((b) => b.bron === 'minimum' && !b.afgevinkt).map((b) => b.naam))) minimumControleren(n);
   }
   const syncMeld = (melding) => document.dispatchEvent(new CustomEvent('syncstatus', { detail: { melding } }));
   const zBewaren = () => idb(SYNC_SLEUTEL, Z ? JSON.parse(JSON.stringify(Z)) : undefined, !Z).catch((f) => console.warn('Synchronisatie niet bewaard', f));
@@ -1160,6 +1345,7 @@
       try { await syncRonde(); } catch (f) {
         if (Z) { Z.fout = f.message || 'Synchroniseren lukte niet.'; Z.foutNetwerk = !!f.netwerk; zBewaren(); }
         if (!f.netwerk) console.error('Synchroniseren', f);
+        log(`Synchroniseren: ${f.netwerk ? f.message : foutTekst(f)}`);
         throw f;
       } finally { syncBezig = false; syncMeld(); }
     });
@@ -1250,7 +1436,7 @@
         await bewaren();
         await zBewaren();
         if (kanaal) kanaal.postMessage('gewijzigd');
-      });
+      }, 'koppelen');
       try { await syncNu(); } catch { /* staat in de status; volgende keer opnieuw */ }
     },
     nu: () => syncNu(),
@@ -1272,9 +1458,11 @@
   const LEZEN = new Set(['status', 'alles', 'statistieken', 'barcode', 'ocr']);
   const echteFetch = window.fetch.bind(window);
   let wachtrij = Promise.resolve();
+  // wat er nu in de wachtrij bezig is (en in welke stap), voor het logboek als iets te lang duurt
+  let bezigMet = '';
   /** Iets doen met de gegevens, na de opdrachten van de app die al wachten (en niet tegelijk ermee). */
-  function inWachtrij(f) {
-    const r = wachtrij.then(f);
+  function inWachtrij(f, naam = 'synchroniseren: samenvoegen') {
+    const r = wachtrij.then(async () => { bezigMet = naam; try { return await f(); } finally { bezigMet = ''; } });
     wachtrij = r.catch(() => {});
     return r;
   }
@@ -1286,13 +1474,24 @@
     const bron = pad.split('/')[0];
     let data = {};
     if (opties.body && typeof opties.body === 'string') { try { data = JSON.parse(opties.body); } catch { data = {}; } }
+    const naam = `${methode} ${pad}`, begin = Date.now();
+    let stap = 'wacht op vorige opdracht';
+    // waakhond: duurt het te lang, dan noteren waarop gewacht wordt en de app laten weten (melding "Even geduld")
+    const waak = methode === 'GET' ? null : setTimeout(() => {
+      log(`Traag: ${naam} duurt al 5 s (stap: ${stap}${stap === 'wacht op vorige opdracht' ? `; bezig: ${bezigMet || 'niets'}` : ''}; opslag ${opslagStuk ? 'stuk' : 'ok'}; sync ${syncBezig ? 'bezig' : 'niet bezig'})`);
+      document.dispatchEvent(new CustomEvent('traag', { detail: { stap } }));
+    }, 5000);
     const uitvoeren = async () => {
+      bezigMet = naam; stap = 'opstarten';
       await klaar;
       try {
+        stap = 'verwerken';
         const antwoord = await api(methode, pad, data, opties.body);
         const wijzigt = methode !== 'GET' && !LEZEN.has(bron);
         if (wijzigt) {
-          try { await bewaren(); } catch {
+          stap = 'bewaren';
+          try { await bewaren(); } catch (f) {
+            log(`Bewaren mislukt bij ${naam}: ${foutTekst(f)}`);
             fout(507, 'Je gegevens konden niet bewaard worden op dit toestel. Open de app niet in een privévenster en kijk of er nog opslagruimte vrij is.');
           }
           if (kanaal) kanaal.postMessage('gewijzigd');
@@ -1301,24 +1500,39 @@
         }
         return new Response(JSON.stringify(antwoord), { status: 200, headers: { 'Content-Type': 'application/json' } });
       } catch (e) {
-        if (!e.status) console.error(e);
+        if (!e.status) { console.error(e); log(`Fout bij ${naam}: ${foutTekst(e)}`); }
         return new Response(JSON.stringify({ fout: e.status ? e.message : 'Er ging iets mis: ' + e.message }), { status: e.status || 500, headers: { 'Content-Type': 'application/json' } });
       }
     };
     // trage opdrachten (tekstherkenning, barcode opzoeken) houden de rest niet op
-    if (bron === 'ocr' || bron === 'barcode') return uitvoeren();
-    const r = wachtrij.then(uitvoeren);
+    const klaarMet = (r) => {
+      clearTimeout(waak); bezigMet = '';
+      const duur = Date.now() - begin;
+      if (duur > 5000) log(`${naam} klaar na ${Math.round(duur / 1000)} s`);
+      return r;
+    };
+    if (bron === 'ocr' || bron === 'barcode') return uitvoeren().finally(() => clearTimeout(waak));
+    const r = wachtrij.then(uitvoeren).then(klaarMet, (f) => { klaarMet(); throw f; });
     wachtrij = r.catch(() => {});
     return r;
   };
 
   // gewijzigd in een ander venster van de app: opnieuw inlezen
-  if (kanaal) kanaal.onmessage = async () => { await laden(); document.dispatchEvent(new Event('visibilitychange')); };
+  // (in de wachtrij: niet midden in een opdracht van dit venster de gegevens vervangen)
+  if (kanaal) kanaal.onmessage = async () => {
+    log('Ander venster van de app wijzigde iets: opnieuw inlezen');
+    await inWachtrij(() => laden(), 'ander venster: opnieuw inlezen').catch(() => {});
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
 
   // ------------------------------------------------------------------ installeren / offline
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').then((reg) => {
+        if (!reg) return;
+        // een geïnstalleerde app op de gsm wordt vaak alleen uit de achtergrond teruggehaald (niet opnieuw geopend):
+        // dan ook nakijken of er een nieuwe versie is
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
         reg.addEventListener('updatefound', () => {
           const nieuw = reg.installing;
           nieuw && nieuw.addEventListener('statechange', () => {

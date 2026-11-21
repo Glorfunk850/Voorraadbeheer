@@ -52,6 +52,7 @@ async function main() {
   await page.goto(basis + '#voorraad');
   await page.waitForSelector('#nieuw');
   await page.click('#nieuw');
+  await page.waitForTimeout(150); // het formulier zet na 60 ms de cursor in het naamveld
   const keuzes = await page.$$eval('#pf-eenheid option', (l) => l.map((o) => o.value));
   controle(keuzes.includes('bokaal'), 'bokaal staat bij de eenheden van een product');
   await page.fill('#pf-naam', 'Augurken');
@@ -110,8 +111,67 @@ async function main() {
   await page.goto(basis + '#voorraad');
   await page.waitForSelector('#nieuw');
   await page.click('#nieuw');
+  await page.waitForTimeout(150); // het formulier zet na 60 ms de cursor in het naamveld
   const na = await page.$$eval('#pf-eenheid option', (l) => l.map((o) => o.value));
   controle(!na.includes('doos') && !na.includes('glas'), 'verwijderde eenheden niet meer te kiezen');
+
+  await page.click('#paneel [data-sluit]').catch(() => {});
+
+  // eenheid voor de inhoud meteen in het formulier toevoegen via "Andere eenheid…"
+  await page.goto(basis + '#voorraad');
+  await page.waitForSelector('#nieuw');
+  await page.click('#nieuw');
+  await page.waitForTimeout(150); // het formulier zet na 60 ms de cursor in het naamveld
+  await page.fill('#pf-naam', 'Keukenrol');
+  await page.fill('#pf-hv', '4');
+  await page.selectOption('#pf-eenheid', 'stuks');
+  await page.fill('#pf-inhoud', '200');
+  await page.focus('#pf-inhoud-eenheid');
+  await page.selectOption('#pf-inhoud-eenheid', '__nieuwe_inhoud__');
+  await page.waitForSelector('#vraag[open]');
+  await page.fill('#vraag-invoer', 'Vel');
+  await page.click('#vraag-ja');
+  await page.waitForTimeout(300);
+  controle((await page.inputValue('#pf-inhoud-eenheid')) === 'vel', '"vel" toegevoegd en meteen gekozen');
+  await page.click('#pf button[type=submit]');
+  for (let i = 0; i < 40; i++) { d = await api('GET', 'alles'); if (d.producten.some((p) => p.naam === 'Keukenrol')) break; await page.waitForTimeout(100); }
+  controle(d.instellingen.inhoud_eenheden.includes('vel'), '"vel" bewaard bij Instellingen');
+  const rol = d.producten.find((p) => p.naam === 'Keukenrol');
+  controle(rol && rol.inhoud === 200 && rol.inhoud_eenheid === 'vel', 'product bewaard als 4 stuks à 200 vel');
+
+  // ook een gewone eenheid via "Andere eenheid…"; annuleren laat de vorige keuze staan
+  await page.click('#nieuw');
+  await page.waitForTimeout(150); // het formulier zet na 60 ms de cursor in het naamveld
+  await page.selectOption('#pf-eenheid', 'pak');
+  await page.focus('#pf-eenheid');
+  await page.selectOption('#pf-eenheid', '__nieuwe_eenheid__');
+  await page.waitForSelector('#vraag[open]');
+  await page.click('#vraag-nee');
+  await page.waitForTimeout(150);
+  controle((await page.inputValue('#pf-eenheid')) === 'pak', 'annuleren: vorige eenheid blijft gekozen');
+  await page.selectOption('#pf-eenheid', '__nieuwe_eenheid__');
+  await page.waitForSelector('#vraag[open]');
+  await page.fill('#vraag-invoer', 'tube');
+  await page.click('#vraag-ja');
+  await page.waitForTimeout(300);
+  controle((await page.inputValue('#pf-eenheid')) === 'tube' && await page.isVisible('#pf-inhoud-rij'), '"tube" toegevoegd, gekozen en telbaar');
+  await page.click('#paneel [data-sluit]').catch(() => {});
+
+  // bij Instellingen: hernoemen past de producten aan, verwijderen niet; "g" hernoemen kan niet
+  await page.goto(basis + '#instellingen');
+  await page.waitForSelector('[data-uitklap="inhoud_eenheden"]');
+  await page.click('[data-uitklap="inhoud_eenheden"] summary');
+  await page.click('[data-lijst="inhoud_eenheden"]:has-text("vel") [data-hernoem]');
+  await page.fill('#vraag-invoer', 'blad');
+  await page.click('#vraag-ja');
+  await page.waitForTimeout(300);
+  d = await api('GET', 'alles');
+  controle(d.instellingen.inhoud_eenheden.includes('blad') && d.producten.find((p) => p.naam === 'Keukenrol').inhoud_eenheid === 'blad', 'inhoudseenheid hernoemd, product mee');
+  await page.click('[data-lijst="inhoud_eenheden"]:has-text("blad") [data-wis]');
+  await page.click('#vraag-ja');
+  await page.waitForTimeout(300);
+  d = await api('GET', 'alles');
+  controle(!d.instellingen.inhoud_eenheden.includes('blad') && d.producten.find((p) => p.naam === 'Keukenrol').inhoud_eenheid === 'blad', 'inhoudseenheid verwijderd, product houdt ze');
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
