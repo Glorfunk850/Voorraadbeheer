@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 73;
+const APP_VERSIE = 74;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -2995,6 +2995,13 @@ function handleidingPaneel(openThema) {
     };
     $$('[data-hl-naar]', el).forEach((b) => (b.onclick = () => naar(b.dataset.hlNaar)));
     $$('[data-hl-terug]', el).forEach((b) => (b.onclick = () => $('.hl-inhoud', el).scrollIntoView({ behavior: 'smooth', block: 'start' })));
+    // schermafbeelding aantikken: groter tonen (nog eens tikken: weer klein)
+    $$('figure.hl-foto img', el).forEach((img) => {
+      img.setAttribute('role', 'button'); img.tabIndex = 0;
+      const wissel = () => img.closest('figure').classList.toggle('groot');
+      img.onclick = wissel;
+      img.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wissel(); } };
+    });
     if (openThema) naar(themas.find((t) => zelfde(t.titel, openThema))?.id || '');
   }, { breed: true });
 }
@@ -3010,7 +3017,12 @@ async function handleidingDownloaden() {
   try {
     const { handleidingPdf } = await import('./handleiding-pdf.js');
     const datum = new Date().toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' });
-    const pdf = handleidingPdf(HANDLEIDING, { titel: 'Handleiding Voorraad', onderschrift: `Versie ${APP_VERSIE} · ${datum}` });
+    // de schermafbeeldingen ophalen (offline uit de cache); lukt er een niet, dan komt alleen de uitleg in de pdf
+    const afbeeldingen = {};
+    await Promise.all([...new Set(HANDLEIDING.match(/handleiding\/[\w-]+\.jpg/g) || [])].map(async (src) => {
+      try { const r = await fetch(src); if (r.ok) afbeeldingen[src] = new Uint8Array(await r.arrayBuffer()); } catch { /* zonder afbeelding */ }
+    }));
+    const pdf = handleidingPdf(HANDLEIDING, { titel: 'Handleiding Voorraad', onderschrift: `Versie ${APP_VERSIE} · ${datum}`, afbeeldingen });
     const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
     const a = document.createElement('a');
     a.href = url; a.download = `Handleiding Voorraad (versie ${APP_VERSIE}).pdf`;
@@ -3035,8 +3047,11 @@ function handleidingAfdrukken() {
   const opruimen = () => { document.body.classList.remove('afdrukken'); blok.remove(); window.removeEventListener('afterprint', opruimen); };
   window.addEventListener('afterprint', opruimen);
   if (typeof window.print !== 'function') { opruimen(); toast('Afdrukken kan niet in deze browser. Download de pdf en druk die af.'); return; }
-  // even wachten zodat de afdrukversie getekend is (nodig op iPhone)
-  setTimeout(() => { try { window.print(); } catch { opruimen(); toast('Afdrukken lukte niet. Download de pdf en druk die af.'); } }, 50);
+  // wachten tot de schermafbeeldingen geladen zijn (hoogstens 3 seconden) en de afdrukversie getekend is (nodig op iPhone)
+  const geladen = Promise.all($$('img', blok).map((img) => (img.complete ? null : new Promise((ok) => { img.onload = img.onerror = ok; }))));
+  Promise.race([geladen, new Promise((ok) => setTimeout(ok, 3000))]).then(() => setTimeout(() => {
+    try { window.print(); } catch { opruimen(); toast('Afdrukken lukte niet. Download de pdf en druk die af.'); }
+  }, 50));
 }
 
 async function tekenInstellingen() {

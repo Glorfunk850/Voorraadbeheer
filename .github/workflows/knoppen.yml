@@ -47,3 +47,5 @@ jobs:
         run: node test/potten.test.cjs
       - name: Scherm aan laten tijdens het koken
         run: node test/scherm.test.cjs
+      - name: Afbeeldingen in de handleiding (app en pdf)
+        run: node test/handleiding.test.cjs

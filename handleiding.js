@@ -2,7 +2,7 @@
 // Pas de tekst hier aan als de app verandert.
 export const HANDLEIDING = `
 <h2>Wat is Voorraad?</h2>
-<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 73; je versie zie je onderaan bij <b>Instellingen</b>.</p>
+<p>Voorraad houdt bij wat je in huis hebt, wat binnenkort op moet, wat je moet kopen en wat je gaat koken. De handleiding hoort bij versie 74; je versie zie je onderaan bij <b>Instellingen</b>.</p>
 <p>Alles staat op je toestel zelf en werkt ook zonder internet. Er gaat niets naar buiten en er wordt geen AI gebruikt. Elk toestel heeft zijn eigen gegevens, tenzij je <b>synchroniseren tussen toestellen</b> aanzet: dan gaan je gegevens versleuteld naar je eigen server, die ze niet kan lezen (zie <i>Synchroniseren tussen toestellen</i>).</p>
 
 <h3>Installeren</h3>
@@ -19,14 +19,16 @@ export const HANDLEIDING = `
   <tr><th>Scherm</th><th>Waarvoor</th></tr>
   <tr><td>Voorraad</td><td>Wat binnenkort op moet, wat op is, en zoeken in alles wat je hebt</td></tr>
   <tr><td>Boodschappen</td><td>Je boodschappenlijst, per winkel en met prijzen. Het getal op de knop is het aantal open boodschappen</td></tr>
+  <tr><td>Catalogus</td><td>Alle producten die je ooit toevoegde, ook als ze op zijn, met merken, inhouden en prijzen</td></tr>
   <tr><td>Recepten</td><td>Je recepten, met hoeveel ingrediënten je in huis hebt</td></tr>
   <tr><td>Planner</td><td>Wat je deze week eet</td></tr>
-  <tr><td>Instellingen</td><td>Lijsten, waarschuwingen, back-ups (op de telefoon via het tandwiel rechtsboven)</td></tr>
 </table>
+<p><b>Instellingen</b> (lijsten, waarschuwingen, back-ups) open je op de telefoon met het <b>tandwiel</b> rechtsboven; op de computer staat het onderaan in de balk links.</p>
 <p>Bijna alles opent in een paneel dat van onderen inschuift (telefoon) of rechts verschijnt (computer). Sluiten doe je met <b>×</b>, door ernaast te tikken of met Esc.</p>
 
 <h2>Voorraad</h2>
 <p>Het voorraadscherm toont alleen wat aandacht vraagt: <b>Op te gebruiken</b> (datum komt eraan of is voorbij) en <b>Op</b> (producten waarvan je niets meer hebt). Al de rest vind je door bovenaan te <b>zoeken</b> op naam, merk, plaats, categorie of notitie. Bij <b>Gevonden</b> staat elk product één keer per merk, met het merk achter de naam; tik erop om de verpakkingen van dat merk te zien.</p>
+<figure class="hl-foto"><img src="handleiding/voorraad.jpg" alt="Het voorraadscherm met Op te gebruiken en Op" width="390" height="780"><figcaption>Het voorraadscherm: bovenaan zoeken, daaronder wat op moet (rood: datum komt eraan of is voorbij) en wat op is. Onderaan de knoppen naar de andere schermen; met <b>+</b> rechtsboven voeg je een product toe.</figcaption></figure>
 
 <h3>Een product toevoegen</h3>
 <ol>
@@ -39,6 +41,8 @@ export const HANDLEIDING = `
   <li>Onder <b>Meer</b> staan categorie, minimumvoorraad, aankoopdatum en notitie. Onder <b>Prijs per winkel</b> vul je prijzen in.</li>
   <li>Tik op <b>Toevoegen</b>.</li>
 </ol>
+
+<figure class="hl-foto"><img src="handleiding/product-toevoegen.jpg" alt="Het venster Toevoegen met naam, merk, verpakking, hoeveelheid en eenheid" width="390" height="780"><figcaption>Een product toevoegen. Alleen de naam is nodig; de rest mag leeg blijven.</figcaption></figure>
 
 <h3>Twee soorten datums</h3>
 <table>
@@ -56,6 +60,7 @@ export const HANDLEIDING = `
   <li><b>Nieuwe verpakking toevoegen</b>: zelfde product met een andere datum, bv. een tweede pak melk.</li>
   <li><b>Op boodschappenlijst</b>, <b>Prijzen invullen</b>, <b>Weggooien</b>, <b>Bewerken</b> of <b>Verwijderen</b>.</li>
 </ul>
+<figure class="hl-foto"><img src="handleiding/product.jpg" alt="Een geopend product met − en +, de houdbaarheidsdatum en de knoppen eronder" width="390" height="780"><figcaption>Een product geopend: met <b>−</b> en <b>+</b> pas je het aantal aan; daaronder de datum en wat je nog met het product kunt doen.</figcaption></figure>
 <p>Na gebruiken, weggooien of verwijderen verschijnt onderaan <b>Ongedaan maken</b>. Heb je meerdere verpakkingen van hetzelfde product, dan kies je eerst welke je wilt bekijken.</p>
 
 <h3>Minimumvoorraad</h3>
@@ -116,6 +121,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 
 <h3>Catalogus</h3>
 <p>Het tabblad <b>Catalogus</b> toont alle producten die je ooit toevoegde, ook als ze op zijn, met een zoekveld. Onder het zoekveld kies je bij <b>Sorteren</b> (een uitklapmenu) hoe de lijst gesorteerd is: <b>Op naam (A–Z)</b> of <b>Op categorie</b>. Op categorie is elke categorie <b>uitklapbaar</b>: tik op een categorie om ze te openen of te sluiten; achter de naam staat hoeveel producten erin zitten. Producten zonder categorie staan onderaan bij <i>Zonder categorie</i>. Zoek je, dan staan alle categorieën open. Je keuze blijft bewaard op dit toestel. Bij wat je nu in huis hebt, staat <i>in huis</i>. Met <b>Toevoegen</b> zet je er zelf een product bij, zonder dat het in je voorraad komt. Tik op een product: van daaruit zet je het terug in je voorraad of op je lijst, <b>bewerk</b> je het (naam, aantal, categorie, plaats, inhoud, prijzen), of haal je het uit de catalogus. Geef je een product een nieuwe naam, dan verandert die ook in je voorraad en op je boodschappenlijst.</p>
+<figure class="hl-foto"><img src="handleiding/catalogus.jpg" alt="De catalogus met zoekveld, sorteren en producten met hun prijs" width="390" height="780"><figcaption>De catalogus: alles wat je ooit toevoegde. Bij wat je nu hebt, staat <i>in huis</i>; in het groen de goedkoopste prijs en winkel.</figcaption></figure>
 <p>Hetzelfde product mag <b>meermaals</b> in de catalogus, met een <b>ander merk</b> en/of een <b>andere inhoud</b>: bv. koffie van Douwe à 250 g, van Douwe à 500 g en van Lavazza à 1 kg. Elk staat als aparte regel in de lijst. Tik op een product en kies <b>Ander merk of inhoud toevoegen</b>, of gebruik <b>Toevoegen</b> met een naam die al bestaat. Categorie, plaats, houdbaarheid en prijzen gelden voor alle merken en inhouden samen (prijzen blijven per inhoud). Precies hetzelfde merk met dezelfde inhoud kan maar één keer. Wat je aan je voorraad toevoegt met een nieuw merk of een nieuwe inhoud, komt vanzelf als extra regel in de catalogus.</p>
 
 <h2>Boodschappen</h2>
@@ -136,6 +142,8 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <li>Een product mag <b>meermaals</b> op de lijst, met een andere hoeveelheid en inhoud: bv. 2 pak rijst à 500 g én 1 pak à 1 kg. Elke regel krijgt zijn eigen prijs. Voeg je iets toe met dezelfde inhoud, dan wordt het bij die regel bijgeteld. Na het winkelen komt elke inhoud als aparte regel in je voorraad.</li>
 </ul>
 
+<figure class="hl-foto"><img src="handleiding/boodschappen.jpg" alt="De boodschappenlijst met winkelknoppen, prijzen en − en + naast elke boodschap" width="390" height="780"><figcaption>De boodschappenlijst: bovenaan typ je een boodschap of kies je uit de lijst, daaronder de winkels. Tik op het rondje als iets in je mandje ligt.</figcaption></figure>
+
 <h3>Winkels en prijzen</h3>
 <ol>
   <li>Zet je winkels bij <b>Instellingen → Winkels</b> (bv. Colruyt, Delhaize, Aldi).</li>
@@ -153,10 +161,13 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <li>Controleer per product hoeveelheid, eenheid en plaats, en vul de houdbaarheidsdatum in als je die bij de hand hebt. Staat een product er zonder merk en inhoud op (bv. <b>elk merk</b> of door je minimumvoorraad), kies dan wat je gekocht hebt: <b>Zonder merk of inhoud</b>, een merk en inhoud uit je catalogus, of <b>Ander merk of inhoud invullen…</b>. Bij dat laatste vul je zelf merk, inhoud per stuk en eventueel uitlekgewicht in; dat komt dan ook in je catalogus. Het product wordt alleen bijgeteld bij een voorraadregel met hetzelfde merk en dezelfde inhoud; de app neemt nooit vanzelf een merk of inhoud over die je niet koos.</li>
   <li>Tik op <b>In voorraad zetten</b>. Wil je de producten niet in je voorraad, tik dan op <b>Alleen van lijst halen</b>.</li>
 </ol>
+<figure class="hl-foto"><img src="handleiding/winkelen.jpg" alt="Het venster In je voorraad zetten na Klaar met winkelen" width="390" height="780"><figcaption>Na <b>Klaar met winkelen</b>: controleer per product het aantal, de plaats en de datum, en tik op <b>In voorraad zetten</b>.</figcaption></figure>
 <p>Sta je op een winkeltabblad, dan rond je alleen de producten van die winkel af.</p>
 
 <h2>Recepten</h2>
 <p>Bij elk recept toont de app hoeveel ingrediënten je in huis hebt, bv. <b>5/7</b>. Zout, peper en water tellen niet mee.</p>
+
+<figure class="hl-foto"><img src="handleiding/recepten.jpg" alt="Het receptenscherm met zoekveld, filters en recepten per soort" width="390" height="780"><figcaption>Het receptenscherm: zoeken, filters en bovenaan de recepten die gebruiken wat binnenkort op moet. Met <b>+</b> voeg je een recept toe.</figcaption></figure>
 
 <h3>Een recept toevoegen</h3>
 <p>Tik op <b>Recept</b> en kies:</p>
@@ -195,6 +206,8 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <li><b>Bewerken</b> of <b>Verwijderen</b> staan onderaan.</li>
 </ul>
 
+<figure class="hl-foto"><img src="handleiding/recept.jpg" alt="Een geopend recept met personen, Scherm blijft aan, ingrediënten en de knoppen Gekookt, Op boodschappenlijst en Inplannen" width="390" height="780"><figcaption>Een recept geopend: wat <i>niet in huis</i> is, staat in het grijs. Daaronder <b>Gekookt</b>, <b>Op boodschappenlijst…</b> en <b>Inplannen…</b>.</figcaption></figure>
+
 <h2>Maaltijdplanner</h2>
 <p>De planner toont één week, van maandag tot zondag. Met <b>‹</b> en <b>›</b> ga je naar een andere week; <b>Terug naar deze week</b> brengt je terug.</p>
 
@@ -207,6 +220,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 </ol>
 <p>Rechts van een geplande maaltijd staat hoeveel ingrediënten je in huis hebt, bv. <b>3/5</b>. Oranje betekent dat er iets ontbreekt.</p>
 
+<figure class="hl-foto"><img src="handleiding/planner.jpg" alt="De maaltijdplanner met een week, Plannen per dag en geplande maaltijden" width="390" height="780"><figcaption>De planner: per dag <b>+ Plannen</b>. Rechts van een maaltijd hoeveel ingrediënten je in huis hebt (oranje: er ontbreekt iets).</figcaption></figure>
 <h3>Een geplande maaltijd</h3>
 <p>Tik erop om:</p>
 <ul>
@@ -244,6 +258,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
   <tr><td>Eenheden</td><td>Waarin je voorraad en boodschappen telt</td><td>stuks, g, kg, ml, cl, dl, l, pak, blik, fles, pot, zak, doos</td></tr>
 </table>
 <p><b>Eenheden</b>: voeg je eigen eenheid toe, bv. <i>bokaal</i>, <i>tube</i> of <i>rol</i>. Die kun je daarna overal kiezen (voorraad, boodschappen, prijs per …, recepten) en herkent de app ook als je bovenaan bij Boodschappen <code>2 bokaal augurken</code> typt. Een eigen eenheid telt als verpakking: je kunt er een inhoud per stuk bij invullen (bv. bokaal à 350 g). Een eigen eenheid kun je hernoemen; de standaardeenheden (g, kg, l …) niet, want daarmee rekent de app. Verwijder je een eenheid, dan kun je ze niet meer kiezen, maar producten die ze al hebben, houden ze. <i>stuks</i> kun je niet verwijderen.</p>
+<figure class="hl-foto"><img src="handleiding/instellingen.jpg" alt="De lijst Plaatsen opengeklapt bij Instellingen, met hernoemen, pijltjes en kruisjes" width="390" height="780"><figcaption>Een lijst opengeklapt bij Instellingen: tik op een naam om die te wijzigen, <b>↑</b> zet hem hoger, <b>×</b> verwijdert hem.</figcaption></figure>
 <ul>
   <li><b>Toevoegen</b>: typ onderaan een naam en tik op <b>+</b>.</li>
   <li><b>Hernoemen</b>: tik op een naam. De nieuwe naam komt ook bij al je producten of recepten.</li>
@@ -255,7 +270,7 @@ Het minimum geldt per inhoud: heb je bv. rijst in pakken à 500 g en à 1 kg, da
 <p>Onder <b>Overzicht</b> zie je wat je het vaakst weggooit, koopt en kookt.</p>
 
 <h3>De handleiding lezen</h3>
-<p>Tik bij <b>Instellingen</b> op <b>Handleiding lezen</b>. Bovenaan staat de <b>inhoud</b>: tik op een thema (bv. Boodschappen) om het te openen. Je kunt ook op de titel van een thema tikken om het open of dicht te klappen. In een geopend thema staan bovenaan de onderwerpen; tik erop om er meteen naartoe te gaan. Met <b>Alles openklappen</b> zie je de hele handleiding, met <b>↑ Naar de inhoud</b> ga je terug naar boven.</p>
+<p>Tik bij <b>Instellingen</b> op <b>Handleiding lezen</b>. Bovenaan staat de <b>inhoud</b>: tik op een thema (bv. Boodschappen) om het te openen. Je kunt ook op de titel van een thema tikken om het open of dicht te klappen. In een geopend thema staan bovenaan de onderwerpen; tik erop om er meteen naartoe te gaan. Met <b>Alles openklappen</b> zie je de hele handleiding, met <b>↑ Naar de inhoud</b> ga je terug naar boven. De <b>schermafbeeldingen</b> tonen hoe het eruitziet; tik op een afbeelding om ze groter te zien, en nog eens om ze weer klein te maken.</p>
 
 <h3>Handleiding downloaden of afdrukken</h3>
 <p>Bij <b>Instellingen → Handleiding</b>, en onderaan de handleiding zelf, staan twee knoppen. De pdf en de afgedrukte versie bevatten altijd de volledige handleiding.</p>

@@ -1,6 +1,6 @@
 // Service worker: laat de app installeren en offline werken.
 // Verhoog VERSIE bij elke nieuwe uitgave, zodat toestellen de nieuwe bestanden ophalen.
-const VERSIE = 'voorraad-v73';
+const VERSIE = 'voorraad-v74';
 const EXTERN = 'voorraad-extern-v1'; // tekstherkenning (Tesseract.js + taalbestanden), na eerste gebruik offline
 const BESTANDEN = [
   './', 'index.html', 'style.css', 'app.js', 'lokaal.js', 'samenvoegen.js', 'parser.js', 'layout.js', 'handleiding.js', 'handleiding-pdf.js', 'manifest.webmanifest',
@@ -14,6 +14,9 @@ const PDF_BESTANDEN = [
   'vendor/wasm/jbig2.wasm', 'vendor/wasm/openjpeg.wasm', 'vendor/wasm/qcms_bg.wasm',
   'vendor/wasm/jbig2_nowasm_fallback.js', 'vendor/wasm/openjpeg_nowasm_fallback.js',
   'sync-adres.js', 'vendor/qrcode.js', 'vendor/jsQR.js', // ook los: ontbreekt sync-adres.js, dan werkt de app gewoon
+  // schermafbeeldingen in de handleiding (ook los: zonder afbeelding blijft de uitleg leesbaar)
+  ...['voorraad', 'product-toevoegen', 'product', 'boodschappen', 'winkelen', 'catalogus', 'recepten', 'recept', 'planner', 'instellingen']
+    .map((n) => `handleiding/${n}.jpg`),
 ];
 
 self.addEventListener('install', (e) => {

@@ -102,8 +102,26 @@ function regels(stuks, grootte, max) {
   }, []));
 }
 
+/** Breedte en hoogte (in pixels) van een JPEG-bestand, of null als het geen bruikbare JPEG is. */
+export function jpegMaat(b) {
+  if (!b || b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const m = b[i + 1], lengte = (b[i + 2] << 8) | b[i + 3];
+    // SOF0..SOF15, behalve DHT (c4), JPG (c8) en DAC (cc)
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+      return { hoog: (b[i + 5] << 8) | b[i + 6], breed: (b[i + 7] << 8) | b[i + 8], kleuren: b[i + 9] };
+    }
+    i += 2 + lengte;
+  }
+  return null;
+}
+
+const FOTO_BREED = 150; // breedte van een schermafbeelding in de pdf (punten), de uitleg komt ernaast
+
 class Opmaak {
-  constructor() { this.paginas = []; this.nieuwePagina(); }
+  constructor(afbeeldingen = {}) { this.paginas = []; this.afbeeldingen = afbeeldingen; this.gebruikt = []; this.nieuwePagina(); }
   nieuwePagina() { this.inhoud = []; this.paginas.push(this.inhoud); this.y = HOOG - MARGE; this.leeg = true; }
   ruimte(h) { if (this.y - h < ONDER && !this.leeg) this.nieuwePagina(); }
   tekstRegel(regel, x, y, grootte, kleur = KLEUR_TEKST) {
@@ -178,6 +196,30 @@ class Opmaak {
     }
     this.y -= 4;
   }
+  /** Een schermafbeelding (figure met img en figcaption): links de afbeelding, rechts de uitleg. */
+  figuur(el) {
+    const img = el.querySelector('img');
+    const bytes = img && this.afbeeldingen[img.getAttribute('src')];
+    const maat = jpegMaat(bytes);
+    const onder = el.querySelector('figcaption');
+    if (!maat) { if (onder) this.alinea(stukjes(onder), { grootte: 9, kleur: KLEUR_STIL }); return; } // geen afbeelding: alleen de uitleg
+    let naam = this.gebruikt.findIndex((a) => a.bytes === bytes);
+    if (naam < 0) { this.gebruikt.push({ bytes, ...maat }); naam = this.gebruikt.length - 1; }
+    const b = FOTO_BREED, h = b * maat.hoog / maat.breed;
+    this.y -= 4;
+    this.ruimte(h + 8);
+    const y = this.y - h;
+    this.inhoud.push(`q ${b.toFixed(2)} 0 0 ${h.toFixed(2)} ${MARGE.toFixed(2)} ${y.toFixed(2)} cm /Im${naam + 1} Do Q`);
+    this.inhoud.push(`${KLEUR_LIJN} RG 0.6 w ${MARGE.toFixed(2)} ${y.toFixed(2)} ${b.toFixed(2)} ${h.toFixed(2)} re S`);
+    this.leeg = false;
+    if (onder) {
+      const x = MARGE + b + 16, breed = INHOUD - b - 16, g = 9.5, lh = g * 1.42;
+      const rs = regels(stukjes(onder), g, breed);
+      let ty = this.y - Math.max(0, (h - rs.length * lh) / 2);
+      for (const r of rs) { ty -= lh; this.tekstRegel(r, x, ty + g * 0.3, g, KLEUR_STIL); }
+    }
+    this.y = y - 12;
+  }
   blokken(root) {
     for (const el of root.children) {
       const tag = el.tagName;
@@ -194,6 +236,7 @@ class Opmaak {
       } else if (tag === 'P') this.alinea(stukjes(el));
       else if (tag === 'UL' || tag === 'OL') this.lijst(el, MARGE);
       else if (tag === 'TABLE') this.tabel(el);
+      else if (tag === 'FIGURE') this.figuur(el);
       else if (el.children.length) this.blokken(el);
       else if (el.textContent.trim()) this.alinea(stukjes(el));
     }
@@ -201,13 +244,18 @@ class Opmaak {
 }
 
 /** Alle onderdelen samenvoegen tot een pdf-bestand (als Uint8Array). */
-function pdfBestand(paginas, titel) {
+function pdfBestand(paginas, titel, afbeeldingen = []) {
   const obj = [];
   const nieuw = (inhoud) => { obj.push(inhoud); return obj.length; };
   const catalogus = nieuw(null), boom = nieuw(null);
   const font = (naam) => nieuw(`<< /Type /Font /Subtype /Type1 /BaseFont /${naam} /Encoding /WinAnsiEncoding >>`);
   const f = { F1: font('Helvetica'), F2: font('Helvetica-Bold'), F3: font('Helvetica-Oblique'), F4: font('Courier') };
-  const bronnen = `<< /Font << ${Object.entries(f).map(([k, v]) => `/${k} ${v} 0 R`).join(' ')} >> >>`;
+  const binair = (bytes) => { let t = ''; for (let i = 0; i < bytes.length; i += 8192) t += String.fromCharCode(...bytes.subarray(i, i + 8192)); return t; };
+  const beelden = afbeeldingen.map((a) => nieuw(`<< /Type /XObject /Subtype /Image /Width ${a.breed} /Height ${a.hoog} `
+    + `/ColorSpace /${a.kleuren === 1 ? 'DeviceGray' : a.kleuren === 4 ? 'DeviceCMYK' : 'DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode `
+    + `/Length ${a.bytes.length} >>\nstream\n${binair(a.bytes)}\nendstream`));
+  const xobj = beelden.length ? ` /XObject << ${beelden.map((n, i) => `/Im${i + 1} ${n} 0 R`).join(' ')} >>` : '';
+  const bronnen = `<< /Font << ${Object.entries(f).map(([k, v]) => `/${k} ${v} 0 R`).join(' ')} >>${xobj} >>`;
   const kinderen = paginas.map((inhoud) => {
     const stroom = inhoud.join('\n');
     const s = nieuw(`<< /Length ${stroom.length} >>\nstream\n${stroom}\nendstream`);
@@ -230,12 +278,13 @@ function pdfBestand(paginas, titel) {
 /**
  * De handleiding-HTML omzetten naar een pdf.
  * @param {string} html  de handleiding (HTML-fragment)
- * @param {{titel?: string, onderschrift?: string}} opties
+ * @param {{titel?: string, onderschrift?: string, afbeeldingen?: Object<string, Uint8Array>}} opties
+ *   afbeeldingen: per src (zoals in de HTML) de bytes van het JPEG-bestand; ontbreekt er een, dan komt alleen de uitleg in de pdf
  * @returns {Uint8Array}
  */
-export function handleidingPdf(html, { titel = 'Handleiding Voorraad', onderschrift = '' } = {}) {
+export function handleidingPdf(html, { titel = 'Handleiding Voorraad', onderschrift = '', afbeeldingen = {} } = {}) {
   const doc = new DOMParser().parseFromString(`<!DOCTYPE html><body>${html}</body>`, 'text/html');
-  const o = new Opmaak();
+  const o = new Opmaak(afbeeldingen);
   o.alinea([{ tekst: titel, stijl: 'vet' }], { grootte: 22, na: 2, kleur: KLEUR_ACCENT });
   if (onderschrift) o.alinea([{ tekst: onderschrift, stijl: 'gewoon' }], { grootte: 9.5, na: 6, kleur: KLEUR_STIL });
   o.y -= 10;
@@ -250,5 +299,5 @@ export function handleidingPdf(html, { titel = 'Handleiding Voorraad', onderschr
     const x = BREED / 2 - breedte(tekst, 'gewoon', 8) / 2;
     p.push(`${KLEUR_STIL} rg BT /F1 8 Tf ${x.toFixed(2)} 32 Td (${escape(tekst)}) Tj ET`);
   });
-  return pdfBestand(o.paginas, titel);
+  return pdfBestand(o.paginas, titel, o.gebruikt);
 }
