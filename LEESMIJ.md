@@ -119,8 +119,10 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - De webapp zit in de apk: ze werkt zonder internet en zonder GitHub Pages. Synchroniseren gaat via dezelfde server.
 - De gegevens van de apk staan los van die in Chrome. Zet ze over met een back-up (Instellingen → back-up maken,
   in de apk terugzetten) of met synchroniseren.
-- Downloads (back-up, csv, pdf) komen in de map **Downloads**. Meldingen werken niet in de apk; de barcodescanner,
-  bestanden kiezen, afdrukken en scherm aan laten wel.
+- Downloads (back-up, csv, pdf) komen in de map **Downloads**. De barcodescanner, bestanden kiezen, afdrukken en
+  scherm aan laten werken ook.
+- **Meldingen:** zet ze aan bij Instellingen → Meldingen → **Aanzetten** en sta meldingen toe. Ook als de app dicht
+  is, kijkt Android ongeveer twee keer per dag na wat op moet (hoogstens één melding per dag, zoals in Chrome).
 - Bij elke wijziging bouwt de GitHub-actie *Android-app (apk)* een nieuwe apk. Installeer die gewoon over de oude
   heen: je gegevens blijven bewaard.
 

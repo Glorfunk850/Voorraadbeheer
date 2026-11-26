@@ -8,7 +8,7 @@ android {
     compileSdk 35
     defaultConfig {
         applicationId 'nl.voorraad.app'
-        minSdk 24
+        minSdk 26
         targetSdk 35
         versionCode appVersie
         versionName "${appVersie}"
@@ -32,10 +32,13 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    sourceSets { main { assets.srcDirs = ["$buildDir/webapp"] } }
+    sourceSets { main { assets.srcDirs = ["$buildDir/webapp", "src/main/assets"] } }
 }
 
-dependencies { implementation 'androidx.webkit:webkit:1.12.1' }
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.work:work-runtime:2.9.1'
+}
 
 // de webapp (index.html, app.js, vendor, handleiding …) in de apk stoppen
 tasks.register('webappKopieren', Copy) {

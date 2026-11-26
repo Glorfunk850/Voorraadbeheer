@@ -56,27 +56,18 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> bestandTerug;
     private PermissionRequest cameraVraag;
 
-    // Brug tussen de webapp en Android: downloads opslaan, afdrukken en het scherm aan laten.
-    private static final String BRUG_JS =
-        "(function(){if(window.__voorraadApp)return;window.__voorraadApp=1;" +
-        // downloads (blob:/data: met a.download) naar de map Downloads
-        "var klik=HTMLAnchorElement.prototype.click;" +
-        "HTMLAnchorElement.prototype.click=function(){var h=this.href||'';" +
-        " if(this.hasAttribute('download')&&(h.indexOf('blob:')===0||h.indexOf('data:')===0)){var naam=this.getAttribute('download')||'bestand';" +
-        "  fetch(h).then(function(r){return r.blob();}).then(function(b){var fr=new FileReader();" +
-        "   fr.onload=function(){var d=String(fr.result);VoorraadApp.opslaan(naam,b.type||'application/octet-stream',d.substring(d.indexOf(',')+1));};" +
-        "   fr.readAsDataURL(b);}).catch(function(e){VoorraadApp.melding('Opslaan lukte niet: '+e);});return;}" +
-        " return klik.apply(this,arguments);};" +
-        // afdrukken via Android
-        "window.print=function(){VoorraadApp.afdrukken();};" +
-        // scherm aan laten (Screen Wake Lock bestaat niet in de WebView)
-        "if(!('wakeLock' in navigator)){var tel=0;" +
-        " Object.defineProperty(navigator,'wakeLock',{value:{request:function(){tel++;VoorraadApp.schermAan(true);" +
-        "  var s={released:false,type:'screen',onrelease:null,_l:[],addEventListener:function(t,f){this._l.push(f);},removeEventListener:function(t,f){this._l=this._l.filter(function(g){return g!==f;});}," +
-        "   release:function(){if(s.released)return Promise.resolve();s.released=true;if(--tel<=0){tel=0;VoorraadApp.schermAan(false);}" +
-        "    var ev={type:'release',target:s};if(s.onrelease)s.onrelease(ev);s._l.forEach(function(f){f(ev);});return Promise.resolve();}};" +
-        "  return Promise.resolve(s);}}});}" +
-        "})();";
+    private static final int MELDINGEN = 4;
+    private String brugJs = "";
+
+    /** brug.js uit de apk lezen (vult aan wat de WebView niet kan: downloads, afdrukken, scherm aan, meldingen). */
+    private String brugLezen() {
+        try (java.io.InputStream in = getAssets().open("brug.js")) {
+            java.io.ByteArrayOutputStream uit = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            for (int n; (n = in.read(buf)) > 0; ) uit.write(buf, 0, n);
+            return uit.toString("UTF-8");
+        } catch (java.io.IOException e) { return ""; }
+    }
 
     @Override
     protected void onCreate(Bundle opgeslagen) {
@@ -95,9 +86,10 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(true);
 
+        brugJs = brugLezen();
         web.addJavascriptInterface(new Brug(), "VoorraadApp");
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(web, BRUG_JS, Collections.singleton("https://appassets.androidplatform.net"));
+            WebViewCompat.addDocumentStartJavaScript(web, brugJs, Collections.singleton("https://appassets.androidplatform.net"));
         }
 
         if (Build.VERSION.SDK_INT >= 24) {
@@ -126,7 +118,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView v, String url, android.graphics.Bitmap icoon) {
                 // oudere WebView zonder DOCUMENT_START_SCRIPT
-                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) v.evaluateJavascript(BRUG_JS, null);
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) v.evaluateJavascript(brugJs, null);
             }
         });
 
@@ -164,7 +156,34 @@ public class MainActivity extends Activity {
         });
 
         if (opgeslagen != null) web.restoreState(opgeslagen);
-        else web.loadUrl(START);
+        else web.loadUrl(START + viewVan(getIntent()));
+    }
+
+    /** Getikt op een melding: "#voorraad" (anders leeg). */
+    private static String viewVan(Intent i) {
+        String v = i == null ? null : i.getStringExtra("view");
+        return v != null && v.matches("[a-z]+") ? "#" + v : "";
+    }
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        String v = viewVan(i);
+        if (!v.isEmpty()) web.evaluateJavascript("location.hash='" + v + "'", null);
+    }
+
+    /** Toestemming voor meldingen zoals Notification.permission: granted, denied of default. */
+    private String toestemming() {
+        if (Melder.magMelden(this)) return "granted";
+        if (Build.VERSION.SDK_INT >= 33) {
+            boolean gevraagd = Melder.prefs(this).getBoolean("gevraagd", false);
+            if (!gevraagd || shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) return "default";
+        }
+        return "denied";
+    }
+
+    private void toestemmingTerug() {
+        web.evaluateJavascript("window.__voorraadToestemming&&window.__voorraadToestemming('" + toestemming() + "')", null);
     }
 
     @Override
@@ -194,6 +213,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] rechten, int[] antwoord) {
+        if (code == MELDINGEN) { toestemmingTerug(); return; }
         if (code == CAMERA && cameraVraag != null) {
             if (antwoord.length > 0 && antwoord[0] == PackageManager.PERMISSION_GRANTED) {
                 cameraVraag.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
@@ -211,6 +231,35 @@ public class MainActivity extends Activity {
     }
 
     private class Brug {
+        @JavascriptInterface
+        public boolean toon(String titel, String tekst) { return Melder.toon(MainActivity.this, titel, tekst); }
+
+        @JavascriptInterface
+        public String toestemming() { return MainActivity.this.toestemming(); }
+
+        @JavascriptInterface
+        public void vraagToestemming() {
+            runOnUiThread(() -> {
+                String t = MainActivity.this.toestemming();
+                if (Build.VERSION.SDK_INT >= 33 && "default".equals(t)) {
+                    Melder.prefs(MainActivity.this).edit().putBoolean("gevraagd", true).apply();
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, MELDINGEN);
+                } else {
+                    toestemmingTerug();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void achtergrond(boolean aan) { Melder.achtergrond(MainActivity.this, aan); }
+
+        @JavascriptInterface
+        public boolean achtergrondAan() { return Melder.prefs(MainActivity.this).getBoolean("achtergrond", false); }
+
+        /** Voorraad en keuze aan/uit voor de melding (JSON uit brug.js). */
+        @JavascriptInterface
+        public void staat(String json) { Melder.prefs(MainActivity.this).edit().putString("staat", json).apply(); }
+
         @JavascriptInterface
         public void opslaan(String naam, String soort, String base64) {
             try {
