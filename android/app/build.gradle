@@ -1,0 +1,47 @@
+plugins { id 'com.android.application' }
+
+// versienummer van de webapp (APP_VERSIE in app.js) wordt ook het versienummer van de apk
+def appVersie = (file('../../app.js').text =~ /const APP_VERSIE = (\d+)/)[0][1].toInteger()
+
+android {
+    namespace 'nl.voorraad.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'nl.voorraad.app'
+        minSdk 24
+        targetSdk 35
+        versionCode appVersie
+        versionName "${appVersie}"
+    }
+    signingConfigs {
+        // vaste sleutel, zodat een nieuwe apk over de oude heen geïnstalleerd kan worden (gegevens blijven bewaard)
+        vast {
+            storeFile file('../voorraad.keystore')
+            storePassword 'voorraad'
+            keyAlias 'voorraad'
+            keyPassword 'voorraad'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.vast
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets { main { assets.srcDirs = ["$buildDir/webapp"] } }
+}
+
+dependencies { implementation 'androidx.webkit:webkit:1.12.1' }
+
+// de webapp (index.html, app.js, vendor, handleiding …) in de apk stoppen
+tasks.register('webappKopieren', Copy) {
+    from('../..') {
+        include '*.html', '*.js', '*.css', '*.png', '*.svg', '*.webmanifest', 'vendor/**', 'handleiding/**'
+    }
+    into "$buildDir/webapp/www"
+}
+preBuild.dependsOn webappKopieren
