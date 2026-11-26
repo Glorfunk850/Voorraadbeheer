@@ -112,6 +112,20 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - Werkt in recente versies van Chrome, Edge, Safari (iPhone/iPad vanaf iOS 16.4) en Firefox. Kan de browser het niet,
   dan staat dat bij Instellingen.
 
+## Android-app (apk)
+
+- Download op je gsm: https://github.com/Glorfunk850/Voorraadbeheer/releases/download/android-app/Voorraad.apk
+  en open het bestand. Sta toe dat apps van onbekende bronnen geïnstalleerd worden als Android dat vraagt.
+- De webapp zit in de apk: ze werkt zonder internet en zonder GitHub Pages. Synchroniseren gaat via dezelfde server.
+- De gegevens van de apk staan los van die in Chrome. Zet ze over met een back-up (Instellingen → back-up maken,
+  in de apk terugzetten) of met synchroniseren.
+- Downloads (back-up, csv, pdf) komen in de map **Downloads**. De barcodescanner, bestanden kiezen, afdrukken en
+  scherm aan laten werken ook.
+- **Meldingen:** zet ze aan bij Instellingen → Meldingen → **Aanzetten** en sta meldingen toe. Ook als de app dicht
+  is, kijkt Android ongeveer twee keer per dag na wat op moet (hoogstens één melding per dag, zoals in Chrome).
+- Bij elke wijziging bouwt de GitHub-actie *Android-app (apk)* een nieuwe apk. Installeer die gewoon over de oude
+  heen: je gegevens blijven bewaard.
+
 ## Online zetten met GitHub Pages (gratis, eenmalig ±10 minuten)
 
 1. Maak een gratis account op https://github.com (als je er nog geen hebt).
