@@ -1,7 +1,7 @@
 name: Android-app (apk)
 
 # Bouwt bij elke wijziging een apk met de webapp erin. Te downloaden onder Actions → deze run → Artifacts,
-# en na een wijziging op main ook altijd via Releases → "Android-app" (bestand Voorraad.apk).
+# en ook altijd via Releases → "Android-app" (bestand Voorraad.apk).
 on:
   push:
   workflow_dispatch:
@@ -36,11 +36,11 @@ jobs:
           name: Voorraad-apk
           path: Voorraad.apk
       - name: Op Releases zetten
-        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-app
           name: Android-app
           body: Nieuwste versie van de Android-app. Download Voorraad.apk op je gsm en open het bestand om te installeren.
           files: Voorraad.apk
+          target_commitish: ${{ github.sha }}
           make_latest: true
