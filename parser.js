@@ -283,6 +283,14 @@ export function sleutelwoorden(naam) {
     .map(sleutel);
 }
 
+// Woorden die alleen iets beschrijven (kleur, smaak, bereiding): een gedeeld woord als "rode" maakt
+// van "rode paprika" nog geen "rode biet".
+const BESCHRIJVEND = new Set(['rode', 'rood', 'groene', 'groen', 'gele', 'geel', 'witte', 'wit', 'zwarte', 'zwart', 'bruine', 'bruin',
+  'oranje', 'paarse', 'paars', 'roze', 'blonde', 'zoete', 'zoet', 'zure', 'zuur', 'zoute', 'zout', 'pittige', 'pittig', 'scherpe',
+  'milde', 'jonge', 'jong', 'belegen', 'oude', 'halfvolle', 'volle', 'magere', 'gemalen', 'gerookte', 'gerookt', 'gekookte', 'gekookt',
+  'gebakken', 'gegrilde', 'gepofte', 'ingelegde', 'zachte', 'harde', 'lichte', 'donkere', 'fijne', 'grove', 'platte', 'krokante']
+  .map((w) => sleutel(w)));
+
 /** Zoek het best passende voorraadproduct (naam) voor een ingrediënt. */
 export function zoekVoorraadnaam(ingredientNaam, productnamen, geleerd = {}) {
   const eigen = sleutelwoorden(ingredientNaam).join(' ');
@@ -293,11 +301,14 @@ export function zoekVoorraadnaam(ingredientNaam, productnamen, geleerd = {}) {
   for (const naam of productnamen) {
     const woorden = sleutelwoorden(naam);
     if (!woorden.length) continue;
+    // een samengesteld product ("Spinazie met room") is iets anders dan spinazie of room apart
+    const samengesteld = /\s(?:met|in|op)\s/i.test(naam.replace(/\(.*?\)/g, ' '));
     let s = 0;
     if (woorden.join(' ') === eigen) s = 4;
     else if (woorden.every((w) => ingr.has(w))) s = 2 + woorden.length / 10; // "melk" in "volle melk"
+    else if (samengesteld) s = 0;
     else if ([...ingr].every((w) => woorden.includes(w))) s = 1.5;             // "ui" bij "rode ui"
-    else if (woorden.some((w) => w.length > 3 && ingr.has(w))) s = 1;
+    else if (woorden.some((w) => w.length > 3 && !BESCHRIJVEND.has(w) && ingr.has(w))) s = 1;
     else if (woorden.length === 1 && woorden[0].length >= 3 && [...ingr].some((w) => w.length > woorden[0].length && w.endsWith(woorden[0]))) s = 1; // "slagroom" bij "room"
     if (s > score || (s === score && s > 0 && naam.length < beste.length)) { score = s; beste = naam; }
   }
