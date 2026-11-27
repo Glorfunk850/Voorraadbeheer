@@ -64,9 +64,6 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - Bij het vinkje **Minimum voor alle merken samen** kies je bij **Wat telt mee**: alle groottes samen, alleen grote of alleen
   kleine. Eén keuze per product (alleen kleine en alleen grote kunnen wel samen); een oud dubbel minimum (alle groottes én
   alleen grote) wordt bij het openen opgeruimd: het minimum per grootte blijft.
-- Een voorraadregel zonder merk of grootte waarvan de inhoud in de catalogus maar bij één merk en grootte hoort, krijgt dat
-  merk en die grootte (bv. een blik linzen à 265 g wordt Plan't à 265 g, groot), en past je de catalogus aan, dan volgen je
-  voorraadregels van dat merk en die inhoud.
 - Zakt een grootte onder het minimum, dan komt het tekort op je lijst in **dezelfde grootte**.
 - **Niet opgegeven** werkt zoals vroeger. Dit staat los van *Bijkopen in een grote verpakking* (potten, doos met zakjes).
 

@@ -793,14 +793,11 @@
       if ('grootverpakking' in data) grootZetten(c.naam, grootUit(data.grootverpakking));
       if ('inhoud' in data || 'merk' in data || 'verpakking' in data) {
         variantBewaren(c, v, oud);
-        // merk, inhoud of grootte van een variant veranderd (bv. van "niet opgegeven" naar groot): je voorraadregels van
-        // die variant volgen, anders tellen ze niet mee voor het minimum van die grootte
-        if (oud && variantSleutel(oud) !== variantSleutel(v)) {
-          for (const p of S.producten) {
-            if (!zelfde(p.naam, c.naam) || variantSleutel(variantUit(p)) !== variantSleutel(oud)) continue;
-            Object.assign(p, { merk: v.merk, inhoud: v.inhoud, inhoud_eenheid: v.inhoud_eenheid, uitlekgewicht: v.uitlekgewicht });
-            delete p.verpakking; Object.assign(p, maatVeld(maatVan(v)));
-          }
+        // alleen de grootte veranderd (bv. van "niet opgegeven" naar groot): je voorraadregels van die variant volgen,
+        // anders tellen ze niet mee voor het minimum van die grootte
+        const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
+        if (oud && variantSleutel(oud) !== variantSleutel(v) && zonderMaat(oud) === zonderMaat(v)) {
+          for (const p of S.producten) if (zelfde(p.naam, c.naam) && variantSleutel(variantUit(p)) === variantSleutel(oud)) { delete p.verpakking; Object.assign(p, maatVeld(maatVan(v))); }
         }
       }
       else if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
@@ -1328,25 +1325,14 @@
     const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
     for (const p of S.producten) {
       const c = S.catalogus.find((x) => zelfde(x.naam, p.naam));
-      if (!c || (maatVan(p) && p.merk)) continue;
+      if (!c || maatVan(p)) continue;
       const vs = variantenVan(c);
       if (vs.some((v) => variantSleutel(v) === variantSleutel(variantUit(p)))) continue; // de variant bestaat: niets te doen
       // zelfde merk en inhoud, alleen de grootte ontbreekt
-      if (!maatVan(p)) {
-        const k = zonderMaat(variantUit(p)), zelfdeMI = vs.filter((v) => zonderMaat(v) === k);
-        const maten = new Set(zelfdeMI.map(maatVan));
-        if (zelfdeMI.length && maten.size === 1 && !maten.has('')) { p.verpakking = [...maten][0]; namen.add(p.naam); continue; }
-      }
-      // zonder merk (en/of grootte), en de catalogus kent die inhoud alleen nog als één merk en grootte
-      // (bv. een blik linzen à 265 g zonder merk, terwijl de catalogus alleen Plan't à 265 g, groot heeft): overnemen
-      const ik = inhoudSleutel(variantUit(p));
-      if (p.merk || !ik) continue;
-      const kandidaten = vs.filter((v) => inhoudSleutel(v) === ik && (!maatVan(p) || maatVan(v) === maatVan(p)));
-      if (kandidaten.length !== 1) continue;
-      const v = kandidaten[0];
-      p.merk = v.merk || '';
-      if (!maatVan(p) && maatVan(v)) p.verpakking = maatVan(v);
-      namen.add(p.naam);
+      // (een regel zonder merk of met een andere inhoud blijft zoals ze is: die gegevens vul je zelf aan)
+      const k = zonderMaat(variantUit(p)), zelfdeMI = vs.filter((v) => zonderMaat(v) === k);
+      const maten = new Set(zelfdeMI.map(maatVan));
+      if (zelfdeMI.length && maten.size === 1 && !maten.has('')) { p.verpakking = [...maten][0]; namen.add(p.naam); }
     }
     // dubbel minimum van vroeger: een minimum voor alle groottes naast een (later gezet) minimum voor grote en/of kleine
     // verpakkingen. Het minimum per grootte geldt; het oude voor alle groottes vervalt (zie minimumInCatalogus).

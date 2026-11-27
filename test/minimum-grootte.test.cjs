@@ -116,8 +116,7 @@ async function main() {
   controle(!cd.minimum && cd.minimum_groot === 3, `doperwten: alleen het minimum 3 grote blijft (${cd.minimum}, ${cd.minimum_groot})`);
   controle(JSON.stringify(lijst(d, D)) === JSON.stringify(['2 groot']), `doperwten: 2 grote op de lijst, geen tweede regel (${lijst(d, D).join(', ')})`);
   const lz = d.producten.find((p) => p.naam === 'Linzen');
-  controle(lz.merk === "Plan't" && lz.verpakking === 'groot', `blik linzen zonder merk en grootte krijgt Plan't, groot uit de catalogus (${lz.merk}, ${lz.verpakking})`);
-  controle(JSON.stringify(lijst(d, 'Linzen')) === JSON.stringify(['2 groot']), `linzen: minimum 3 grote, 1 in huis: 2 op de lijst (${lijst(d, 'Linzen').join(', ')})`);
+  controle(!lz.merk && !lz.verpakking, `blik linzen zonder merk en grootte blijft zoals het is: die gegevens vul je zelf aan (${lz.merk || '-'}, ${lz.verpakking || '-'})`);
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
