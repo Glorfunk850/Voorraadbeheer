@@ -102,9 +102,11 @@ async function main() {
   const gr = rijen.find((x) => x.t.includes('groot'));
   await page.click(`[data-cat="${N}"][data-var="${gr.v}"]`);
   await page.click('#c-bewerk');
-  controle((await page.textContent('#cf-alle-titel')).includes('grote verpakkingen'), 'catalogus: minimum voor alle merken samen geldt voor grote verpakkingen');
   await page.click('label:has(#cf-alle-aan)');
   await page.fill('#cf-alle', '5');
+  controle(await page.isVisible('#cf-telt') && (await page.textContent('#cf-telt .aan')).trim() === 'Alle groottes', 'catalogus: keuze "Wat telt mee", standaard alle groottes');
+  await page.click('#cf-telt [data-w="groot"]');
+  controle((await page.textContent('#cf-telt-uitleg')).includes('Alleen grote'), 'alleen grote gekozen: uitleg past zich aan');
   await page.click('#cf button[type=submit]');
   await page.waitForTimeout(250);
   d = await api('GET', 'alles');
@@ -116,7 +118,7 @@ async function main() {
   // kleine verpakking kiezen in het formulier: het vinkje toont het minimum van de kleine (geen)
   await page.click('#c-bewerk');
   await page.click('#cf-maat [data-w="klein"]');
-  controle(!(await page.isChecked('#cf-alle-aan')) && (await page.textContent('#cf-alle-titel')).includes('kleine'), 'klein gekozen: vinkje toont het minimum van de kleine verpakkingen');
+  controle(!(await page.isChecked('#cf-alle-aan')) && (await page.textContent('#cf-telt .aan')).trim() === 'Alleen kleine', 'klein gekozen: geen minimum voor de kleine verpakkingen, keuze staat op alleen kleine');
   await page.click('#paneel [data-sluit]');
 
   // bestaande gegevens zonder grootte werken zoals vroeger
@@ -136,16 +138,16 @@ async function main() {
   d = await api('POST', 'producten', { ...mais, hoeveelheid: 2, merk: 'Noliko', inhoud: 230, verpakking: 'klein' });
   let cm = d.catalogus.find((x) => x.naam === 'Maïs');
   controle(cm.varianten.length === 2 && cm.varianten.every((v) => v.verpakking === 'klein'), `grootte verbeterd naar klein: geen variant zonder grootte achtergebleven (${JSON.stringify(cm.varianten)})`);
-  controle(cm.minimum === 3 && cm.minimum_klein === 1, `catalogus: oud minimum 3 (zonder grootte) en minimum 1 klein (${cm.minimum}, ${cm.minimum_klein})`);
+  controle(!cm.minimum && cm.minimum_klein === 1, `catalogus: minimum 1 klein vervangt het minimum 3 voor alle groottes (${cm.minimum}, ${cm.minimum_klein})`);
   controle(!d.boodschappen.some((x) => x.naam === 'Maïs'), `alles klein, 3 in huis, minimum klein 1: Maïs niet op de lijst (${JSON.stringify(d.boodschappen.filter((x) => x.naam === 'Maïs'))})`);
   // klein zakt onder zijn minimum: wel op de lijst, als kleine verpakking
   for (const p of d.producten.filter((x) => x.naam === 'Maïs')) d = await api('POST', `producten/${p.id}/verbruik`, { hoeveelheid: p.hoeveelheid });
   b = d.boodschappen.filter((x) => x.naam === 'Maïs');
   controle(b.length === 1 && b[0].verpakking === 'klein' && b[0].hoeveelheid === 1, `geen klein meer in huis: 1 kleine op de lijst (${JSON.stringify(b)})`);
-  // komt er toch weer Maïs zonder grootte bij, dan geldt het oude minimum daarvoor opnieuw
+  // komt er Maïs zonder grootte bij: het minimum geldt alleen voor de kleine, dus niets extra op de lijst
   d = await api('POST', 'producten', { ...mais, hoeveelheid: 1, merk: 'Bonduelle' });
   b = d.boodschappen.filter((x) => x.naam === 'Maïs' && !x.verpakking);
-  controle(b.length === 1 && b[0].hoeveelheid === 2, `Maïs zonder grootte: oud minimum 3 geldt weer, 2 op de lijst (${JSON.stringify(b)})`);
+  controle(b.length === 0, `Maïs zonder grootte: geen tweede minimum, niets zonder grootte op de lijst (${JSON.stringify(b)})`);
 
   // Verkeerde boodschap uit een oudere versie (bv. uit een back-up) verdwijnt vanzelf, ook na opnieuw openen
   const oud = await api('GET', 'alles');

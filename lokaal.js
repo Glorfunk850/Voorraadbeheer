@@ -360,8 +360,8 @@
     const c = S.catalogus.find((x) => zelfde(x.naam, naam));
     // Eerst de minima voor het hele product (catalogus): per grootte, en het algemene voor de groottes zonder eigen minimum.
     // Wat daar niet onder valt, volgt het minimum van de voorraadregels zelf (per inhoud en grootte).
-    const vrij = new Set(MATEN), actief = new Set();
-    for (const m of ['klein', 'groot']) if (c && c[catMinimumVeld(m)] > 0) { vrij.delete(m); actief.add(m); minimumTotaal(naam, c, m, [m]); }
+    const vrij = new Set(MATEN), actief = new Set(), taken = [];
+    for (const m of ['klein', 'groot']) if (c && c[catMinimumVeld(m)] > 0) { vrij.delete(m); actief.add(m); taken.push([m, [m]]); }
     // Het algemene minimum geldt voor de groottes zonder eigen minimum. Heeft het product daarvan niets (geen voorraadregel
     // en geen variant in de catalogus, bv. alles is klein en klein heeft een eigen minimum), dan is het een overblijfsel
     // van vroeger: niet tellen, anders staat het product altijd op de lijst (0 in huis van een grootte die je nooit koopt).
@@ -369,11 +369,13 @@
       const rest = [...vrij];
       const heeftRest = rest.length === MATEN.length || S.producten.some((p) => zelfde(p.naam, naam) && rest.includes(maatVan(p)))
         || variantenVan(c).some((v) => rest.includes(maatVan(v)));
-      if (heeftRest) { vrij.clear(); actief.add(''); minimumTotaal(naam, c, '', rest); }
+      if (heeftRest) { vrij.clear(); actief.add(''); taken.push(['', rest]); }
     }
-    // automatische boodschap van een catalogusminimum dat er niet meer is: weg (het minimum per inhoud neemt het over)
+    // eerst: automatische boodschap van een catalogusminimum dat er niet meer is weg (bv. minimum van "alleen grote"
+    // naar "alle groottes" gezet); anders houdt ze de nieuwe tegen. Het minimum per inhoud neemt het over.
     S.boodschappen = S.boodschappen.filter((b) => !(zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum'
       && typeof b.minimum_maat === 'string' && !actief.has(b.minimum_maat)));
+    for (const [m, groep] of taken) minimumTotaal(naam, c, m, groep);
     if (!vrij.size) return;
     const sleutels = new Set([...S.producten.filter((p) => zelfde(p.naam, naam) && vrij.has(maatVan(p)) && telt(p)).map(productSleutel),
       ...autoBoodschappen(naam).filter((b) => typeof b.minimum_maat !== 'string' && vrij.has(maatVan(b))).map(minimumSleutel)]);
@@ -461,9 +463,21 @@
   function catalogusMinimumZetten(naam, minimum, eenheid, maat = '') {
     if (minimum === undefined || !(naam || '').trim()) return;
     if (!S.catalogus.some((x) => zelfde(x.naam, naam))) catalogusBijwerken({ naam: naam.trim(), eenheid: eenheid || 'stuks' }, false);
-    const c = S.catalogus.find((x) => zelfde(x.naam, naam)), m = getal(minimum), veld = catMinimumVeld(maatVan({ verpakking: maat }));
-    if (m > 0) c[veld] = m; else delete c[veld];
+    minimumInCatalogus(S.catalogus.find((x) => zelfde(x.naam, naam)), minimum, maat);
   }
+  /**
+   * Minimum voor het hele product zetten. Eén keuze per product: ofwel alle groottes samen (`maat` leeg), ofwel alleen
+   * grote en/of kleine verpakkingen. Nooit allebei: een minimum voor alle groottes naast een minimum voor de grote
+   * verpakkingen telde dubbel (bv. doperwten: 3 voor alles en 3 grote zette te veel op de lijst).
+   */
+  function minimumInCatalogus(c, minimum, maat = '') {
+    const m = getal(minimum), mt = maatVan({ verpakking: maat }), veld = catMinimumVeld(mt);
+    if (!(m > 0)) { delete c[veld]; return; }
+    c[veld] = m;
+    if (mt) delete c.minimum; else { delete c.minimum_klein; delete c.minimum_groot; }
+  }
+  /** Grootte waarvoor een minimum uit een formulier geldt: wat je koos bij "Wat telt mee", anders de grootte van de verpakking. */
+  const minimumMaatUit = (data, veld, standaard) => (typeof data[veld] === 'string' ? maatVan({ verpakking: data[veld] }) : standaard);
   // Catalogus: elk product dat ooit werd toegevoegd, ook als het later op is of verwijderd werd
   // Varianten van een catalogusproduct: hetzelfde product met een ander merk en/of een andere inhoud
   // (bv. Rijst van Lassie à 1 kg en Rijst van Boni à 500 g). Categorie, plaats, prijzen ... gelden voor alle varianten.
@@ -775,7 +789,7 @@
       for (const k of ['eenheid', 'categorie', 'locatie', 'datumtype']) if (k in data && !(k === 'eenheid' && methode === 'POST' && !nieuwProduct)) c[k] = (data[k] || '').trim();
       if ('hoeveelheid' in data) { const h = getal(data.hoeveelheid); if (h > 0) c.hoeveelheid = h; }
       // minimum voor het hele product: alle merken en inhouden samen (van de gekozen grootte: klein, groot of alle)
-      if ('minimum' in data) { const m = getal(data.minimum), veld = catMinimumVeld(maatVan(data)); if (m > 0) c[veld] = m; else delete c[veld]; }
+      if ('minimum' in data) minimumInCatalogus(c, data.minimum, minimumMaatUit(data, 'minimum_maat', maatVan(data)));
       if ('grootverpakking' in data) grootZetten(c.naam, grootUit(data.grootverpakking));
       if ('inhoud' in data || 'merk' in data || 'verpakking' in data) {
         variantBewaren(c, v, oud);
@@ -835,7 +849,7 @@
         }
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
-        catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid, maatVan(p));
+        catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid, minimumMaatUit(data, 'catalogus_minimum_maat', maatVan(p)));
         minimumControleren(p.naam);
         return alles();
       }
@@ -856,7 +870,7 @@
         if ('grootverpakking' in data) grootZetten(p.naam, p.grootverpakking || null);
         if (Array.isArray(data.prijzen)) prijzenZetten(p.naam, data.prijzen, p.eenheid, data.prijzen_inhoud);
         if (p.barcode) S.barcodes[p.barcode] = { naam: p.naam, merk: p.merk || '', categorie: p.categorie, hoeveelheid: p.hoeveelheid || 1, eenheid: p.eenheid, datumtype: p.datumtype, locatie: p.locatie };
-        catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid, maatVan(p));
+        catalogusMinimumZetten(p.naam, data.catalogus_minimum, p.eenheid, minimumMaatUit(data, 'catalogus_minimum_maat', maatVan(p)));
         minimumControleren(oudeNaam); minimumControleren(p.naam);
         return alles();
       }
@@ -979,7 +993,7 @@
         }
         // minimum voor alle merken samen, aangezet bij het toevoegen van een boodschap
         for (const item of data.items || [data]) if ('catalogus_minimum' in item && (item.naam || '').trim()) {
-          catalogusMinimumZetten(item.naam, item.catalogus_minimum, item.eenheid, maatVan(item));
+          catalogusMinimumZetten(item.naam, item.catalogus_minimum, item.eenheid, minimumMaatUit(item, 'catalogus_minimum_maat', maatVan(item)));
           minimumControleren(item.naam);
         }
         return alles();
@@ -1310,16 +1324,19 @@
     const namen = new Set();
     const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
     for (const p of S.producten) {
-      if (maatVan(p)) continue;
       const c = S.catalogus.find((x) => zelfde(x.naam, p.naam));
-      if (!c) continue;
-      const k = zonderMaat(variantUit(p)), vs = variantenVan(c).filter((v) => zonderMaat(v) === k);
-      if (!vs.length || vs.some((v) => !maatVan(v))) continue;
-      const maten = new Set(vs.map(maatVan));
-      if (maten.size !== 1) continue;
-      p.verpakking = [...maten][0];
-      namen.add(p.naam);
+      if (!c || maatVan(p)) continue;
+      const vs = variantenVan(c);
+      if (vs.some((v) => variantSleutel(v) === variantSleutel(variantUit(p)))) continue; // de variant bestaat: niets te doen
+      // zelfde merk en inhoud, alleen de grootte ontbreekt
+      // (een regel zonder merk of met een andere inhoud blijft zoals ze is: die gegevens vul je zelf aan)
+      const k = zonderMaat(variantUit(p)), zelfdeMI = vs.filter((v) => zonderMaat(v) === k);
+      const maten = new Set(zelfdeMI.map(maatVan));
+      if (zelfdeMI.length && maten.size === 1 && !maten.has('')) { p.verpakking = [...maten][0]; namen.add(p.naam); }
     }
+    // dubbel minimum van vroeger: een minimum voor alle groottes naast een (later gezet) minimum voor grote en/of kleine
+    // verpakkingen. Het minimum per grootte geldt; het oude voor alle groottes vervalt (zie minimumInCatalogus).
+    for (const c of S.catalogus) if (c.minimum > 0 && (c.minimum_klein > 0 || c.minimum_groot > 0)) { delete c.minimum; namen.add(c.naam); }
     return namen;
   }
   function minimumBoodschappenNakijken() {

@@ -61,7 +61,9 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 - Zet je in de **catalogus** de grootte van een merk en inhoud op klein of groot, dan krijgen je voorraadregels van dat
   merk en die inhoud dezelfde grootte: zo tellen ze mee voor het minimum van die grootte.
 - Grote verpakkingen worden alleen met grote samengeteld, kleine alleen met kleine (in je voorraad én op de lijst).
-- Het minimum geldt alleen voor die grootte, ook het vinkje **Minimum voor alle merken samen** (kies eerst Klein of Groot).
+- Bij het vinkje **Minimum voor alle merken samen** kies je bij **Wat telt mee**: alle groottes samen, alleen grote of alleen
+  kleine. Eén keuze per product (alleen kleine en alleen grote kunnen wel samen); een oud dubbel minimum (alle groottes én
+  alleen grote) wordt bij het openen opgeruimd: het minimum per grootte blijft.
 - Zakt een grootte onder het minimum, dan komt het tekort op je lijst in **dezelfde grootte**.
 - **Niet opgegeven** werkt zoals vroeger. Dit staat los van *Bijkopen in een grote verpakking* (potten, doos met zakjes).
 
