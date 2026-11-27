@@ -138,6 +138,22 @@ async function test(naam, fn) {
     assert.strictEqual(z('ui', p), 'Rode ui');
     assert.strictEqual(z('melk', p), 'Halfvolle melk');
     assert.strictEqual(z('champignons', p), 'Champignons');
+    // een vorm (poeder, saus ...) maakt er een ander product van
+    const q = ['Paprika poeder', 'Bouillon', 'Olie'];
+    assert.strictEqual(z('paprika', q), '');
+    assert.strictEqual(z('rode paprika', q), '');
+    assert.strictEqual(z('paprikapoeder', q), 'Paprika poeder');
+    assert.strictEqual(z('kippenbouillon', q), 'Bouillon');
+    assert.strictEqual(z('olijfolie', q), 'Olie');
+  });
+
+  await test('Vroeger vanzelf bewaarde verkeerde koppelingen tellen niet meer', async () => {
+    const { koppelingFout: f } = await laad('parser.js');
+    assert.ok(f('room', 'Spinazie met room'));
+    assert.ok(f('rode paprika', 'Rode biet'));
+    assert.ok(f('paprika', 'Paprika poeder'));
+    assert.ok(!f('ui', 'Rode ui'));
+    assert.ok(!f('kip', 'Kipfilet'));       // zelf gekozen, geen gedeeld woord: blijft
   });
 
   if (fouten) { console.log(`\n${fouten} test(s) mislukt.`); process.exit(1); }

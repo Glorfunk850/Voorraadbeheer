@@ -1,5 +1,5 @@
 // Voorraad — interface. Praat met api/..., afgehandeld in lokaal.js (opslag op dit toestel).
-import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, sleutelwoorden, omrekenen, eigenEenhedenZetten } from './parser.js';
+import { receptOntleden, ingredientOntleden, zoekVoorraadnaam, koppelingFout, sleutelwoorden, omrekenen, eigenEenhedenZetten } from './parser.js';
 import { tekstOpmaken, pdfStukjes, paginasStapelen } from './layout.js';
 import { HANDLEIDING } from './handleiding.js';
 
@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 89;
+const APP_VERSIE = 90;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -2004,16 +2004,21 @@ function winkelenAfronden(ids) {
 // ---------------------------------------------------------------------------
 // RECEPTEN
 // ---------------------------------------------------------------------------
+/** De bewaarde koppeling van een ingrediënt, zonder koppelingen die vroeger vanzelf verkeerd bewaard werden. */
+const bewaardeKoppeling = (i) => (i.voorraadnaam && !koppelingFout(i.naam, i.voorraadnaam) ? i.voorraadnaam : '');
+/** Aan welk voorraadproduct hoort een ingrediënt: zelf gekozen, zelf "niet gekoppeld", of vanzelf gezocht. */
+const koppelingVan = (i, namen, geleerd) => (i.geenKoppeling ? '' : bewaardeKoppeling(i) || zoekVoorraadnaam(i.naam, namen, geleerd));
+
 function geleerdeKoppelingen() {
   const k = {};
-  for (const r of S.recepten) for (const i of r.ingredienten) if (i.voorraadnaam) k[sleutelwoorden(i.naam).join(' ')] = i.voorraadnaam;
+  for (const r of S.recepten) for (const i of r.ingredienten) { const v = bewaardeKoppeling(i); if (v) k[sleutelwoorden(i.naam).join(' ')] = v; }
   return k;
 }
-const altijdInHuis = (i) => ALTIJD_IN_HUIS.has((i.naam || '').trim().toLowerCase()) && !i.voorraadnaam;
+const altijdInHuis = (i) => ALTIJD_IN_HUIS.has((i.naam || '').trim().toLowerCase()) && !bewaardeKoppeling(i);
 
 function beschikbaarheid(ingr, factor = 1, namen = productnamen(), geleerd = geleerdeKoppelingen()) {
   if (altijdInHuis(ingr)) return { st: 'ok', partijen: [], altijd: true };
-  const naam = ingr.voorraadnaam || zoekVoorraadnaam(ingr.naam, namen, geleerd);
+  const naam = koppelingVan(ingr, namen, geleerd);
   if (!naam) return { st: 'ontbreekt', naam: '' };
   // geopende verpakkingen eerst opmaken
   const partijen = S.producten.filter((p) => zelfde(p.naam, naam) && p.hoeveelheid > 0 && houdbaarheid(p).niveau !== 4)
@@ -2054,7 +2059,7 @@ function tekenRecepten() {
       const gebruikt = [];
       let score = 0;
       for (const i of r.ingredienten) {
-        const naam = i.voorraadnaam || zoekVoorraadnaam(i.naam, namen, geleerd);
+        const naam = koppelingVan(i, namen, geleerd);
         const p = naam && dringend.find((d) => zelfde(d.naam, naam));
         if (p && !gebruikt.includes(p)) { gebruikt.push(p); score += p.datumtype === 'TGT' ? 3 : 1; }
       }
@@ -2335,7 +2340,7 @@ function receptBewerken(r, ruweTekst) {
     sluitKnoppen(el);
     const namen = productnamen(), geleerd = geleerdeKoppelingen();
     const ingrRij = (i) => {
-      const koppel = i.voorraadnaam ?? zoekVoorraadnaam(i.naam, namen, geleerd);
+      const koppel = koppelingVan(i, namen, geleerd);
       const eenheden = receptEenheden().includes(i.eenheid || '') ? receptEenheden() : [...receptEenheden(), i.eenheid];
       const div = document.createElement('div');
       div.className = 'ingr-bewerk';
@@ -2346,7 +2351,7 @@ function receptBewerken(r, ruweTekst) {
           <button type="button" class="weg" aria-label="Weghalen">×</button></div>
         <div class="koppel"><span>In voorraad als</span><select class="i-koppel">${opties(namen, koppel, '— niet gekoppeld —')}</select></div>`;
       const sel = $('.i-koppel', div);
-      if (i.voorraadnaam) sel.dataset.handmatig = '1';
+      if (bewaardeKoppeling(i) || i.geenKoppeling) sel.dataset.handmatig = '1';
       sel.onchange = () => (sel.dataset.handmatig = '1');
       $('.i-naam', div).onchange = (e) => { if (!sel.dataset.handmatig) sel.innerHTML = opties(namen, zoekVoorraadnaam(e.target.value, namen, geleerd), '— niet gekoppeld —'); };
       $('.weg', div).onclick = () => div.remove();
@@ -2401,7 +2406,9 @@ function receptBewerken(r, ruweTekst) {
         stappen: $('#rf-stappen', el).value, notities: $('#rf-notities', el).value,
         soort: gekozen($('#rf-soort', el))[0] || '', categorieen: gekozen($('#rf-cat', el)),
         ingredienten: $$('.ingr-bewerk', el).map((d) => ({ hoeveelheid: num($('.i-hv', d).value), eenheid: $('.i-eenheid', d).value,
-          naam: $('.i-naam', d).value.trim(), voorraadnaam: $('.i-koppel', d).value })).filter((i) => i.naam),
+          // alleen een zelf gekozen koppeling bewaren; een voorstel wordt telkens opnieuw gezocht
+          naam: $('.i-naam', d).value.trim(), ...($('.i-koppel', d).dataset.handmatig
+            ? ($('.i-koppel', d).value ? { voorraadnaam: $('.i-koppel', d).value } : { geenKoppeling: true }) : {}) })).filter((i) => i.naam),
       };
       try {
         const res = await api(bewerkId ? 'PUT' : 'POST', bewerkId ? `recepten/${bewerkId}` : 'recepten', data);
@@ -2663,7 +2670,7 @@ function weekBoodschappen(items, wanneer) {
     const factor = (m.personen || r.personen || 1) / (r.personen || 1);
     for (const i of r.ingredienten) {
       if (altijdInHuis(i)) continue;
-      const vn = i.voorraadnaam || zoekVoorraadnaam(i.naam, namen, geleerd) || '';
+      const vn = koppelingVan(i, namen, geleerd) || '';
       const sleutel = (vn || i.naam).trim().toLowerCase();
       const h = i.hoeveelheid !== null && i.hoeveelheid !== undefined ? i.hoeveelheid * factor : null;
       const e = i.eenheid || '';

@@ -994,7 +994,7 @@
         lijstAanvullen(S.instellingen, 'recept_soorten', [r.soort]);
         lijstAanvullen(S.instellingen, 'recept_categorieen', r.categorieen);
         r.ingredienten = (data.ingredienten || []).filter((i) => i.naam).map((i, n) => ({ id: id(), recept_id: r.id, volgorde: n,
-          hoeveelheid: getal(i.hoeveelheid), eenheid: i.eenheid || '', naam: i.naam, voorraadnaam: i.voorraadnaam || '' }));
+          hoeveelheid: getal(i.hoeveelheid), eenheid: i.eenheid || '', naam: i.naam, voorraadnaam: i.voorraadnaam || '', ...(i.geenKoppeling ? { geenKoppeling: true } : {}) }));
       };
       if (methode === 'POST' && ident === null) {
         const r = { id: id(), aangemaakt: nu() };
