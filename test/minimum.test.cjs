@@ -180,6 +180,20 @@ async function main() {
   controle(zonder.length === 1 && zonder[0].hoeveelheid >= 1, 'zonder keuze: in de voorraad zonder merk en inhoud');
 
 
+  // dezelfde verpakking op twee plaatsen (kruidenkast en witte kast), de ene met inhoud of in potjes, de andere niet:
+  // samen 1 in huis, dus na het openen van één niets op de lijst
+  for (const [naam, a, b] of [['Paprikapoeder', {}, { inhoud: 40, inhoud_eenheid: 'g' }], ['Dille', { inhoud: 20, inhoud_eenheid: 'g' }, {}], ['Kerrie', {}, { eenheid: 'pot' }]]) {
+    await api('POST', 'producten', { naam, hoeveelheid: 1, eenheid: 'stuks', locatie: 'Kruidenkast', minimum: 1, ...a });
+    await api('POST', 'producten', { naam, hoeveelheid: 1, eenheid: 'stuks', locatie: 'Witte kast', ...b });
+    d = await api('GET', 'alles');
+    const kast = d.producten.find((p) => p.naam === naam && p.locatie === 'Kruidenkast');
+    d = await api('POST', `producten/${kast.id}/openen`, {});
+    controle(!d.boodschappen.some((x) => x.naam === naam), `${naam}: 1 geopend, nog 1 op een andere plaats: niet op de lijst`);
+    const wit = d.producten.find((p) => p.naam === naam && p.locatie === 'Witte kast');
+    d = await api('POST', `producten/${wit.id}/verbruik`, { hoeveelheid: 1 });
+    controle(d.boodschappen.some((x) => x.naam === naam && x.bron === 'minimum' && x.hoeveelheid === 1), `${naam}: ook die op: 1 op de lijst`);
+  }
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();
