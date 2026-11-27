@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 91;
+const APP_VERSIE = 92;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -441,6 +441,12 @@ const groepSleutel = (x) => `${prijsMerk(x)}|${prijsSleutel(x)}`;
 function prijzenVan(naam, inh) {
   const alle = catalogusVan(naam)?.prijzen || [];
   if (inh === undefined) return alle;
+  // kleine of grote verpakking zonder eigen inhoud: de prijzen van de inhoud van die grootte (bv. bokaal à 190 g)
+  const maatInh = maatInhouden(naam, inh);
+  if (maatInh) {
+    const m = prijsMerk(inh);
+    return alle.filter((p) => (!m || prijsMerk(p) === m) && maatInh.some((v) => prijsSleutel(p) === prijsSleutel(v) && (!prijsMerk(p) || prijsMerk(p) === prijsMerk(v))));
+  }
   const m = prijsMerk(inh), k = prijsSleutel(inh);
   const pogingen = [[m, k], ['', k], ...(k ? [[m, ''], ['', '']] : [[m, prijsSleutel(catalogusVan(naam))], ['', prijsSleutel(catalogusVan(naam))]])];
   for (const [mm, kk] of pogingen) {
@@ -448,6 +454,22 @@ function prijzenVan(naam, inh) {
     if (lijst.length) return lijst;
   }
   return [];
+}
+/**
+ * Een boodschap klein of groot, zonder eigen inhoud: welke inhouden (merk + inhoud uit de catalogus) horen bij die grootte?
+ * Eerst de catalogusregels met die grootte (bv. Jumbo à 190 g, klein). Heeft geen enkele regel een grootte, dan is klein
+ * de kleinste inhoud en groot de grootste. null als dat niet te zeggen is (dan gelden de gewone prijzen).
+ */
+function maatInhouden(naam, inh) {
+  const maat = maatVan(inh), c = catalogusVan(naam);
+  if (!maat || prijsSleutel(inh) || !c) return null;
+  const vs = variantenVan(c).filter((v) => prijsSleutel(v));
+  if (vs.some((v) => maatVan(v))) return vs.filter((v) => maatVan(v) === maat);
+  const gram = (v) => omrekenen(v.inhoud, v.inhoud_eenheid, ['ml', 'cl', 'dl', 'l'].includes(v.inhoud_eenheid) ? 'ml' : 'g') ?? v.inhoud;
+  const maten = [...new Set(vs.map(gram))].sort((a, b) => a - b);
+  if (maten.length < 2) return null;
+  const doel = maat === 'klein' ? maten[0] : maten[maten.length - 1];
+  return vs.filter((v) => gram(v) === doel);
 }
 const winkelPlek = (w) => { const i = winkels().findIndex((x) => zelfde(x, w)); return i < 0 ? 9999 : i; };
 /** Prijzen van goedkoop naar duur (gelijke prijs: de winkel die bovenaan staat bij Instellingen eerst). */
@@ -468,6 +490,8 @@ const goedkoopste = (naam, inh) => prijzenGesorteerd(naam, inh)[0] || null;
 function winkelVoor(naam, inh) {
   const p = goedkoopste(naam, inh);
   if (p) return p;
+  // klein of groot: nooit de prijs van een andere inhoud (dan eerst de prijs invullen)
+  if (maatInhouden(naam, inh)) return null;
   const alle = prijzenVan(naam), m = prijsMerk(inh);
   const zelfdeMerk = m ? alle.filter((x) => prijsMerk(x) === m) : [];
   return prijzenSorteren(zelfdeMerk.length ? zelfdeMerk : alle)[0] || null;

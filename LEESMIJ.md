@@ -55,6 +55,9 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 
 - Kies bij **Verpakking** (net onder Merk) **Klein** of **Groot**: bij Toevoegen en Bewerken van je voorraad, in de
   **Catalogus** (elke grootte is een aparte regel) en bij een boodschap. Achter de naam staat dan *klein* of *groot*.
+- Op je lijst krijgt een kleine of grote verpakking de **prijs van de inhoud van die grootte** (bv. bokaal à 190 g voor klein,
+  à 350 g voor groot). Geen enkele verpakking klein of groot aangeduid in de catalogus? Dan is klein de kleinste inhoud en
+  groot de grootste. Een grootte zonder eigen prijs toont **Prijs invullen**, nooit de prijs van de andere grootte.
 - Grote verpakkingen worden alleen met grote samengeteld, kleine alleen met kleine (in je voorraad én op de lijst).
 - Het minimum geldt alleen voor die grootte, ook het vinkje **Minimum voor alle merken samen** (kies eerst Klein of Groot).
 - Zakt een grootte onder het minimum, dan komt het tekort op je lijst in **dezelfde grootte**.
