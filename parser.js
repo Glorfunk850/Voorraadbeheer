@@ -283,6 +283,20 @@ export function sleutelwoorden(naam) {
     .map(sleutel);
 }
 
+// Woorden die alleen iets beschrijven (kleur, smaak, bereiding): een gedeeld woord als "rode" maakt
+// van "rode paprika" nog geen "rode biet".
+const BESCHRIJVEND = new Set(['rode', 'rood', 'groene', 'groen', 'gele', 'geel', 'witte', 'wit', 'zwarte', 'zwart', 'bruine', 'bruin',
+  'oranje', 'paarse', 'paars', 'roze', 'blonde', 'zoete', 'zoet', 'zure', 'zuur', 'zoute', 'zout', 'pittige', 'pittig', 'scherpe',
+  'milde', 'jonge', 'jong', 'belegen', 'oude', 'halfvolle', 'volle', 'magere', 'gemalen', 'gerookte', 'gerookt', 'gekookte', 'gekookt',
+  'gebakken', 'gegrilde', 'gepofte', 'ingelegde', 'zachte', 'harde', 'lichte', 'donkere', 'fijne', 'grove', 'platte', 'krokante']
+  .map((w) => sleutel(w)));
+
+// Woorden die van een groente of ander product iets anders maken: "Paprika poeder" is geen paprika,
+// "Tomatensaus" geen tomaat. Ook in samenstellingen ("kippenbouillon" bevat "bouillon").
+const VORM = ['poeder', 'saus', 'soep', 'sap', 'siroop', 'puree', 'jam', 'pesto', 'ketchup', 'chips', 'kruiden', 'mix', 'olie',
+  'azijn', 'extract', 'aroma', 'concentraat', 'bouillon', 'fond', 'dressing', 'spread', 'vlok', 'pasta', 'crem', 'creme'].map((w) => sleutel(w));
+const vormen = (woorden) => VORM.filter((v) => woorden.some((w) => w === v || (w.length > v.length + 2 && w.endsWith(v))));
+
 /** Zoek het best passende voorraadproduct (naam) voor een ingrediënt. */
 export function zoekVoorraadnaam(ingredientNaam, productnamen, geleerd = {}) {
   const eigen = sleutelwoorden(ingredientNaam).join(' ');
@@ -293,15 +307,31 @@ export function zoekVoorraadnaam(ingredientNaam, productnamen, geleerd = {}) {
   for (const naam of productnamen) {
     const woorden = sleutelwoorden(naam);
     if (!woorden.length) continue;
+    // een samengesteld product ("Spinazie met room") is iets anders dan spinazie of room apart
+    const samengesteld = /\s(?:met|in|op)\s/i.test(naam.replace(/\(.*?\)/g, ' '));
+    const vI = vormen([...ingr]), vP = vormen(woorden);
     let s = 0;
-    if (woorden.join(' ') === eigen) s = 4;
+    if (woorden.join(' ') === eigen || woorden.join('') === eigen.replace(/ /g, '')) s = 4; // ook "paprikapoeder" = "Paprika poeder"
+    else if (samengesteld || vI.length !== vP.length || vI.some((v) => !vP.includes(v))) s = 0;
     else if (woorden.every((w) => ingr.has(w))) s = 2 + woorden.length / 10; // "melk" in "volle melk"
     else if ([...ingr].every((w) => woorden.includes(w))) s = 1.5;             // "ui" bij "rode ui"
-    else if (woorden.some((w) => w.length > 3 && ingr.has(w))) s = 1;
+    else if (woorden.some((w) => w.length > 3 && !BESCHRIJVEND.has(w) && ingr.has(w))) s = 1;
     else if (woorden.length === 1 && woorden[0].length >= 3 && [...ingr].some((w) => w.length > woorden[0].length && w.endsWith(woorden[0]))) s = 1; // "slagroom" bij "room"
     if (s > score || (s === score && s > 0 && naam.length < beste.length)) { score = s; beste = naam; }
   }
   return score >= 1 ? beste : '';
+}
+
+/**
+ * Is een bewaarde koppeling waarschijnlijk vanzelf (verkeerd) gemaakt? Vroeger werd elke voorgestelde koppeling
+ * bij het opslaan van een recept bewaard, ook "rode paprika" → "Rode biet" of "room" → "Spinazie met room".
+ * Zo'n koppeling (wel een gedeeld woord, maar volgens de huidige regels geen match) tellen we niet meer.
+ */
+export function koppelingFout(ingredientNaam, product) {
+  if (!product) return false;
+  if (zoekVoorraadnaam(ingredientNaam, [product])) return false;
+  const a = sleutelwoorden(ingredientNaam), b = sleutelwoorden(product);
+  return a.some((x) => b.some((y) => x === y || (y.length >= 3 && x.endsWith(y)) || (x.length >= 3 && y.endsWith(x))));
 }
 
 // ---------------------------------------------------------------------------
