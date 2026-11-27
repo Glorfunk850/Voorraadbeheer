@@ -383,7 +383,7 @@
   const telt = (p) => !p.geopend;
   // Dezelfde verpakking staat soms op twee plaatsen (bv. dille in de kruidenkast en in de witte kast), en dan heeft de ene
   // regel soms een inhoud en de andere niet. Een regel zonder inhoud telt mee bij het enige minimum van die grootte,
-  // en heeft dat minimum zelf geen inhoud, dan tellen alle regels van die grootte zonder eigen minimum mee.
+  // en heeft dat minimum zelf geen inhoud, dan tellen alle regels van die grootte (en eenheid) zonder eigen minimum mee.
   const sleutelMaat = (s) => (/^(klein|groot)\|/.exec(s) || [])[1] || '';
   function regelsVoorMinimum(naam, sleutel) {
     const maat = sleutelMaat(sleutel), leeg = metMaat(maat, '');
@@ -391,7 +391,10 @@
     const eigen = alle.filter((p) => productSleutel(p) === sleutel);
     const actief = new Set(alle.filter((p) => p.minimum > 0).map(productSleutel));
     if (actief.size !== 1 || !actief.has(sleutel)) return eigen;
-    return [...eigen, ...alle.filter((p) => productSleutel(p) !== sleutel && (sleutel === leeg || productSleutel(p) === leeg))];
+    // alleen in dezelfde eenheid (of omrekenbaar): een zak rijst à 5 kg telt niet als een pot
+    const eenheid = eigen.find((p) => p.minimum > 0).eenheid;
+    return [...eigen, ...alle.filter((p) => productSleutel(p) !== sleutel && (sleutel === leeg || productSleutel(p) === leeg)
+      && omrekenen(1, p.eenheid, eenheid) !== null)];
   }
   function minimumPerInhoud(naam, sleutel) {
     const regels = regelsVoorMinimum(naam, sleutel);
