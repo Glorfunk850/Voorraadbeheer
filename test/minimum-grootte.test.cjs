@@ -85,14 +85,39 @@ async function main() {
   d = await api('GET', 'alles');
   controle(!d.producten.find((p) => p.naam === K)?.verpakking, 'regel met eigen variant zonder grootte blijft zonder grootte');
 
-  // 4. Het algemene minimum blijft als er nog iets zonder grootte is
+  // 4. Eén minimum per product: een minimum voor grote verpakkingen vervangt dat voor alle groottes, en omgekeerd
   const A = 'Ananas';
   await api('POST', 'producten', { naam: A, hoeveelheid: 1, eenheid: 'blik', merk: 'Del Monte' });
   await api('PUT', 'catalogus', { naam: A, oudeNaam: A, merk: 'Del Monte', minimum: 3, oudeVariant: { merk: 'Del Monte' } });
-  await api('POST', 'catalogus', { naam: A, eenheid: 'blik', merk: 'Jumbo', verpakking: 'groot', minimum: 1 });
+  await api('POST', 'catalogus', { naam: A, eenheid: 'blik', merk: 'Jumbo', verpakking: 'groot', minimum: 1, minimum_maat: 'groot' });
   d = await api('GET', 'alles');
-  const ca = d.catalogus.find((x) => x.naam === A);
-  controle(ca.minimum === 3 && ca.minimum_groot === 1, `algemeen minimum blijft naast een minimum voor groot (${ca.minimum}, ${ca.minimum_groot})`);
+  let ca = d.catalogus.find((x) => x.naam === A);
+  controle(!ca.minimum && ca.minimum_groot === 1, `minimum alleen grote vervangt minimum voor alle groottes (${ca.minimum}, ${ca.minimum_groot})`);
+  await api('PUT', 'catalogus', { naam: A, oudeNaam: A, merk: 'Jumbo', verpakking: 'groot', minimum: 2, minimum_maat: '', oudeVariant: { merk: 'Jumbo', verpakking: 'groot' } });
+  d = await api('GET', 'alles');
+  ca = d.catalogus.find((x) => x.naam === A);
+  controle(ca.minimum === 2 && !ca.minimum_groot, `"alle groottes" gekozen bij een grote verpakking: minimum 2 voor alles (${ca.minimum}, ${ca.minimum_groot})`);
+  controle(JSON.stringify(lijst(d, A)) === JSON.stringify(['1 -']), `alle groottes, minimum 2, 1 in huis: 1 op de lijst, de oude grote boodschap weg (${lijst(d, A).join(', ')})`);
+
+  // 5. Doperwten zoals vroeger: minimum 3 voor alle groottes én 3 grote; 2 klein + 1 groot in huis
+  const D = 'Doperwten';
+  await api('POST', 'import', { producten: [
+      { id: 'd1', naam: D, merk: 'All Seasons', hoeveelheid: 2, eenheid: 'stuks', inhoud: 280, inhoud_eenheid: 'g', verpakking: 'klein', minimum: 0 },
+      { id: 'd2', naam: D, merk: 'Boni', hoeveelheid: 1, eenheid: 'bokaal', inhoud: 445, inhoud_eenheid: 'g', verpakking: 'groot', minimum: 0 },
+      { id: 'l1', naam: 'Linzen', merk: '', hoeveelheid: 1, eenheid: 'blik', inhoud: 265, inhoud_eenheid: 'g', minimum: 0 }],
+    catalogus: [{ naam: D, eenheid: 'stuks', minimum: 3, minimum_groot: 3, varianten: [
+        { merk: 'Boni', inhoud: 445, inhoud_eenheid: 'g', verpakking: 'groot' }, { merk: 'All Seasons', inhoud: 280, inhoud_eenheid: 'g', verpakking: 'klein' }] },
+      { naam: 'Linzen', eenheid: 'blik', minimum_groot: 3, varianten: [{ merk: "Plan't", inhoud: 265, inhoud_eenheid: 'g', verpakking: 'groot' }] }],
+    boodschappen: [{ id: 'x1', naam: D, hoeveelheid: 2, eenheid: 'stuks', verpakking: 'groot', minimum_maat: 'groot', bron: 'minimum', afgevinkt: 0 },
+      { id: 'x2', naam: D, hoeveelheid: 1, eenheid: 'stuks', minimum_maat: '', bron: 'minimum', afgevinkt: 0 }],
+    recepten: [], planning: [] });
+  d = await api('GET', 'alles');
+  const cd = d.catalogus.find((x) => x.naam === D);
+  controle(!cd.minimum && cd.minimum_groot === 3, `doperwten: alleen het minimum 3 grote blijft (${cd.minimum}, ${cd.minimum_groot})`);
+  controle(JSON.stringify(lijst(d, D)) === JSON.stringify(['2 groot']), `doperwten: 2 grote op de lijst, geen tweede regel (${lijst(d, D).join(', ')})`);
+  const lz = d.producten.find((p) => p.naam === 'Linzen');
+  controle(lz.merk === "Plan't" && lz.verpakking === 'groot', `blik linzen zonder merk en grootte krijgt Plan't, groot uit de catalogus (${lz.merk}, ${lz.verpakking})`);
+  controle(JSON.stringify(lijst(d, 'Linzen')) === JSON.stringify(['2 groot']), `linzen: minimum 3 grote, 1 in huis: 2 op de lijst (${lijst(d, 'Linzen').join(', ')})`);
 
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();

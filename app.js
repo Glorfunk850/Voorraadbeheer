@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 93;
+const APP_VERSIE = 94;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1042,21 +1042,44 @@ function algemeenMinimumGeldt(c) {
 const minimumTekst = (c) => ['', 'klein', 'groot'].filter((m) => catMinimum(c, m) && (m || algemeenMinimumGeldt(c))).map((m) =>
   `minimum ${hoeveelTekst(catMinimum(c, m), c.eenheid || 'stuks') || fmt(catMinimum(c, m))}${m ? ` ${m === 'groot' ? 'grote' : 'kleine'} verpakkingen` : ''} in huis, alle merken samen`).join(' · ');
 // Vinkje "Minimum voor alle merken samen" (in de catalogus, bij voorraad toevoegen en bij boodschappen); het minimum hoort bij het catalogusproduct.
-const minimumVinkjeHtml = (id, minimum) => `<label class="vink uitlek-vink"><input type="checkbox" id="${id}-alle-aan" ${minimum > 0 ? 'checked' : ''}><span class="vakje"></span>
-    <span><span id="${id}-alle-titel">Minimum voor alle merken samen</span> <small class="stil">alle merken en inhouden tellen samen (kleine en grote verpakkingen elk apart); het tekort komt zonder merk en inhoud op je boodschappenlijst</small></span></label>
-  <label class="veld" id="${id}-alle-veld"${minimum > 0 ? '' : ' hidden'}><span>Minimum in huis</span><input id="${id}-alle" inputmode="decimal" value="${minimum > 0 ? esc(fmt(minimum)) : ''}" placeholder="bv. 3"></label>`;
+// Eén minimum per product: ofwel voor alle groottes samen, ofwel alleen voor de grote en/of de kleine verpakkingen
+// (dan tellen de andere groottes niet mee). Nooit allebei: een verborgen tweede minimum zette te veel op de lijst.
+const TELT = [['', 'Alle groottes'], ['groot', 'Alleen grote'], ['klein', 'Alleen kleine']];
+const teltUitleg = (t) => (t === 'groot' ? 'Alleen grote verpakkingen tellen mee; kleine niet.'
+  : t === 'klein' ? 'Alleen kleine verpakkingen tellen mee; grote niet.' : 'Klein, groot en zonder grootte tellen samen.');
+const minimumVinkjeHtml = (id, minimum, telt = '') => `<label class="vink uitlek-vink"><input type="checkbox" id="${id}-alle-aan" ${minimum > 0 ? 'checked' : ''}><span class="vakje"></span>
+    <span><span id="${id}-alle-titel">Minimum voor alle merken samen</span> <small class="stil">alle merken en inhouden tellen samen; het tekort komt zonder merk en inhoud op je boodschappenlijst</small></span></label>
+  <div id="${id}-alle-veld"${minimum > 0 ? '' : ' hidden'}>
+    <label class="veld"><span>Minimum in huis</span><input id="${id}-alle" inputmode="decimal" value="${minimum > 0 ? esc(fmt(minimum)) : ''}" placeholder="bv. 3"></label>
+    <div class="veld" id="${id}-telt-veld"><span class="veld-titel">Wat telt mee</span>
+      <div class="segment drie" id="${id}-telt">${TELT.map(([w, t]) => `<button type="button" data-w="${w}"${w === telt ? ' class="aan"' : ''}>${t}</button>`).join('')}</div>
+      <p class="segment-uitleg" id="${id}-telt-uitleg">${teltUitleg(telt)}</p></div>
+  </div>`;
+const teltLezen = (el, id) => { const b = $(`#${id}-telt .aan`, el); return b ? b.dataset.w : ''; };
+function teltZetten(el, id, t) {
+  $$(`#${id}-telt button`, el).forEach((b) => b.classList.toggle('aan', b.dataset.w === t));
+  const u = $(`#${id}-telt-uitleg`, el); if (u) u.textContent = teltUitleg(t);
+}
+/** Welk minimum staat er in de catalogus voor een verpakking van grootte m? { minimum, telt }. */
+function catMinimumVoor(c, m) {
+  if (m && catMinimum(c, m)) return { minimum: catMinimum(c, m), telt: m };
+  if (catMinimum(c, '')) return { minimum: catMinimum(c, ''), telt: '' };
+  return { minimum: 0, telt: m && ['klein', 'groot'].some((x) => catMinimum(c, x)) ? m : '' };
+}
 /** Bij een kleine of grote verpakking geldt het minimum alleen voor die grootte: titel aanpassen. */
 function minimumVinkjeMaat(el, id, herladen = true) {
   const t = $(`#${id}-alle-titel`, el), aan = $(`#${id}-alle-aan`, el);
   if (!t || !aan) return;
   const m = maatLezen(el, id);
-  t.textContent = m ? `Minimum voor alle merken samen, ${m === 'groot' ? 'grote' : 'kleine'} verpakkingen` : 'Minimum voor alle merken samen';
+  t.textContent = 'Minimum voor alle merken samen';
+  void m;
   // het minimum dat in de catalogus staat voor deze grootte tonen (zolang je het zelf niet aanraakte)
   if (herladen && aan.dataset.naam) minimumVinkjeZetten(el, id, aan.dataset.naam);
 }
 function minimumVinkjeKoppelen(el, id) {
   const aan = $(`#${id}-alle-aan`, el), veld = $(`#${id}-alle`, el);
   if (!aan) return;
+  $$(`#${id}-telt button`, el).forEach((b) => (b.onclick = () => { aan.dataset.aangeraakt = '1'; teltZetten(el, id, b.dataset.w); }));
   aan.onchange = () => {
     aan.dataset.aangeraakt = '1';
     $(`#${id}-alle-veld`, el).hidden = !aan.checked;
@@ -1069,9 +1092,10 @@ function minimumVinkjeZetten(el, id, naam, ookAangeraakt = false) {
   const aan = $(`#${id}-alle-aan`, el);
   if (aan) aan.dataset.naam = naam || '';
   if (!aan || (aan.dataset.aangeraakt && !ookAangeraakt)) return;
-  const m = (naam && catMinimum(catalogusVan(naam), maatLezen(el, id))) || 0;
+  const { minimum: m, telt } = naam && catalogusVan(naam) ? catMinimumVoor(catalogusVan(naam), maatLezen(el, id)) : { minimum: 0, telt: '' };
   delete aan.dataset.aangeraakt;
   aan.checked = m > 0; $(`#${id}-alle`, el).value = m > 0 ? fmt(m) : ''; $(`#${id}-alle-veld`, el).hidden = !(m > 0);
+  teltZetten(el, id, telt);
 }
 /** undefined: niets aangeraakt; null: ongeldig (melding getoond); anders het minimum (0 = uit). */
 function minimumVinkjeLezen(el, id, altijd = false) {
@@ -1300,7 +1324,7 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
         <label class="veld"><span>Merk (mag leeg)</span><input id="cf-merk" value="${esc(c.merk || '')}" autocomplete="off" autocapitalize="words" placeholder="bv. Bonduelle"></label>
         ${inVoorraad ? '<p class="stil" style="margin-top:-.4rem">Een nieuwe naam wordt ook aangepast in je voorraad en op je boodschappenlijst.</p>' : ''}
         ${maatKeuzeHtml('cf', c.verpakking)}
-        ${sjabloon ? '' : minimumVinkjeHtml('cf', catMinimum(c, maatVan(c)))}
+        ${sjabloon ? '' : minimumVinkjeHtml('cf', catMinimumVoor(c, maatVan(c)).minimum, catMinimumVoor(c, maatVan(c)).telt)}
         ${sjabloon ? '' : grootVeldenHtml('cf', nieuw ? null : grootVan(c.naam))}
         <label class="veld"><span>Aantal${eenheid !== 'stuks' ? ` (${esc(eenheid)})` : ''}</span><input id="cf-hv" inputmode="decimal" value="${c.hoeveelheid > 0 ? esc(fmt(c.hoeveelheid)) : '1'}"></label>
         <p class="stil" style="margin:-.4rem 0 1rem">Wordt ingevuld als je het product vanuit de catalogus aan je voorraad toevoegt.</p>
@@ -1369,7 +1393,7 @@ function catalogusFormulier(bestaand, vi = 0, sjabloon = null) {
       const data = { naam, hoeveelheid: hv, eenheid, categorie: $('#cf-cat', el).value, locatie: $('#cf-plaats', el).value, datumtype: type,
         inhoud: inhoud > 0 ? inhoud : null, inhoud_eenheid: inhoud > 0 ? $('#cf-inhoud-eenheid', el).value : '', uitlekgewicht: $('#cf-uitlek', el).checked, merk: $('#cf-merk', el).value.trim(),
         verpakking: maatLezen(el, 'cf'),
-        ...(minimum !== undefined ? { minimum } : {}),
+        ...(minimum !== undefined ? { minimum, minimum_maat: teltLezen(el, 'cf') } : {}),
         ...(grootverpakking !== undefined ? { grootverpakking } : {}),
         // alleen de prijzen van deze inhoud; niets aangepast: niets bewaren
         ...(pz.dataset.aangeraakt || nieuw ? { prijzen, prijzen_inhoud: formPrijzenInhoud(pz) } : {}) };
@@ -1404,7 +1428,7 @@ function productFormulier(bestaand, sjabloon = {}) {
         ${nieuw ? '<div id="pf-catkeuze" class="catkeuze" hidden></div>' : ''}
         <label class="veld"><span>Merk (mag leeg)</span><input id="pf-merk" value="${esc(p.merk || '')}" autocomplete="off" autocapitalize="words" placeholder="bv. Bonduelle"></label>
         ${maatKeuzeHtml('pf', p.verpakking)}
-        ${minimumVinkjeHtml('pf', catMinimum(catalogusVan(p.naam), maatVan(p)))}
+        ${minimumVinkjeHtml('pf', catMinimumVoor(catalogusVan(p.naam), maatVan(p)).minimum, catMinimumVoor(catalogusVan(p.naam), maatVan(p)).telt)}
         <div class="rij2">
           <label class="veld"><span>Hoeveelheid</span><input id="pf-hv" inputmode="decimal" value="${esc(fmt(p.hoeveelheid))}" required></label>
           <label class="veld"><span>Eenheid</span><select id="pf-eenheid">${eenheidOpties(p.eenheid)}</select></label>
@@ -1561,7 +1585,7 @@ function productFormulier(bestaand, sjabloon = {}) {
         vervaldatum: $('#pf-datum', el).value, datumtype: type, categorie: $('#pf-cat', el).value.trim(),
         minimum: num($('#pf-min', el).value) || 0, barcode: p.barcode || '', // barcodes staan voorlopig uit; een bestaande code blijft bewaard
         aankoopdatum: $('#pf-aankoop', el).value, notitie: $('#pf-notitie', el).value.trim(), grootverpakking,
-        ...(alleMerken !== undefined ? { catalogus_minimum: alleMerken } : {}),
+        ...(alleMerken !== undefined ? { catalogus_minimum: alleMerken, catalogus_minimum_maat: teltLezen(el, 'pf') } : {}),
       };
       try {
         await api(nieuw ? 'POST' : 'PUT', nieuw ? 'producten' : `producten/${p.id}`, data);
@@ -1889,7 +1913,7 @@ function boodschapToevoegen() {
             await api(bestaat ? 'PUT' : 'POST', 'catalogus', bestaat ? { naam: n, oudeNaam: bestaat.naam, ...rest } : { naam: n, eenheid: pe, ...rest });
           }
           await api('POST', 'boodschappen', { naam: n, hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, ...inh, merk: $('#bt-merk', el).value.trim(), verpakking: maatLezen(el, 'bt'), product_id: S.producten.find((p) => zelfde(p.naam, n))?.id || null,
-            ...(alleMerken !== undefined ? { catalogus_minimum: alleMerken } : {}) });
+            ...(alleMerken !== undefined ? { catalogus_minimum: alleMerken, catalogus_minimum_maat: teltLezen(el, 'bt') } : {}) });
         } catch { return; /* melding al getoond */ }
         toast(lijstMelding(n, inh));
         naam.value = ''; $('#bt-merk', el).value = ''; $('#bt-zoek', el).value = ''; zoek = ''; hv.value = '1'; eenheid.value = vorige = 'stuks'; minKnopZetten();
