@@ -777,7 +777,15 @@
       // minimum voor het hele product: alle merken en inhouden samen (van de gekozen grootte: klein, groot of alle)
       if ('minimum' in data) { const m = getal(data.minimum), veld = catMinimumVeld(maatVan(data)); if (m > 0) c[veld] = m; else delete c[veld]; }
       if ('grootverpakking' in data) grootZetten(c.naam, grootUit(data.grootverpakking));
-      if ('inhoud' in data || 'merk' in data || 'verpakking' in data) variantBewaren(c, v, oud);
+      if ('inhoud' in data || 'merk' in data || 'verpakking' in data) {
+        variantBewaren(c, v, oud);
+        // alleen de grootte veranderd (bv. van "niet opgegeven" naar groot): je voorraadregels van die variant volgen,
+        // anders tellen ze niet mee voor het minimum van die grootte
+        const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
+        if (oud && variantSleutel(oud) !== variantSleutel(v) && zonderMaat(oud) === zonderMaat(v)) {
+          for (const p of S.producten) if (zelfde(p.naam, c.naam) && variantSleutel(variantUit(p)) === variantSleutel(oud)) { delete p.verpakking; Object.assign(p, maatVeld(maatVan(v))); }
+        }
+      }
       else if ('uitlekgewicht' in data) c.uitlekgewicht = !!data.uitlekgewicht;
       c.laatst = nu();
       if (Array.isArray(data.prijzen)) prijzenZetten(naam, data.prijzen, c.eenheid, data.prijzen_inhoud);
@@ -1280,6 +1288,7 @@
     d.instellingen = d.instellingen || {};
     if (typeof S.instellingen.auto_backup === 'boolean') d.instellingen.auto_backup = S.instellingen.auto_backup;
     S = normaliseren(d);
+    regelGroottesHerstellen();
     // beide toestellen zagen dat iets bijna op was en zetten het op de lijst: één keer houden
     const gezien = new Set();
     S.boodschappen = S.boodschappen.filter((b) => {
@@ -1292,6 +1301,27 @@
   }
   /** Na het laden: de automatische boodschappen (minimum) opnieuw nakijken, zodat een verkeerde van een oudere versie
    *  vanzelf verdwijnt. Alleen producten die al zo'n boodschap hebben: wat je zelf van de lijst haalde, komt niet terug. */
+  /**
+   * Een voorraadregel zonder grootte waarvan de variant in de catalogus intussen een grootte kreeg (bv. Everyday à 320 g
+   * werd in de catalogus "groot"): de regel krijgt die grootte ook, anders telt ze niet mee voor het minimum van die grootte.
+   * Alleen als de catalogus die variant niet meer zonder grootte heeft en er precies één grootte voor is. Geeft de namen terug.
+   */
+  function regelGroottesHerstellen() {
+    const namen = new Set();
+    const zonderMaat = (x) => variantSleutel({ ...x, verpakking: '' });
+    for (const p of S.producten) {
+      if (maatVan(p)) continue;
+      const c = S.catalogus.find((x) => zelfde(x.naam, p.naam));
+      if (!c) continue;
+      const k = zonderMaat(variantUit(p)), vs = variantenVan(c).filter((v) => zonderMaat(v) === k);
+      if (!vs.length || vs.some((v) => !maatVan(v))) continue;
+      const maten = new Set(vs.map(maatVan));
+      if (maten.size !== 1) continue;
+      p.verpakking = [...maten][0];
+      namen.add(p.naam);
+    }
+    return namen;
+  }
   function minimumBoodschappenNakijken() {
     // overblijfsel van een oudere versie: een variant zonder grootte naast dezelfde (merk en inhoud) mét grootte,
     // terwijl geen enkele voorraadregel nog zonder grootte is: dat was een verbetering van de grootte, geen ander product
@@ -1301,7 +1331,8 @@
       c.varianten = c.varianten.filter((v) => maatVan(v) || !c.varianten.some((w) => maatVan(w) && zonderMaat(w) === zonderMaat(v))
         || S.producten.some((x) => zelfde(x.naam, c.naam) && variantSleutel(variantUit(x)) === variantSleutel(v)));
     }
-    for (const n of new Set(S.boodschappen.filter((b) => b.bron === 'minimum' && !b.afgevinkt).map((b) => b.naam))) minimumControleren(n);
+    const hersteld = regelGroottesHerstellen();
+    for (const n of new Set([...hersteld, ...S.boodschappen.filter((b) => b.bron === 'minimum' && !b.afgevinkt).map((b) => b.naam)])) minimumControleren(n);
   }
   const syncMeld = (melding) => document.dispatchEvent(new CustomEvent('syncstatus', { detail: { melding } }));
   const zBewaren = () => idb(SYNC_SLEUTEL, Z ? JSON.parse(JSON.stringify(Z)) : undefined, !Z).catch((f) => console.warn('Synchronisatie niet bewaard', f));

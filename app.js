@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 92;
+const APP_VERSIE = 93;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1029,7 +1029,17 @@ const grootTekst = (g, eenheid) => [`1 ${g.eenheid === 'stuks' ? 'stuk' : g.eenh
   g.potten ? (eenheid === 'pot' ? `vult ±${fmt(g.potten)} ${meervoud('pot', g.potten)}` : `met ${fmt(g.potten)} ${meervoud(eenheid, g.potten)}`) : ''].filter(Boolean).join(' · ');
 /** "Doos", "Zak" ... van een grote verpakking, met hoofdletter. */
 const grootNaam = (g) => { const t = g.eenheid === 'stuks' ? 'Verpakking' : g.eenheid; return t.charAt(0).toUpperCase() + t.slice(1); };
-const minimumTekst = (c) => ['', 'klein', 'groot'].filter((m) => catMinimum(c, m)).map((m) =>
+/**
+ * Geldt het minimum voor alle groottes nog? Niet als kleine en/of grote verpakkingen een eigen minimum hebben en het product
+ * niets heeft van de andere groottes (geen voorraadregel, geen variant): dan is het een overblijfsel van vroeger, dat pas
+ * weer geldt als je iets van die andere grootte koopt (zoals in lokaal.js, minimumControleren).
+ */
+function algemeenMinimumGeldt(c) {
+  const rest = ['', 'klein', 'groot'].filter((m) => !(m && catMinimum(c, m)));
+  return rest.length === 3 || S.producten.some((p) => zelfde(p.naam, c.naam) && rest.includes(maatVan(p)))
+    || variantenVan(c).some((v) => rest.includes(maatVan(v)));
+}
+const minimumTekst = (c) => ['', 'klein', 'groot'].filter((m) => catMinimum(c, m) && (m || algemeenMinimumGeldt(c))).map((m) =>
   `minimum ${hoeveelTekst(catMinimum(c, m), c.eenheid || 'stuks') || fmt(catMinimum(c, m))}${m ? ` ${m === 'groot' ? 'grote' : 'kleine'} verpakkingen` : ''} in huis, alle merken samen`).join(' · ');
 // Vinkje "Minimum voor alle merken samen" (in de catalogus, bij voorraad toevoegen en bij boodschappen); het minimum hoort bij het catalogusproduct.
 const minimumVinkjeHtml = (id, minimum) => `<label class="vink uitlek-vink"><input type="checkbox" id="${id}-alle-aan" ${minimum > 0 ? 'checked' : ''}><span class="vakje"></span>

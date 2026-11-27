@@ -41,6 +41,8 @@ jobs:
         run: node test/verpakking.test.cjs
       - name: Prijs van een kleine en een grote verpakking
         run: node test/maat-prijzen.test.cjs
+      - name: Minimum per grootte (voorraadregel volgt de grootte uit de catalogus)
+        run: node test/minimum-grootte.test.cjs
       - name: Geopende verpakkingen en voorraad per categorie
         run: node test/geopend.test.cjs
       - name: Maaltijdplanner
