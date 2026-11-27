@@ -381,15 +381,30 @@
   }
   // Een geopende verpakking telt als opgebruikt: ze staat nog in je voorraad (om op te maken), maar telt niet mee voor het minimum.
   const telt = (p) => !p.geopend;
+  // Dezelfde verpakking staat soms op twee plaatsen (bv. dille in de kruidenkast en in de witte kast), en dan heeft de ene
+  // regel soms een inhoud en de andere niet. Een regel zonder inhoud telt mee bij het enige minimum van die grootte,
+  // en heeft dat minimum zelf geen inhoud, dan tellen alle regels van die grootte zonder eigen minimum mee.
+  const sleutelMaat = (s) => (/^(klein|groot)\|/.exec(s) || [])[1] || '';
+  function regelsVoorMinimum(naam, sleutel) {
+    const maat = sleutelMaat(sleutel), leeg = metMaat(maat, '');
+    const alle = S.producten.filter((p) => zelfde(p.naam, naam) && maatVan(p) === maat && telt(p));
+    const eigen = alle.filter((p) => productSleutel(p) === sleutel);
+    const actief = new Set(alle.filter((p) => p.minimum > 0).map(productSleutel));
+    if (actief.size !== 1 || !actief.has(sleutel)) return eigen;
+    return [...eigen, ...alle.filter((p) => productSleutel(p) !== sleutel && (sleutel === leeg || productSleutel(p) === leeg))];
+  }
   function minimumPerInhoud(naam, sleutel) {
-    const regels = S.producten.filter((p) => zelfde(p.naam, naam) && productSleutel(p) === sleutel && telt(p));
+    const regels = regelsVoorMinimum(naam, sleutel);
     const auto = autoBoodschappen(naam).find((b) => typeof b.minimum_maat !== 'string' && minimumSleutel(b) === sleutel);
     const weg = () => { if (auto) S.boodschappen = S.boodschappen.filter((b) => b !== auto); };
     if (!regels.length) return weg();
     const hoofd = regels.reduce((a, b) => ((b.minimum || 0) > (a.minimum || 0) ? b : a));
     if (!(hoofd.minimum > 0)) return weg();
     const maat = maatVan(hoofd);
-    const totaal = regels.reduce((s, r) => s + (omrekenen(r.hoeveelheid || 0, r.eenheid, hoofd.eenheid) ?? 0), 0);
+    // verpakkingen tellen per stuk (pot, stuks, zakje ... samen); gewicht en volume worden omgerekend
+    const tel = (r) => omrekenen(r.hoeveelheid || 0, r.eenheid, hoofd.eenheid)
+      ?? (TELBARE.has(r.eenheid || 'stuks') && TELBARE.has(hoofd.eenheid || 'stuks') ? r.hoeveelheid || 0 : 0);
+    const totaal = regels.reduce((s, r) => s + tel(r), 0);
     if (totaal < hoofd.minimum) {
       const tekort = Math.round((hoofd.minimum - totaal) * 100) / 100;
       const groot = regels.find((r) => r.grootverpakking);
