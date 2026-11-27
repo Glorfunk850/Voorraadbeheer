@@ -1712,7 +1712,7 @@ function weekBoodschappen(items, wanneer) {
 // INSTELLINGEN
 // ---------------------------------------------------------------------------
 // App installeren: knop als de browser het aanbiedt, anders uitleg per toestel
-const alsApp = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const alsApp = () => !!window.AndroidApp || window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isAndroid = () => /android/i.test(navigator.userAgent);
 function installUitleg() {

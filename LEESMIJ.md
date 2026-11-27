@@ -54,6 +54,11 @@ Recepten toevoegen kan door een pdf met tekst te kiezen of door het recept zelf 
 ## Installeren
 
 - **Android (Chrome):** open het adres → menu ⋮ → **App installeren**.
+- **Android als APK (zonder Play Store):** bij elke wijziging bouwt GitHub automatisch een APK (tabblad **Actions** →
+  *Android-app (APK)*; op de main-branch staat ze ook bij **Releases**). Download `Voorraad.apk` op je telefoon,
+  open het bestand en sta "Installeren van onbekende apps" toe. De app werkt volledig offline; de webpagina-versie
+  en de APK hebben elk hun eigen gegevens (overzetten met een back-up). Een nieuwere APK installeer je gewoon
+  over de vorige heen; je gegevens blijven bewaard. De code van de app staat in de map `android/`.
 - **iPhone (Safari):** open het adres → deelknop → **Zet op beginscherm**.
 - **Computer (Chrome/Edge):** installeer-icoon in de adresbalk, of Instellingen in de app → **App installeren**.
 

@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+}
+
+// De webapp (index.html, app.js, vendor/ …) uit de hoofdmap gaat mee in de APK.
+def webMap = file("$buildDir/www")
+tasks.register('webappKopieren', Sync) {
+    from(rootProject.file('..')) {
+        include '*.html', '*.js', '*.css', '*.png', '*.svg', '*.webmanifest', 'vendor/**'
+        exclude 'sw.js', 'barcode.js'
+    }
+    into "$webMap/www"
+}
+preBuild.dependsOn 'webappKopieren'
+
+android {
+    namespace 'nl.voorraad.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'nl.voorraad.app'
+        minSdk 24
+        targetSdk 34
+        versionCode((System.getenv('VERSIE_CODE') ?: '1').toInteger())
+        versionName(System.getenv('VERSIE_NAAM') ?: '1.0')
+    }
+
+    signingConfigs {
+        // Vaste sleutel, zodat een nieuwe APK over de vorige heen geïnstalleerd kan worden
+        // (je gegevens blijven dan bewaard). Dit is geen geheim: de app staat niet in de Play Store.
+        vast {
+            storeFile file('apk-sleutel.jks')
+            storePassword 'android'
+            keyAlias 'voorraad'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.vast
+        }
+        debug {
+            signingConfig signingConfigs.vast
+        }
+    }
+
+    sourceSets {
+        main.assets.srcDirs += webMap
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

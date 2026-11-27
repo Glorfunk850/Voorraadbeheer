@@ -311,6 +311,8 @@
     return '﻿' + regels.join('\r\n');
   }
   function downloaden(naam, inhoud, type) {
+    // in de Android-app (APK): het toestel vraagt waar het bestand bewaard moet worden
+    if (window.AndroidApp) { window.AndroidApp.bewaar(naam, type, inhoud); return; }
     const url = URL.createObjectURL(new Blob([inhoud], { type }));
     const a = document.createElement('a');
     a.href = url; a.download = naam; a.style.display = 'none';
@@ -599,7 +601,7 @@
   if (kanaal) kanaal.onmessage = async () => { await laden(); document.dispatchEvent(new Event('visibilitychange')); };
 
   // ------------------------------------------------------------------ installeren / offline
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  if ('serviceWorker' in navigator && location.protocol !== 'file:' && !window.AndroidApp) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('sw.js').then((reg) => {
         reg.addEventListener('updatefound', () => {
