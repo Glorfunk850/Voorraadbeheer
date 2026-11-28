@@ -148,6 +148,7 @@ Het minimum geldt per inhoud en per verpakking (klein of groot): heb je bv. rijs
 
 <h2>Boodschappen</h2>
 <p>Op je boodschappenlijst komt wat je zelf toevoegt, wat onder je minimumvoorraad zakt en wat je vanuit een recept of de planner kiest.</p>
+<p>Wat onder je minimumvoorraad zakt, staat er met het tekort op. Wil je meer kopen, verhoog dan het aantal met <b>+</b>: dat blijft zo, ook als de app het minimum opnieuw nakijkt. Minder dan het tekort kan niet: het minimum blijft gerespecteerd.</p>
 
 <h3>Toevoegen</h3>
 <ul>
