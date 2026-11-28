@@ -29,6 +29,8 @@ jobs:
         run: node test/backup.test.cjs
       - name: Prijzen per winkel en winkellijsten
         run: node test/winkels.test.cjs
+      - name: Goedkoopste en favoriete winkel per product
+        run: node test/favoriet.test.cjs
       - name: Eigen eenheden toevoegen en verwijderen
         run: node test/eenheden.test.cjs
       - name: Hetzelfde product meermaals op de boodschappenlijst

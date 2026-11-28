@@ -361,6 +361,7 @@ details.filter-uitklap .recept-filter + .recept-filter { margin-top: .4rem; }
 
 /* ---------- prijzen per winkel ---------- */
 .pz-uitleg { font-size: .82rem; margin: .1rem 0 .6rem; }
+.fav-veld { margin-top: .9rem; }
 .prijs-rij { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem 32px; gap: .5rem; align-items: center; margin-bottom: .5rem; }
 .prijs-rij .pz-naam { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prijs-rij input { padding: .5rem .65rem; font-size: .95rem; min-width: 0; }
