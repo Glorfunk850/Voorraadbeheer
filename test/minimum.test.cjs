@@ -194,6 +194,31 @@ async function main() {
     controle(d.boodschappen.some((x) => x.naam === naam && x.bron === 'minimum' && x.hoeveelheid === 1), `${naam}: ook die op: 1 op de lijst`);
   }
 
+  // een automatische boodschap zelf verhogen: blijft staan bij het opnieuw nakijken, maar gaat nooit onder het tekort
+  await api('POST', 'producten', { naam: 'Soja yoghurt', hoeveelheid: 2, eenheid: 'stuks', minimum: 2 });
+  d = await api('GET', 'alles');
+  const soja = d.producten.find((p) => p.naam === 'Soja yoghurt');
+  d = await api('POST', `producten/${soja.id}/verbruik`, { hoeveelheid: 1 });
+  let sb = d.boodschappen.find((x) => x.naam === 'Soja yoghurt' && x.bron === 'minimum');
+  controle(sb && sb.hoeveelheid === 1, 'soja yoghurt: tekort 1 op de lijst');
+  await api('PUT', `boodschappen/${sb.id}`, { hoeveelheid: 2 });
+  await api('PUT', `producten/${soja.id}`, { notitie: 'iets' }); // minimum opnieuw nakijken
+  await page.reload(); await page.waitForSelector('#inhoud h1');
+  d = await api('GET', 'alles');
+  sb = d.boodschappen.find((x) => x.id === sb.id);
+  controle(sb && sb.hoeveelheid === 2, `soja yoghurt: zelf op 2 gezet blijft 2 (${sb && sb.hoeveelheid})`);
+  d = await api('POST', `producten/${soja.id}/verbruik`, { hoeveelheid: 1 });
+  sb = d.boodschappen.find((x) => x.id === sb.id);
+  controle(sb && sb.hoeveelheid === 3, `soja yoghurt: tekort wordt 2, plus 1 extra = 3 (${sb && sb.hoeveelheid})`);
+  d = await api('PUT', `boodschappen/${sb.id}`, { hoeveelheid: 1 });
+  sb = d.boodschappen.find((x) => x.id === sb.id);
+  controle(sb && sb.hoeveelheid === 2, `soja yoghurt: niet onder het tekort van 2 (${sb && sb.hoeveelheid})`);
+  await page.goto(basis + '#boodschappen'); await page.reload(); await page.waitForSelector(`[data-min="${sb.id}"]`);
+  controle(await page.isDisabled(`[data-min="${sb.id}"]`), 'soja yoghurt: min-knop uit op het tekort');
+  await page.click(`[data-plus="${sb.id}"]`);
+  await page.waitForFunction((i) => !document.querySelector(`[data-min="${i}"]`).disabled, sb.id);
+  controle(true, 'soja yoghurt: na + kan de min-knop weer');
+
   controle(!jsFouten.length, 'geen JavaScript-fouten' + (jsFouten.length ? ': ' + jsFouten.join(' | ') : ''));
   await browser.close();
   srv.close();

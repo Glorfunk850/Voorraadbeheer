@@ -355,6 +355,15 @@
   const grootBoodschap = (p, sleutel) => ({ id: id(), naam: p.naam, hoeveelheid: 1, eenheid: p.grootverpakking.eenheid,
     ...boodschapInhoud(p.grootverpakking.eenheid, p.grootverpakking.inhoud, p.grootverpakking.inhoud_eenheid),
     ...(typeof sleutel === 'string' ? { minimum_sleutel: sleutel } : {}), product_id: p.id, potten_voor: p.id, afgevinkt: 0, bron: 'minimum' });
+  // Een automatische boodschap mag je zelf verhogen (bv. 2 i.p.v. het tekort van 1). Het tekort waarvoor ze laatst
+  // berekend werd, staat in `minimum_tekort`; wat je er zelf bovenop zette, blijft behouden als het tekort verandert.
+  // Onder het tekort gaan kan niet: het minimum blijft gerespecteerd.
+  function tekortZetten(b, tekort) {
+    const vorig = b.minimum_tekort > 0 ? b.minimum_tekort : null;
+    const extra = vorig !== null && b.hoeveelheid > vorig ? b.hoeveelheid - vorig : 0;
+    b.hoeveelheid = Math.round((tekort + extra) * 100) / 100;
+    b.minimum_tekort = tekort;
+  }
   const autoBoodschappen = (naam) => S.boodschappen.filter((b) => zelfde(b.naam, naam) && !b.afgevinkt && b.bron === 'minimum');
   function minimumControleren(naam) {
     const c = S.catalogus.find((x) => zelfde(x.naam, naam));
@@ -421,11 +430,11 @@
         S.boodschappen.push(grootBoodschap(groot, sleutel));
         return;
       }
-      if (auto && auto.potten_voor) { auto.hoeveelheid = tekort; auto.eenheid = hoofd.eenheid; delete auto.potten_voor; delete auto.inhoud; delete auto.inhoud_eenheid; Object.assign(auto, maatVeld(maat)); }
-      else if (auto) auto.hoeveelheid = tekort;
+      if (auto && auto.potten_voor) { auto.hoeveelheid = tekort; auto.minimum_tekort = tekort; auto.eenheid = hoofd.eenheid; delete auto.potten_voor; delete auto.inhoud; delete auto.inhoud_eenheid; Object.assign(auto, maatVeld(maat)); }
+      else if (auto) { if (auto.eenheid !== hoofd.eenheid) delete auto.minimum_tekort; tekortZetten(auto, tekort); }
       else if (!S.boodschappen.some((b) => zelfde(b.naam, naam) && !b.afgevinkt && (boodschapSleutel(b) === sleutel || (b.bron === 'minimum' && minimumSleutel(b) === sleutel)))) {
         S.boodschappen.push({ id: id(), naam: hoofd.naam, hoeveelheid: tekort, eenheid: hoofd.eenheid, ...maatVeld(maat),
-          minimum_sleutel: sleutel, product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
+          minimum_sleutel: sleutel, minimum_tekort: tekort, product_id: hoofd.id, afgevinkt: 0, bron: 'minimum' });
       }
     } else weg();
   }
@@ -453,10 +462,10 @@
       S.boodschappen.push({ ...grootBoodschap(groot), minimum_maat: m });
       return;
     }
-    if (houden && houden.potten_voor) { delete houden.potten_voor; delete houden.inhoud; delete houden.inhoud_eenheid; }
-    if (houden) { houden.hoeveelheid = tekort; houden.eenheid = eenheid; houden.minimum_maat = m; delete houden.verpakking; Object.assign(houden, maatVeld(m)); return; }
+    if (houden && (houden.potten_voor || houden.eenheid !== eenheid)) { delete houden.potten_voor; delete houden.inhoud; delete houden.inhoud_eenheid; delete houden.minimum_tekort; }
+    if (houden) { tekortZetten(houden, tekort); houden.eenheid = eenheid; houden.minimum_maat = m; delete houden.verpakking; Object.assign(houden, maatVeld(m)); return; }
     if (alOpLijst()) return; // staat er zelf al op
-    S.boodschappen.push({ id: id(), naam: c.naam, hoeveelheid: tekort, eenheid, ...maatVeld(m), minimum_maat: m,
+    S.boodschappen.push({ id: id(), naam: c.naam, hoeveelheid: tekort, eenheid, ...maatVeld(m), minimum_maat: m, minimum_tekort: tekort,
       product_id: (regels[0] || S.producten.find((p) => zelfde(p.naam, naam)))?.id || null, afgevinkt: 0, bron: 'minimum' });
   }
   /** Minimum voor alle merken samen zetten (0: uit); maakt het catalogusproduct aan als het er nog niet is. */
@@ -1002,7 +1011,10 @@
       if (b && methode === 'PUT') {
         if ('afgevinkt' in data) b.afgevinkt = data.afgevinkt ? 1 : 0;
         if ('hoeveelheid' in data) b.hoeveelheid = getal(data.hoeveelheid);
+        if ('eenheid' in data && (data.eenheid || '') !== b.eenheid) delete b.minimum_tekort; // andere eenheid: tekort telt niet meer zo
         if ('eenheid' in data) b.eenheid = data.eenheid || '';
+        // een automatische boodschap gaat niet onder het tekort: het minimum blijft gerespecteerd
+        if (b.bron === 'minimum' && !b.afgevinkt && b.minimum_tekort > 0 && b.hoeveelheid !== null && b.hoeveelheid < b.minimum_tekort) b.hoeveelheid = b.minimum_tekort;
         if ('merk' in data) b.merk = String(data.merk || '').trim();
         if ('verpakking' in data && maatVan(data) !== maatVan(b)) {
           delete b.verpakking; Object.assign(b, maatVeld(maatVan(data)));

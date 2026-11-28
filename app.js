@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 94;
+const APP_VERSIE = 95;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1627,7 +1627,7 @@ function tekenBoodschappen() {
       <input type="checkbox" data-vink="${b.id}" ${b.afgevinkt ? 'checked' : ''}><span class="vakje"></span>
       <span class="naam"><button type="button" class="naam-knop" data-bewerk="${b.id}" aria-label="${esc(b.naam)} bewerken">${esc(b.naam)}${merkTekst(b)}</button><small>${b.bron === 'minimum' && !b.afgevinkt ? (b.potten_voor != null ? 'Grote verpakking, onder je minimum · ' : 'Onder je minimumvoorraad · ') : ''}<button type="button" class="prijs-link${p ? '' : ' leeg'}" data-prijs="${b.id}">${esc(prijs)}</button></small>${merkRegel}</span>
       <span class="aantal-stap">
-        <button type="button" class="stap${b.hoeveelheid === null ? ' verborgen' : ''}" data-min="${b.id}" aria-label="Minder ${esc(b.naam)}" ${b.hoeveelheid > stapVan(b.eenheid) ? '' : 'disabled'}>−</button>
+        <button type="button" class="stap${b.hoeveelheid === null ? ' verborgen' : ''}" data-min="${b.id}" aria-label="Minder ${esc(b.naam)}" ${b.hoeveelheid > stapVan(b.eenheid) && !(b.bron === 'minimum' && !b.afgevinkt && b.minimum_tekort > 0 && b.hoeveelheid <= b.minimum_tekort + 1e-9) ? '' : 'disabled'}>−</button>
         <button type="button" class="stap-getal" data-hv="${b.id}" aria-label="Hoeveelheid en eenheid van ${esc(b.naam)} aanpassen">${b.hoeveelheid === null || b.hoeveelheid === undefined ? '' : esc(`${fmt(b.hoeveelheid)} ${b.eenheid || 'stuks'}`)}${boodschapInhoudVan(b) ? `<small class="inhoud-per">à ${esc(hoeveelTekst(boodschapInhoudVan(b).per, boodschapInhoudVan(b).eenheid))}</small>` : ''}</button>
         <button type="button" class="stap" data-plus="${b.id}" aria-label="Meer ${esc(b.naam)}">+</button></span>
       <button class="weg" data-weg="${b.id}" aria-label="Verwijderen">×</button></label></li>`;
@@ -1714,7 +1714,9 @@ function hoeveelheidKiezen(id) {
       <div class="paneel-voet"><button class="knop" data-sluit>Annuleren</button><button class="knop primair" id="hk-ok">Bewaren</button></div>`;
     sluitKnoppen(el);
     const hv = $('#hk-hv', el), eenheid = $('#hk-eenheid', el);
-    const minKnopZetten = () => { $('#hk-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
+    // een automatische boodschap gaat niet onder het tekort (in dezelfde eenheid): het minimum blijft gerespecteerd
+    const ondergrens = () => (b.bron === 'minimum' && !b.afgevinkt && b.minimum_tekort > 0 && eenheid.value === e0 ? b.minimum_tekort : 0);
+    const minKnopZetten = () => { $('#hk-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value) && num(hv.value) > ondergrens() + 1e-9); };
     $('#hk-plus', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, 1)); minKnopZetten(); };
     $('#hk-min', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, -1)); minKnopZetten(); };
     hv.oninput = minKnopZetten;
@@ -1723,7 +1725,8 @@ function hoeveelheidKiezen(id) {
     eenheid.onchange = () => { if (num(hv.value) === stapVan(vorige)) hv.value = fmt(stapVan(eenheid.value)); vorige = eenheid.value; minKnopZetten(); inhoudVeldenZetten(el, 'hk', eenheid.value); };
     minKnopZetten();
     $('#hk-ok', el).onclick = async () => {
-      const h = num(hv.value);
+      let h = num(hv.value);
+      if (h !== null && h < ondergrens()) { h = ondergrens(); hv.value = fmt(h); }
       const inh = inhoudVeldenLezen(el, 'hk', eenheid.value);
       if (!inh) return;
       await api('PUT', `boodschappen/${b.id}`, { hoeveelheid: h, eenheid: h === null ? '' : eenheid.value, ...inh });
