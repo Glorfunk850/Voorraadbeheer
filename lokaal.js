@@ -553,6 +553,14 @@
     }
     lijstAanvullen(S.instellingen, 'winkels', c.prijzen.map((p) => p.winkel));
   }
+  function favorietZetten(naam, winkel, eenheid) {
+    naam = (naam || '').trim(); winkel = String(winkel || '').trim();
+    if (!naam) return;
+    let c = S.catalogus.find((x) => zelfde(x.naam, naam));
+    if (!c && !winkel) return;
+    if (!c) { catalogusBijwerken({ naam, eenheid: eenheid || '' }, false); c = S.catalogus.find((x) => zelfde(x.naam, naam)); }
+    if (winkel) { c.favoriete_winkel = winkel; lijstAanvullen(S.instellingen, 'winkels', [winkel]); } else delete c.favoriete_winkel;
+  }
   const gebeurtenis = (soort, naam) => S.gebeurtenissen.push({ soort, naam, tijdstip: nu() });
 
   const alles = () => JSON.parse(JSON.stringify({
@@ -753,6 +761,8 @@
       if (data.veld === 'winkel') {
         // winkel hernoemd of verwijderd (naar leeg): prijzen bij die winkel mee aanpassen
         for (const c of S.catalogus) {
+          // favoriete winkel mee hernoemen; verwijderd: weer de goedkoopste winkel
+          if (zelfde(c.favoriete_winkel, data.van)) { if (data.naar) c.favoriete_winkel = data.naar; else delete c.favoriete_winkel; }
           if (!(c.prijzen || []).some((p) => zelfde(p.winkel, data.van))) continue;
           c.prijzen = prijzenLijst(c.prijzen.map((p) => (zelfde(p.winkel, data.van) ? { ...p, winkel: data.naar || '' } : p)));
         }
@@ -763,7 +773,13 @@
       return alles();
     }
 
-    if (bron === 'prijzen') { prijzenZetten(data.naam, data.prijzen, data.eenheid, data.prijzen_inhoud); return alles(); }
+    if (bron === 'prijzen') {
+      prijzenZetten(data.naam, data.prijzen, data.eenheid, data.prijzen_inhoud);
+      if ('favoriete_winkel' in data) favorietZetten(data.naam, data.favoriete_winkel, data.eenheid);
+      return alles();
+    }
+    // je favoriete winkel voor een product (leeg: de goedkoopste winkel)
+    if (bron === 'favoriet') { favorietZetten(data.naam, data.winkel, data.eenheid); return alles(); }
     if (bron === 'catalogus' && methode === 'DELETE') {
       // met `variant`: alleen dat merk en die inhoud weghalen (zolang er nog andere zijn)
       const c = S.catalogus.find((x) => zelfde(x.naam, data && data.naam));
