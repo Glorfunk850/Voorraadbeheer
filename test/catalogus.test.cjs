@@ -197,7 +197,7 @@ async function main() {
   await page.click('#b-menu');
   await page.fill('#bt-naam', 'bonduel');
   await page.dispatchEvent('#bt-naam', 'input');
-  controle((await page.textContent('#bt-lijst')).includes('Kikkererwten'), 'boodschap: zoeken op merk toont het catalogusproduct');
+  controle((await page.textContent('#bt-suggesties')).includes('Kikkererwten'), 'boodschap: typen bij Wat toont het catalogusproduct meteen onder het veld (ook zoeken op merk)');
   await page.fill('#bt-naam', '');
   await page.dispatchEvent('#bt-naam', 'input');
   await page.fill('#bt-zoek', 'kikker');

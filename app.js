@@ -27,7 +27,7 @@ const ALTIJD_IN_HUIS = new Set(['water', 'kraanwater', 'heet water', 'koud water
   'peper en zout', 'zout en peper', 'peper & zout', 'zout & peper', 'peper en zout naar smaak', 'zout en peper naar smaak']);
 const MAX_PDF_PAGINAS = 15;
 // Zelfde nummer als VERSIE in sw.js; staat onderaan bij Instellingen, zodat je kunt zien of een toestel de nieuwste versie heeft.
-const APP_VERSIE = 96;
+const APP_VERSIE = 97;
 
 let S = { producten: [], boodschappen: [], recepten: [], catalogus: [], planning: [], instellingen: {} };
 let status = {};
@@ -1827,7 +1827,7 @@ function volgendeStap(h, e, richting) {
 
 /** Menu om zelf een boodschap te kiezen of te typen, met het aantal erbij. Blijft open om er meer toe te voegen. */
 function boodschapToevoegen() {
-  let zoek = '', eenheidZetten = () => {}, meerVullen = () => {}, meerLezen = () => ({}), meerVoor = null;
+  let zoek = '', bovenaan = false, eenheidZetten = () => {}, meerVullen = () => {}, meerLezen = () => ({}), meerVoor = null;
   const bekendeEenheid = (naam) => S.producten.find((p) => zelfde(p.naam, naam))?.eenheid || catalogusVan(naam)?.eenheid || 'stuks';
   paneelOpenen((el) => {
     const lijstTekenen = () => {
@@ -1841,16 +1841,19 @@ function boodschapToevoegen() {
       // in huis: per merk en inhoud als het product er meer heeft
       const inHuis = (n, v) => { const c = catalogusVan(n); return S.producten.filter((p) => (c && v ? hoortBijVariant(p, c, v) : zelfde(p.naam, n)) && p.hoeveelheid > 0); };
       $('#bt-zoek-blok', el).hidden = !catalogusnamen().length;
-      $('#bt-lijst', el).innerHTML = namen.length ? `<ul class="lijst">${namen.map(({ n, v, elk }, i) => {
+      // typ je bij Wat, dan staan de keuzes meteen onder dat veld (anders zie je ze niet boven het toetsenbord)
+      const doel = bovenaan && q ? $('#bt-suggesties', el) : $('#bt-lijst', el);
+      $(bovenaan && q ? '#bt-lijst' : '#bt-suggesties', el).innerHTML = '';
+      doel.innerHTML = namen.length ? `<ul class="lijst">${namen.map(({ n, v, elk }, i) => {
         const b = opLijst(n), h = inHuis(n, v);
         const onder = b.length ? `Staat op je lijst${b.some((x) => x.hoeveelheid) ? ': ' + b.map((x) => boodschapTekst(x) || '?').join(' + ') : ''}`
           : h.length ? `In huis: ${elk ? hoeveelTekst(totaalInHuis(n), catalogusVan(n)?.eenheid || 'stuks') || fmt(totaalInHuis(n)) : h.map(voorraadTekst).join(' + ')}` : 'Niet in huis';
         const merkDeel = elk ? '<span class="merk"> · elk merk</span>' : merkTekst({ merk: v ? v.merk : merkVan(n) });
         return `<li><button type="button" class="rij" data-kies="${i}"><span class="naam">${esc(n)}${merkDeel}<small>${esc([elk ? 'merk en inhoud om het even' : v && [inhoudLabel(v), maatWoord(maatVan(v))].filter(Boolean).join(' '), onder].filter(Boolean).join(' · '))}</small></span><span class="rechts">${ICOON.plus.replace('<svg', '<svg width="18" height="18"')}</span></button></li>`;
-      }).join('')}</ul>` : q ? `<div class="leeg">Niets gevonden in je catalogus. Typ het bij Wat en tik op Toevoegen om "${esc(zoek.trim())}" op je lijst te zetten.</div>` : '';
+      }).join('')}</ul>` : q && !bovenaan ? `<div class="leeg">Niets gevonden in je catalogus. Typ het bij Wat en tik op Toevoegen om "${esc(zoek.trim())}" op je lijst te zetten.</div>` : '';
       $$('[data-kies]', el).forEach((k) => (k.onclick = () => {
         const { n, v, elk } = namen[+k.dataset.kies];
-        $('#bt-naam', el).value = n; zoek = n; $('#bt-zoek', el).value = ''; $('#bt-merk', el).value = elk ? '' : v ? v.merk || '' : merkVan(n);
+        $('#bt-naam', el).value = n; zoek = n; bovenaan = false; $('#bt-zoek', el).value = ''; $('#bt-merk', el).value = elk ? '' : v ? v.merk || '' : merkVan(n);
         eenheidZetten(bekendeEenheid(n));
         meerVullen(n);
         maatZetten(el, 'bt', v ? v.verpakking : ''); minimumVinkjeMaat(el, 'bt');
@@ -1866,6 +1869,7 @@ function boodschapToevoegen() {
     if (!alGetekend('boodschap-toevoegen')) {
       el.innerHTML = `${paneelKop('Boodschap toevoegen', 'Kies uit je catalogus of typ zelf iets.')}
         <label class="veld"><span>Wat</span><input id="bt-naam" placeholder="bv. Appelsienen" autocomplete="off" autocapitalize="sentences"></label>
+        <div id="bt-suggesties" class="bt-suggesties"></div>
         <label class="veld"><span>Merk (mag leeg)</span><input id="bt-merk" placeholder="bv. Bonduelle" autocomplete="off" autocapitalize="words"></label>
         ${maatKeuzeHtml('bt', '')}
         ${minimumVinkjeHtml('bt', 0)}
@@ -1939,8 +1943,8 @@ function boodschapToevoegen() {
           ...(bi.inhoud > 0 && TELBAAR.has(pe) && !(c?.inhoud > 0) ? bi : {}) };
       };
       // zoeken in de catalogus: via het zoekveld, of gewoon door te typen bij Wat
-      $('#bt-zoek', el).oninput = () => { zoek = $('#bt-zoek', el).value; lijstTekenen(); };
-      naam.oninput = () => { zoek = naam.value; $('#bt-zoek', el).value = ''; const e = catalogusnamen().find((n) => zelfde(n, naam.value)); if (e) { eenheidZetten(bekendeEenheid(e)); if (!$('#bt-merk', el).value && !meerVarianten(e)) $('#bt-merk', el).value = merkVan(e); } meerVullen(naam.value.trim()); lijstTekenen(); };
+      $('#bt-zoek', el).oninput = () => { zoek = $('#bt-zoek', el).value; bovenaan = false; lijstTekenen(); };
+      naam.oninput = () => { zoek = naam.value; bovenaan = true; $('#bt-zoek', el).value = ''; const e = catalogusnamen().find((n) => zelfde(n, naam.value)); if (e) { eenheidZetten(bekendeEenheid(e)); if (!$('#bt-merk', el).value && !meerVarianten(e)) $('#bt-merk', el).value = merkVan(e); } meerVullen(naam.value.trim()); lijstTekenen(); };
       const minKnopZetten = () => { $('#bt-min', el).disabled = !(num(hv.value) > stapVan(eenheid.value)); };
       $('#bt-plus', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, 1)); minKnopZetten(); };
       $('#bt-min', el).onclick = () => { hv.value = fmt(volgendeStap(num(hv.value), eenheid.value, -1)); minKnopZetten(); };
@@ -1978,7 +1982,7 @@ function boodschapToevoegen() {
             ...(alleMerken !== undefined ? { catalogus_minimum: alleMerken, catalogus_minimum_maat: teltLezen(el, 'bt') } : {}) });
         } catch { return; /* melding al getoond */ }
         toast(lijstMelding(n, inh));
-        naam.value = ''; $('#bt-merk', el).value = ''; $('#bt-zoek', el).value = ''; zoek = ''; hv.value = '1'; eenheid.value = vorige = 'stuks'; minKnopZetten();
+        naam.value = ''; $('#bt-merk', el).value = ''; $('#bt-zoek', el).value = ''; zoek = ''; bovenaan = false; hv.value = '1'; eenheid.value = vorige = 'stuks'; minKnopZetten();
         $('#bt-inhoud', el).value = ''; inhoudVeldenZetten(el, 'bt', 'stuks'); maatZetten(el, 'bt', '');
         meerVoor = null; meerAangeraakt = false; meerVullen(''); meer.open = false; minimumVinkjeZetten(el, 'bt', '', true);
         lijstTekenen();

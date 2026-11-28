@@ -399,7 +399,8 @@ summary small.stil { font-weight: 400; margin-left: .3rem; }
 .aantal-kies .rond { width: 44px; height: 44px; font-size: 1.4rem; color: var(--tekst); }
 .aantal-kies input { width: 5rem; text-align: center; font-variant-numeric: tabular-nums; }
 .aantal-kies select { flex: 1; min-width: 0; }
-#bt-lijst .rij .rechts { color: var(--accent); }
+#bt-lijst .rij .rechts, #bt-suggesties .rij .rechts { color: var(--accent); }
+#bt-suggesties:not(:empty) { margin: -.4rem 0 1rem; }
 .aantal-stap .stap.verborgen { visibility: hidden; }
 .naam-knop { display: block; max-width: 100%; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; text-decoration: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .naam-knop:hover { color: var(--accent); }
